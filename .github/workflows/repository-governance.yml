@@ -1,0 +1,82 @@
+name: Repository Governance & Secret Scan
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  governance-audit:
+    name: Repository Policy & Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate Repository Policy
+        run: |
+          echo "Checking repository for forbidden internal or proprietary files..."
+          
+          # List of forbidden files/patterns
+          FORBIDDEN_PATTERNS=(
+            "docs/"
+            "PRD.md"
+            "ARCHITECTURE.md"
+            "AI_SYSTEM.md"
+            "AI_RULES.md"
+            "AI_UNDERSTANDING.md"
+            "LICENSE_SYSTEM.md"
+            "REPORT_ENGINE.md"
+            "PRODUCT_RULES.md"
+            "REPOSITORY_GOVERNANCE.md"
+            "prompts/"
+            "business/"
+            "meeting-notes/"
+            "roadmap-internal/"
+            "id_rsa"
+            "id_ed25519"
+          )
+          
+          VIOLATION_FOUND=false
+          
+          for PATTERN in "${FORBIDDEN_PATTERNS[@]}"; do
+            if [[ "$PATTERN" == */ ]]; then
+              if [ -d "$PATTERN" ]; then
+                echo "❌ CRITICAL VIOLATION: Forbidden directory '$PATTERN' exists in the repository."
+                VIOLATION_FOUND=true
+              fi
+            else
+              # Avoid subshells to preserve VIOLATION_FOUND
+              while read -r FILE; do
+                if [ -n "$FILE" ]; then
+                  echo "❌ CRITICAL VIOLATION: Forbidden file '$FILE' exists in the repository."
+                  VIOLATION_FOUND=true
+                fi
+              done < <(find . -type f -name "$PATTERN")
+            fi
+          done
+
+          # Check for forbidden extensions (*.env, *.pem, *.key)
+          while read -r FILE; do
+            if [ -n "$FILE" ]; then
+              if [[ "$FILE" != *".env.example"* ]]; then
+                echo "❌ CRITICAL VIOLATION: Forbidden sensitive file '$FILE' found."
+                VIOLATION_FOUND=true
+              fi
+            fi
+          done < <(find . -type f \( -name "*.env" -o -name "*.pem" -o -name "*.key" \))
+
+          if [ "$VIOLATION_FOUND" = true ]; then
+            echo "Repository governance validation FAILED. Please remove the forbidden files before merging."
+            exit 1
+          else
+            echo "✅ Repository governance validation PASSED. No internal files detected."
+          fi
+
+      - name: Run Gitleaks Secret Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

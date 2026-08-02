@@ -1,0 +1,39 @@
+# Dependencies
+/vendor/
+/node_modules/
+/public/storage
+/public/build
+/public/hot
+
+# Environment / Secrets
+.env
+.env.backup
+.env.production
+.env.testing
+/auth.json
+*.key
+
+# PHPUnit & Testing
+.phpunit.result.cache
+/.phpunit.cache/
+.phpunit.state
+.crashdir/
+
+# IDEs & System Files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+.phpactor.json
+/.fleet/
+/.nova/
+/.zed/
+Homestead.json
+Homestead.yaml
+
+# Docker / Local Development
+.docker-compose.local.yml
+docker-compose.override.yml
+.data/
+.db_data/

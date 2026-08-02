@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  laravel-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_DATABASE: trustnode_testing
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Validate Repository Policy
+      run: |
+        echo "Checking repository for forbidden internal or proprietary files..."
+        
+        # List of forbidden files/patterns
+        FORBIDDEN_PATTERNS=(
+          "docs/"
+          "PRD.md"
+          "ARCHITECTURE.md"
+          "AI_SYSTEM.md"
+          "AI_RULES.md"
+          "AI_UNDERSTANDING.md"
+          "LICENSE_SYSTEM.md"
+          "REPORT_ENGINE.md"
+          "PRODUCT_RULES.md"
+          "REPOSITORY_GOVERNANCE.md"
+          "prompts/"
+          "business/"
+          "meeting-notes/"
+          "roadmap-internal/"
+          "id_rsa"
+          "id_ed25519"
+        )
+        
+        VIOLATION_FOUND=false
+        
+        for PATTERN in "${FORBIDDEN_PATTERNS[@]}"; do
+          if [[ "$PATTERN" == */ ]]; then
+            if [ -d "$PATTERN" ]; then
+              echo "❌ CRITICAL VIOLATION: Forbidden directory '$PATTERN' exists in the repository."
+              VIOLATION_FOUND=true
+            fi
+          else
+            while read -r FILE; do
+              if [ -n "$FILE" ]; then
+                echo "❌ CRITICAL VIOLATION: Forbidden file '$FILE' exists in the repository."
+                VIOLATION_FOUND=true
+              fi
+            done < <(find . -type f -name "$PATTERN")
+          fi
+        done
+
+        # Check for forbidden extensions (*.env, *.pem, *.key)
+        while read -r FILE; do
+          if [ -n "$FILE" ]; then
+            if [[ "$FILE" != *".env.example"* ]]; then
+              echo "❌ CRITICAL VIOLATION: Forbidden sensitive file '$FILE' found."
+              VIOLATION_FOUND=true
+            fi
+          fi
+        done < <(find . -type f \( -name "*.env" -o -name "*.pem" -o -name "*.key" \))
+
+        if [ "$VIOLATION_FOUND" = true ]; then
+          echo "Repository governance validation FAILED. Stopping CI execution."
+          exit 1
+        else
+          echo "✅ Repository governance validation PASSED. Proceeding."
+        fi
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv
+        coverage: none
+
+    - name: Copy .env
+      run: php -r "file_exists('.env') || copy('.env.example', '.env');"
+
+    - name: Install Composer Dependencies
+      run: composer install --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+
+    - name: Generate key
+      run: php artisan key:generate
+
+    - name: Directory Permissions
+      run: chmod -R 777 storage bootstrap/cache
+
+    - name: Run Migrations and Tests
+      env:
+        DB_CONNECTION: mysql
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_DATABASE: trustnode_testing
+        DB_USERNAME: root
+        DB_PASSWORD: ""
+        REDIS_HOST: 127.0.0.1
+        CACHE_STORE: redis
+        QUEUE_CONNECTION: sync
+      run: php artisan test

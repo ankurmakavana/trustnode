@@ -1,0 +1,22 @@
+# Set default behavior to automatically normalize line endings.
+* text=auto eol=lf
+
+# Force LF for shell scripts and config files to avoid issues in Linux/Docker.
+*.sh text eol=lf
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+
+# Denote language-specific diff behaviors.
+*.blade.php diff=html
+*.css diff=css
+*.html diff=html
+*.md diff=markdown
+*.php diff=php
+*.js diff=javascript
+*.ts diff=javascript
+
+# Ignore development/management configs from source archives.
+/.gitattributes export-ignore
+/.github export-ignore
+/.editorconfig export-ignore
+/.gitignore export-ignore
