@@ -1,0 +1,132 @@
+services:
+  # Nginx Web Server Proxy
+  nginx:
+    image: nginx:1.26-alpine
+    ports:
+      - "8000:80"
+    volumes:
+      - .:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      php:
+        condition: service_healthy
+    networks:
+      - trustnode-network
+
+  # PHP-FPM Application Runner (PHP 8.4)
+  php:
+    build:
+      context: .
+      dockerfile: ./docker/php/Dockerfile
+    volumes:
+      - .:/var/www/html
+      - trustnode-vendor:/var/www/html/vendor
+    environment:
+      DB_HOST: mysql
+      REDIS_HOST: redis
+    healthcheck:
+      test: ["CMD", "php", "-r", "if(@fsockopen('127.0.0.1', 9000)) { exit(0); } else { exit(1); }"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - trustnode-network
+
+  # Vite React Dev Compiler
+  node:
+    build:
+      context: .
+      dockerfile: ./docker/node/Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - trustnode-node-modules:/app/node_modules
+    networks:
+      - trustnode-network
+
+  # MySQL Database Instance (MySQL 8.4 LTS)
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: trustnode
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    volumes:
+      - trustnode-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trustnode-network
+
+  # Redis Cache & Queue Registry
+  redis:
+    image: redis:7.4-alpine
+    volumes:
+      - trustnode-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - trustnode-network
+
+  # Background Queue Worker Agent
+  worker:
+    build:
+      context: .
+      dockerfile: ./docker/php/Dockerfile
+    command: php artisan queue:work --queue=default,scans,notifications
+    volumes:
+      - .:/var/www/html
+      - trustnode-vendor:/var/www/html/vendor
+    environment:
+      DB_HOST: mysql
+      REDIS_HOST: redis
+    depends_on:
+      php:
+        condition: service_healthy
+    networks:
+      - trustnode-network
+
+  # Cron Scheduler Loop Daemon
+  scheduler:
+    build:
+      context: .
+      dockerfile: ./docker/php/Dockerfile
+    command: php artisan schedule:work
+    volumes:
+      - .:/var/www/html
+      - trustnode-vendor:/var/www/html/vendor
+    environment:
+      DB_HOST: mysql
+      REDIS_HOST: redis
+    depends_on:
+      php:
+        condition: service_healthy
+    networks:
+      - trustnode-network
+
+networks:
+  trustnode-network:
+    name: trustnode-network
+    driver: bridge
+
+volumes:
+  trustnode-db-data:
+    name: trustnode-db-data
+  trustnode-redis-data:
+    name: trustnode-redis-data
+  trustnode-vendor:
+    name: trustnode-vendor
+  trustnode-node-modules:
+    name: trustnode-node-modules

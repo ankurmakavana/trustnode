@@ -1,0 +1,44 @@
+# Version Control
+.git
+.github
+.gitattributes
+.gitignore
+
+# Local Environment & Secrets
+.env
+.env.backup
+.env.production
+.env.testing
+*.key
+*.pem
+id_rsa
+id_ed25519
+
+# Package Manager Caches
+node_modules/
+vendor/
+
+# Laravel Storage & Cache Logs
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/testing/*
+storage/framework/views/*
+storage/logs/*.log
+bootstrap/cache/*.php
+
+# IDE & System Files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+.phpactor.json
+Homestead.json
+Homestead.yaml
+
+# Docker Configs
+docker/
+compose.*.yaml
+Dockerfile
+*.code-workspace
+WORKSPACE.md

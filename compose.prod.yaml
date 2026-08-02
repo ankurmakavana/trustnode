@@ -1,0 +1,110 @@
+services:
+  # Nginx Web Server Proxy (Serves pre-compiled production assets)
+  nginx:
+    image: nginx:1.26-alpine
+    ports:
+      - "8000:80"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      php:
+        condition: service_healthy
+    networks:
+      - trustnode-network
+
+  # PHP-FPM Application Engine
+  php:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    environment:
+      DB_HOST: mysql
+      REDIS_HOST: redis
+      APP_ENV: production
+      APP_DEBUG: "false"
+    healthcheck:
+      test: ["CMD", "php", "-r", "if(@fsockopen('127.0.0.1', 9000)) { exit(0); } else { exit(1); }"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - trustnode-network
+
+  # MySQL Database Instance
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: change_this_in_production
+      MYSQL_DATABASE: trustnode
+    volumes:
+      - trustnode-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trustnode-network
+
+  # Redis Cache & Queue Registry
+  redis:
+    image: redis:7.4-alpine
+    volumes:
+      - trustnode-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - trustnode-network
+
+  # Background Queue Worker
+  worker:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    command: php artisan queue:work --queue=default,scans,notifications
+    environment:
+      DB_HOST: mysql
+      REDIS_HOST: redis
+      APP_ENV: production
+      APP_DEBUG: "false"
+    depends_on:
+      php:
+        condition: service_healthy
+    networks:
+      - trustnode-network
+
+  # Cron Scheduler Loop Daemon
+  scheduler:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    command: php artisan schedule:work
+    environment:
+      DB_HOST: mysql
+      REDIS_HOST: redis
+      APP_ENV: production
+      APP_DEBUG: "false"
+    depends_on:
+      php:
+        condition: service_healthy
+    networks:
+      - trustnode-network
+
+networks:
+  trustnode-network:
+    name: trustnode-network
+    driver: bridge
+
+volumes:
+  trustnode-db-data:
+    name: trustnode-db-data
+  trustnode-redis-data:
+    name: trustnode-redis-data
