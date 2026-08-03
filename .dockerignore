@@ -37,8 +37,5 @@ Homestead.json
 Homestead.yaml
 
 # Docker Configs
-docker/
-compose.*.yaml
-Dockerfile
 *.code-workspace
 WORKSPACE.md
