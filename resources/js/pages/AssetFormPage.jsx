@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader } from '../components/ui/primitives';
+import { useAuth } from '../context/AuthContext';
 
 export default function AssetFormPage({ assetId = null, onSave, onCancel }) {
+    const { checkAuthStatus } = useAuth();
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState({});
@@ -29,6 +31,10 @@ export default function AssetFormPage({ assetId = null, onSave, onCancel }) {
                         'Accept': 'application/json',
                     }
                 });
+                if (response.status === 401) {
+                    checkAuthStatus();
+                    return;
+                }
                 if (!response.ok) {
                     throw new Error('Failed to load asset');
                 }
@@ -90,6 +96,11 @@ export default function AssetFormPage({ assetId = null, onSave, onCancel }) {
                 },
                 body: JSON.stringify(payload),
             });
+
+            if (response.status === 401) {
+                checkAuthStatus();
+                return;
+            }
 
             if (response.status === 422) {
                 const data = await response.json();

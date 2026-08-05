@@ -5,8 +5,10 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, MonoChip, Skeleton } from '../components/ui/primitives';
 import { RiskBadge, AssetTypeBadge } from '../components/ui/primitives_assets';
+import { useAuth } from '../context/AuthContext';
 
 export default function AssetDetailPage({ assetId, onBack, onEdit }) {
+    const { checkAuthStatus } = useAuth();
     const [asset, setAsset] = useState(null);
     const [activities, setActivities] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -21,6 +23,10 @@ export default function AssetDetailPage({ assetId, onBack, onEdit }) {
                     'Accept': 'application/json',
                 }
             });
+            if (response.status === 401) {
+                checkAuthStatus();
+                return;
+            }
             if (!response.ok) {
                 throw new Error('Failed to load asset details');
             }
@@ -41,6 +47,10 @@ export default function AssetDetailPage({ assetId, onBack, onEdit }) {
                     'Accept': 'application/json',
                 }
             });
+            if (response.status === 401) {
+                checkAuthStatus();
+                return;
+            }
             if (!response.ok) {
                 throw new Error('Failed to load activity logs');
             }

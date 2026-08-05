@@ -3,8 +3,9 @@ import {
     Search, Bell, Sun, Moon, ChevronDown,
     LogOut, User, Settings, ShieldAlert, ScanLine, FileText, Users,
 } from 'lucide-react';
-import { mockNotifications, mockCurrentUser } from '../data/mockData';
+import { mockNotifications } from '../data/mockData';
 import { Avatar, IconButton } from './ui/primitives';
+import { useAuth } from '../context/AuthContext';
 
 /* ── useClickOutside hook ─────────────────────────────────── */
 function useClickOutside(ref, handler) {
@@ -104,7 +105,7 @@ function NotificationPanel({ onClose }) {
 }
 
 /* ── ProfileMenu ─────────────────────────────────────────── */
-function ProfileMenu({ onClose }) {
+function ProfileMenu({ onClose, user, onLogout }) {
     const ref = useRef(null);
     useClickOutside(ref, onClose);
 
@@ -122,10 +123,10 @@ function ProfileMenu({ onClose }) {
         >
             {/* User info */}
             <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-100">
-                <Avatar initials={mockCurrentUser.initials} size="md" />
+                <Avatar initials={user.initials} size="md" />
                 <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 truncate">{mockCurrentUser.displayName}</p>
-                    <p className="text-xs text-slate-400 truncate">{mockCurrentUser.email}</p>
+                    <p className="text-sm font-semibold text-slate-900 truncate">{user.displayName}</p>
+                    <p className="text-xs text-slate-400 truncate">{user.email}</p>
                 </div>
             </div>
 
@@ -146,6 +147,7 @@ function ProfileMenu({ onClose }) {
             {/* Divider + Sign out */}
             <div className="border-t border-slate-100 py-1">
                 <button
+                    onClick={onLogout}
                     role="menuitem"
                     className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus-visible:bg-red-50"
                 >
@@ -159,6 +161,7 @@ function ProfileMenu({ onClose }) {
 
 /* ── Header ──────────────────────────────────────────────── */
 export default function Header({ darkMode, onToggleDark, pageTitle }) {
+    const { user, logout } = useAuth();
     const [showNotifications, setShowNotifications] = useState(false);
     const [showProfile,       setShowProfile]       = useState(false);
     const [searchValue,       setSearchValue]       = useState('');
@@ -192,6 +195,8 @@ export default function Header({ darkMode, onToggleDark, pageTitle }) {
         document.addEventListener('keydown', handler);
         return () => document.removeEventListener('keydown', handler);
     }, []);
+
+    if (!user) return null;
 
     return (
         <header
@@ -279,9 +284,9 @@ export default function Header({ darkMode, onToggleDark, pageTitle }) {
                         aria-expanded={showProfile}
                         className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                     >
-                        <Avatar initials={mockCurrentUser.initials} size="sm" />
+                        <Avatar initials={user.initials} size="sm" />
                         <span className="hidden lg:block text-sm font-medium text-slate-700 max-w-[120px] truncate">
-                            {mockCurrentUser.displayName}
+                            {user.displayName}
                         </span>
                         <ChevronDown
                             size={13}
@@ -289,7 +294,7 @@ export default function Header({ darkMode, onToggleDark, pageTitle }) {
                         />
                     </button>
                     {showProfile && (
-                        <ProfileMenu onClose={() => setShowProfile(false)} />
+                        <ProfileMenu onClose={() => setShowProfile(false)} user={user} onLogout={logout} />
                     )}
                 </div>
             </div>

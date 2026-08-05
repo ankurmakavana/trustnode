@@ -5,8 +5,10 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, ViewAllLink, MonoChip, Skeleton } from '../components/ui/primitives';
 import { RiskBadge, AssetTypeBadge, ConfirmationDialog } from '../components/ui/primitives_assets';
+import { useAuth } from '../context/AuthContext';
 
 export default function AssetsPage({ onNavigateToCreate, onNavigateToEdit, onNavigateToDetail }) {
+    const { checkAuthStatus } = useAuth();
     const [assets, setAssets] = useState([]);
     const [meta, setMeta] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -45,6 +47,10 @@ export default function AssetsPage({ onNavigateToCreate, onNavigateToEdit, onNav
                     'Accept': 'application/json',
                 }
             });
+            if (response.status === 401) {
+                checkAuthStatus();
+                return;
+            }
             if (!response.ok) {
                 throw new Error('Failed to load asset index');
             }

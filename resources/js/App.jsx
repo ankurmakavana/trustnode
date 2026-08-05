@@ -6,6 +6,9 @@ import AssetsPage from './pages/AssetsPage';
 import AssetFormPage from './pages/AssetFormPage';
 import AssetDetailPage from './pages/AssetDetailPage';
 import PlaceholderPage from './pages/PlaceholderPage';
+import LoginPage from './pages/LoginPage';
+import { useAuth } from './context/AuthContext';
+import { Loader2 } from 'lucide-react';
 
 const pageLabels = {
     dashboard: 'Dashboard',
@@ -20,6 +23,7 @@ const pageLabels = {
 };
 
 export default function App() {
+    const { user, loading } = useAuth();
     const [activePage,   setActivePage]   = useState('dashboard');
     const [sidebarOpen,  setSidebarOpen]  = useState(true);
     const [darkMode,     setDarkMode]     = useState(false);
@@ -65,6 +69,7 @@ export default function App() {
                         <AssetFormPage 
                             onSave={handleFormSaved} 
                             onCancel={() => setCurrentView('list')} 
+                            onUnauthorized={() => {}}
                         />
                     );
                 case 'edit':
@@ -73,6 +78,7 @@ export default function App() {
                             assetId={activeAssetId} 
                             onSave={handleFormSaved} 
                             onCancel={() => setCurrentView('list')} 
+                            onUnauthorized={() => {}}
                         />
                     );
                 case 'detail':
@@ -81,6 +87,7 @@ export default function App() {
                             assetId={activeAssetId} 
                             onBack={() => setCurrentView('list')} 
                             onEdit={handleViewEdit} 
+                            onUnauthorized={() => {}}
                         />
                     );
                 case 'list':
@@ -90,6 +97,7 @@ export default function App() {
                             onNavigateToCreate={handleViewCreate}
                             onNavigateToEdit={handleViewEdit}
                             onNavigateToDetail={handleViewDetail}
+                            onUnauthorized={() => {}}
                         />
                     );
             }
@@ -97,6 +105,21 @@ export default function App() {
 
         return <PlaceholderPage title={pageLabels[activePage] || activePage} />;
     };
+
+    // Show initial session validation loading screen
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3">
+                <Loader2 className="animate-spin text-brand-600" size={32} />
+                <span className="text-xs font-semibold text-slate-500">Initializing session...</span>
+            </div>
+        );
+    }
+
+    // Redirect guest users to Login Page
+    if (!user) {
+        return <LoginPage />;
+    }
 
     return (
         <div className="flex h-screen overflow-hidden bg-slate-50">

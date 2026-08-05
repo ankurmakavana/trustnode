@@ -5,8 +5,10 @@ import ActivityTable from '../components/ActivityTable';
 import ScansTable from '../components/ScansTable';
 import QuickActions from '../components/QuickActions';
 import { SkeletonCard } from '../components/ui/primitives';
+import { useAuth } from '../context/AuthContext';
 
 export default function DashboardPage() {
+    const { checkAuthStatus } = useAuth();
     const [stats, setStats] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -18,6 +20,10 @@ export default function DashboardPage() {
                         'Accept': 'application/json',
                     }
                 });
+                if (response.status === 401) {
+                    checkAuthStatus();
+                    return;
+                }
                 if (!response.ok) {
                     throw new Error('Failed to load dashboard stats');
                 }
