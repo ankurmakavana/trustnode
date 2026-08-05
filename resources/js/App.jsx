@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardPage from './pages/DashboardPage';
+import AssetsPage from './pages/AssetsPage';
+import AssetFormPage from './pages/AssetFormPage';
+import AssetDetailPage from './pages/AssetDetailPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 
 const pageLabels = {
@@ -20,9 +23,78 @@ export default function App() {
     const [activePage,   setActivePage]   = useState('dashboard');
     const [sidebarOpen,  setSidebarOpen]  = useState(true);
     const [darkMode,     setDarkMode]     = useState(false);
+    
+    // Sub-view page routing states
+    const [currentView,  setCurrentView]  = useState('list'); // list, create, edit, detail
+    const [activeAssetId, setActiveAssetId] = useState(null);
+
+    const handleNavigate = (page) => {
+        setActivePage(page);
+        setCurrentView('list');
+        setActiveAssetId(null);
+    };
+
+    const handleViewDetail = (id) => {
+        setActiveAssetId(id);
+        setCurrentView('detail');
+    };
+
+    const handleViewEdit = (id) => {
+        setActiveAssetId(id);
+        setCurrentView('edit');
+    };
+
+    const handleViewCreate = () => {
+        setCurrentView('create');
+    };
+
+    const handleFormSaved = () => {
+        setCurrentView('list');
+        setActiveAssetId(null);
+    };
 
     const renderPage = () => {
-        if (activePage === 'dashboard') return <DashboardPage />;
+        if (activePage === 'dashboard') {
+            return <DashboardPage />;
+        }
+
+        if (activePage === 'assets') {
+            switch (currentView) {
+                case 'create':
+                    return (
+                        <AssetFormPage 
+                            onSave={handleFormSaved} 
+                            onCancel={() => setCurrentView('list')} 
+                        />
+                    );
+                case 'edit':
+                    return (
+                        <AssetFormPage 
+                            assetId={activeAssetId} 
+                            onSave={handleFormSaved} 
+                            onCancel={() => setCurrentView('list')} 
+                        />
+                    );
+                case 'detail':
+                    return (
+                        <AssetDetailPage 
+                            assetId={activeAssetId} 
+                            onBack={() => setCurrentView('list')} 
+                            onEdit={handleViewEdit} 
+                        />
+                    );
+                case 'list':
+                default:
+                    return (
+                        <AssetsPage 
+                            onNavigateToCreate={handleViewCreate}
+                            onNavigateToEdit={handleViewEdit}
+                            onNavigateToDetail={handleViewDetail}
+                        />
+                    );
+            }
+        }
+
         return <PlaceholderPage title={pageLabels[activePage] || activePage} />;
     };
 
@@ -31,7 +103,7 @@ export default function App() {
             {/* Sidebar */}
             <Sidebar
                 activePage={activePage}
-                onNavigate={setActivePage}
+                onNavigate={handleNavigate}
                 collapsed={!sidebarOpen}
                 onToggle={() => setSidebarOpen(v => !v)}
             />

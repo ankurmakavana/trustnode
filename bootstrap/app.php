@@ -25,6 +25,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => CheckPermissionMiddleware::class,
             'role' => CheckRoleMiddleware::class,
         ]);
+
+        // Return JSON 401 instead of redirecting unauthenticated requests
+        $middleware->redirectGuestsTo(fn () => response()->json(['message' => 'Unauthenticated.'], 401));
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (AuthorizationException $e) {

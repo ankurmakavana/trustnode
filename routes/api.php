@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Asset\AssetController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\PasswordController;
+use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -25,4 +27,11 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware('auth')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/password/change', [PasswordController::class, 'changePassword']);
+
+    // Dashboard Endpoints
+    Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
+
+    // Asset Management Endpoints
+    Route::get('/assets/{asset}/activity', [AssetController::class, 'activityLogs']);
+    Route::apiResource('/assets', AssetController::class);
 });

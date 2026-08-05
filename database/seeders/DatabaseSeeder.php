@@ -34,5 +34,8 @@ class DatabaseSeeder extends Seeder
                 'email_verified_at' => now(),
             ]
         );
+
+        // 4. Seed Asset Management Data
+        $this->call(AssetSeeder::class);
     }
 }
