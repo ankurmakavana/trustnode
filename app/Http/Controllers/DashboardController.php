@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Asset;
+use App\Models\Target;
 use Illuminate\Http\JsonResponse;
 
 class DashboardController extends Controller
@@ -15,8 +16,8 @@ class DashboardController extends Controller
         // 1. Monitored Assets count
         $assetsCount = Asset::count();
 
-        // 2. Count active scans (this stays mock for now as scans is future module)
-        $runningScans = 8;
+        // 2. Monitored Targets count (Replaces active scans or adds target statistics)
+        $targetsCount = Target::count();
 
         // 3. Count critical findings (this stays mock for now as findings is future module)
         $criticalFindings = 34;
@@ -26,6 +27,7 @@ class DashboardController extends Controller
 
         // Calculate count delta added this month
         $assetsDelta = Asset::where('created_at', '>=', now()->startOfMonth())->count();
+        $targetsDelta = Target::where('created_at', '>=', now()->startOfMonth())->count();
 
         return response()->json([
             'stats' => [
@@ -41,15 +43,15 @@ class DashboardController extends Controller
                     'description' => 'Registered IPs, domains & network ranges',
                 ],
                 [
-                    'id' => 'scans',
-                    'label' => 'Active Scans',
-                    'value' => (string) $runningScans,
-                    'delta' => '3 queued',
-                    'deltaLabel' => '',
-                    'trend' => 'neutral',
+                    'id' => 'targets',
+                    'label' => 'Target Scopes',
+                    'value' => (string) $targetsCount,
+                    'delta' => '+'.$targetsDelta,
+                    'deltaLabel' => 'added this month',
+                    'trend' => 'up',
                     'color' => 'violet',
-                    'icon' => 'ScanLine',
-                    'description' => 'Running + pending assessments',
+                    'icon' => 'Crosshair',
+                    'description' => 'Configured scanning target environments',
                 ],
                 [
                     'id' => 'findings',

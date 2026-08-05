@@ -6,12 +6,14 @@ namespace App\Providers;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\Target;
 use App\Models\User;
 use App\Observers\PermissionObserver;
 use App\Observers\RoleObserver;
 use App\Policies\AssetPolicy;
 use App\Policies\ReportPolicy;
 use App\Policies\ScanPolicy;
+use App\Policies\TargetPolicy;
 use App\Policies\UserPolicy;
 use App\Services\Authorization\PermissionService;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
@@ -37,6 +39,7 @@ final class AuthServiceProvider extends ServiceProvider
      */
     protected $policies = [
         User::class => UserPolicy::class,
+        Target::class => TargetPolicy::class,
     ];
 
     public function boot(): void
@@ -47,8 +50,9 @@ final class AuthServiceProvider extends ServiceProvider
         Role::observe(RoleObserver::class);
         Permission::observe(PermissionObserver::class);
 
-        // Register asset, scan, and report policies manually (no model yet)
+        // Register asset, scan, report and target policies manually (no model yet or explicit overrides)
         Gate::policy('asset', AssetPolicy::class);
+        Gate::policy('target', TargetPolicy::class);
         Gate::policy('scan', ScanPolicy::class);
         Gate::policy('report', ReportPolicy::class);
 

@@ -3,9 +3,12 @@
 namespace Tests\Feature;
 
 use App\Enums\Asset\AssetType;
+use App\Enums\Target\TargetEnvironment;
+use App\Enums\Target\TargetType;
 use App\Enums\UserRole;
 use App\Models\Asset;
 use App\Models\Role;
+use App\Models\Target;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -39,14 +42,23 @@ class DashboardStatsTest extends TestCase
         Asset::create([
             'name' => 'Internal Server 1',
             'type' => AssetType::HOSTNAME,
-            'value' => 'gateway',
+            'value' => 'gateway.internal',
             'created_by' => $this->admin->id,
         ]);
 
         Asset::create([
             'name' => 'Internal Server 2',
             'type' => AssetType::HOSTNAME,
-            'value' => 'portal',
+            'value' => 'portal.internal',
+            'created_by' => $this->admin->id,
+        ]);
+
+        // Create some targets
+        Target::create([
+            'name' => 'Production Endpoint',
+            'type' => TargetType::DOMAIN,
+            'value' => 'api.internal',
+            'environment' => TargetEnvironment::PRODUCTION,
             'created_by' => $this->admin->id,
         ]);
 
@@ -55,6 +67,9 @@ class DashboardStatsTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonPath('stats.0.id', 'assets')
             ->assertJsonPath('stats.0.value', '2')
-            ->assertJsonPath('stats.0.delta', '+2');
+            ->assertJsonPath('stats.0.delta', '+2')
+            ->assertJsonPath('stats.1.id', 'targets')
+            ->assertJsonPath('stats.1.value', '1')
+            ->assertJsonPath('stats.1.delta', '+1');
     }
 }

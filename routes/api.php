@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Target\TargetController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -34,4 +35,8 @@ Route::middleware('auth')->group(function (): void {
     // Asset Management Endpoints
     Route::get('/assets/{asset}/activity', [AssetController::class, 'activityLogs']);
     Route::apiResource('/assets', AssetController::class);
+
+    // Target Management Endpoints
+    Route::get('/targets/{target}/activity', [TargetController::class, 'activityLogs']);
+    Route::apiResource('/targets', TargetController::class);
 });

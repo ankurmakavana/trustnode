@@ -37,5 +37,8 @@ class DatabaseSeeder extends Seeder
 
         // 4. Seed Asset Management Data
         $this->call(AssetSeeder::class);
+
+        // 5. Seed Target Management Data
+        $this->call(TargetSeeder::class);
     }
 }

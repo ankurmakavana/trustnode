@@ -5,6 +5,9 @@ import DashboardPage from './pages/DashboardPage';
 import AssetsPage from './pages/AssetsPage';
 import AssetFormPage from './pages/AssetFormPage';
 import AssetDetailPage from './pages/AssetDetailPage';
+import TargetsPage from './pages/TargetsPage';
+import TargetFormPage from './pages/TargetFormPage';
+import TargetDetailPage from './pages/TargetDetailPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 import LoginPage from './pages/LoginPage';
 import { useAuth } from './context/AuthContext';
@@ -31,20 +34,30 @@ export default function App() {
     // Sub-view page routing states
     const [currentView,  setCurrentView]  = useState('list'); // list, create, edit, detail
     const [activeAssetId, setActiveAssetId] = useState(null);
+    const [activeTargetId, setActiveTargetId] = useState(null);
 
     const handleNavigate = (page) => {
         setActivePage(page);
         setCurrentView('list');
         setActiveAssetId(null);
+        setActiveTargetId(null);
     };
 
     const handleViewDetail = (id) => {
-        setActiveAssetId(id);
+        if (activePage === 'assets') {
+            setActiveAssetId(id);
+        } else if (activePage === 'targets') {
+            setActiveTargetId(id);
+        }
         setCurrentView('detail');
     };
 
     const handleViewEdit = (id) => {
-        setActiveAssetId(id);
+        if (activePage === 'assets') {
+            setActiveAssetId(id);
+        } else if (activePage === 'targets') {
+            setActiveTargetId(id);
+        }
         setCurrentView('edit');
     };
 
@@ -55,6 +68,7 @@ export default function App() {
     const handleFormSaved = () => {
         setCurrentView('list');
         setActiveAssetId(null);
+        setActiveTargetId(null);
     };
 
     const renderPage = () => {
@@ -98,6 +112,43 @@ export default function App() {
                             onNavigateToEdit={handleViewEdit}
                             onNavigateToDetail={handleViewDetail}
                             onUnauthorized={() => {}}
+                        />
+                    );
+            }
+        }
+
+        if (activePage === 'targets') {
+            switch (currentView) {
+                case 'create':
+                    return (
+                        <TargetFormPage 
+                            onSave={handleFormSaved} 
+                            onCancel={() => setCurrentView('list')} 
+                        />
+                    );
+                case 'edit':
+                    return (
+                        <TargetFormPage 
+                            targetId={activeTargetId} 
+                            onSave={handleFormSaved} 
+                            onCancel={() => setCurrentView('list')} 
+                        />
+                    );
+                case 'detail':
+                    return (
+                        <TargetDetailPage 
+                            targetId={activeTargetId} 
+                            onBack={() => setCurrentView('list')} 
+                            onEdit={handleViewEdit} 
+                        />
+                    );
+                case 'list':
+                default:
+                    return (
+                        <TargetsPage 
+                            onNavigateToCreate={handleViewCreate}
+                            onNavigateToEdit={handleViewEdit}
+                            onNavigateToDetail={handleViewDetail}
                         />
                     );
             }

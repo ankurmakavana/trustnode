@@ -26,6 +26,11 @@ class RolePermissionSeeder extends Seeder
             'assets.update' => 'Modify assets properties',
             'assets.delete' => 'Delete target scopes',
 
+            'targets.create' => 'Add target domains, IPs, ranges',
+            'targets.view' => 'View registered target scopes',
+            'targets.update' => 'Modify targets properties',
+            'targets.delete' => 'Delete targets',
+
             'scans.execute' => 'Trigger scans and configure profiles',
             'scans.view' => 'View active queues and histories',
 
@@ -54,6 +59,7 @@ class RolePermissionSeeder extends Seeder
                 'name' => UserRole::MANAGER->label(),
                 'permissions' => [
                     'assets.create', 'assets.view', 'assets.update', 'assets.delete',
+                    'targets.create', 'targets.view', 'targets.update', 'targets.delete',
                     'scans.execute', 'scans.view',
                     'reports.export', 'reports.view',
                     'findings.view', 'findings.update',
@@ -64,6 +70,7 @@ class RolePermissionSeeder extends Seeder
                 'name' => UserRole::OPERATOR->label(),
                 'permissions' => [
                     'assets.view',
+                    'targets.view',
                     'scans.view',
                     'reports.view',
                     'findings.view', 'findings.update',

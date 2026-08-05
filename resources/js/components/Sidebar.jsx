@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { mockNavItems, navGroups, mockCurrentUser } from '../data/mockData';
 import { Avatar, Badge } from './ui/primitives';
+import { useAuth } from '../context/AuthContext';
 
 const iconMap = {
     LayoutDashboard, Server, Crosshair, ScanLine, ShieldAlert,
@@ -89,9 +90,35 @@ function NavGroup({ group, items, activePage, collapsed, onNavigate }) {
 }
 
 export default function Sidebar({ activePage, onNavigate, collapsed, onToggle }) {
+    const { user } = useAuth();
+    const [targetsCount, setTargetsCount] = React.useState('0');
+
+    // Fetch targets count dynamically to update sidebar counters
+    React.useEffect(() => {
+        if (!user) return;
+        fetch('/api/targets?per_page=1', {
+            headers: { 'Accept': 'application/json' }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data?.meta?.total !== undefined) {
+                setTargetsCount(String(data.meta.total));
+            }
+        })
+        .catch(() => {});
+    }, [user, activePage]);
+
+    // Replace the items list with dynamic targets counter
+    const dynamicNavItems = mockNavItems.map(item => {
+        if (item.id === 'targets') {
+            return { ...item, badge: targetsCount };
+        }
+        return item;
+    });
+
     const groupedItems = navGroups.map(group => ({
         group,
-        items: mockNavItems.filter(i => i.group === group.id),
+        items: dynamicNavItems.filter(i => i.group === group.id),
     }));
 
     return (
@@ -152,29 +179,31 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle })
             </nav>
 
             {/* User footer */}
-            <div className="shrink-0 border-t border-slate-200 p-2">
-                <div className={`
-                    flex items-center gap-2.5 p-2 rounded-lg
-                    hover:bg-slate-50 cursor-pointer group
-                    transition-colors
-                    ${collapsed ? 'justify-center' : ''}
-                `}>
-                    <Avatar
-                        initials={mockCurrentUser.initials}
-                        size="sm"
-                    />
-                    {!collapsed && (
-                        <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-slate-900 truncate leading-tight">
-                                {mockCurrentUser.displayName}
-                            </p>
-                            <p className="text-[10px] text-slate-400 truncate leading-tight">
-                                {mockCurrentUser.role}
-                            </p>
-                        </div>
-                    )}
+            {user && (
+                <div className="shrink-0 border-t border-slate-200 p-2">
+                    <div className={`
+                        flex items-center gap-2.5 p-2 rounded-lg
+                        hover:bg-slate-50 cursor-pointer group
+                        transition-colors
+                        ${collapsed ? 'justify-center' : ''}
+                    `}>
+                        <Avatar
+                            initials={user.initials}
+                            size="sm"
+                        />
+                        {!collapsed && (
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-slate-900 truncate leading-tight">
+                                    {user.displayName}
+                                </p>
+                                <p className="text-[10px] text-slate-400 truncate leading-tight">
+                                    {user.role}
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
         </aside>
     );
 }
