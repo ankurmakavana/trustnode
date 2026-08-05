@@ -26,10 +26,20 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => CheckRoleMiddleware::class,
         ]);
 
-        // Return JSON 401 instead of redirecting unauthenticated requests
-        $middleware->redirectGuestsTo(fn () => response()->json(['message' => 'Unauthenticated.'], 401));
+        $middleware->api(prepend: [
+            \Illuminate\Cookie\Middleware\EncryptCookies::class,
+            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \Illuminate\Session\Middleware\StartSession::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // Return JSON 401 for all unauthenticated requests
+        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e) {
+            return response()->json([
+                'message' => 'Unauthenticated.',
+            ], 401);
+        });
+
         $exceptions->render(function (AuthorizationException $e) {
             return response()->json([
                 'success' => false,
