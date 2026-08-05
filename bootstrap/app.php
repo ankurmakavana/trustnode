@@ -6,9 +6,13 @@ use App\Exceptions\Authorization\AuthorizationException;
 use App\Http\Middleware\CheckPermissionMiddleware;
 use App\Http\Middleware\CheckRoleMiddleware;
 use App\Providers\AuthServiceProvider;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Session\Middleware\StartSession;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -27,14 +31,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->api(prepend: [
-            \Illuminate\Cookie\Middleware\EncryptCookies::class,
-            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
-            \Illuminate\Session\Middleware\StartSession::class,
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Return JSON 401 for all unauthenticated requests
-        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e) {
+        $exceptions->render(function (AuthenticationException $e) {
             return response()->json([
                 'message' => 'Unauthenticated.',
             ], 401);

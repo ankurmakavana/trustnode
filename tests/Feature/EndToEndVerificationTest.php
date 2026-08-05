@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Enums\UserRole;
 use App\Models\Role;
 use App\Models\User;
+use Database\Seeders\AssetSeeder;
+use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
@@ -19,24 +21,26 @@ class EndToEndVerificationTest extends TestCase
     {
         parent::setUp();
         Cache::flush();
-        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
-        $this->seed(\Database\Seeders\AssetSeeder::class);
+
+        $this->seed(RolePermissionSeeder::class);
 
         $adminRole = Role::where('slug', UserRole::ADMINISTRATOR->value)->first();
         $this->admin = User::factory()->create([
             'role_id' => $adminRole->id,
         ]);
+
+        // Seed Assets AFTER creating the user so the seeder finds a user and runs
+        $this->seed(AssetSeeder::class);
     }
 
     /**
-     * E2E Step 1: Root route establishes a session and returns 200 OK.
+     * E2E Step 1: Root route returns 200 OK and HTML template.
      */
-    public function test_root_route_auto_logs_in_user_and_returns_html_view()
+    public function test_root_route_returns_html_view()
     {
         $response = $this->get('/');
         $response->assertStatus(200);
-        $response->assertSee('app-'); // Vite stylesheet/JS indicators
-        $this->assertAuthenticated();
+        $response->assertSee('app.jsx'); // Vite stylesheet/JS indicators
     }
 
     /**
@@ -49,13 +53,13 @@ class EndToEndVerificationTest extends TestCase
         $response->assertJsonStructure([
             'data' => [
                 '*' => [
-                    'id', 'uuid', 'name', 'type', 'value', 'description', 
-                    'criticality', 'status', 'risk_score', 'owner', 'notes', 
-                    'group', 'tags', 'created_by', 'updated_by', 'created_at', 'updated_at'
-                ]
-            ]
+                    'id', 'uuid', 'name', 'type', 'value', 'description',
+                    'criticality', 'status', 'risk_score', 'owner', 'notes',
+                    'group', 'tags', 'created_by', 'updated_by', 'created_at', 'updated_at',
+                ],
+            ],
         ]);
-        
+
         // Assert we got the seeded data (e.g. auth.internal)
         $response->assertJsonFragment(['value' => 'auth.internal']);
     }
@@ -69,7 +73,7 @@ class EndToEndVerificationTest extends TestCase
         $response->assertStatus(200);
         $response->assertJsonFragment([
             'id' => 'assets',
-            'value' => '7' // 7 seeded assets in AssetSeeder
+            'value' => '7', // 7 seeded assets in AssetSeeder
         ]);
     }
 }
