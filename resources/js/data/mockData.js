@@ -192,6 +192,7 @@ export const mockNavItems = [
     { id: 'targets',   label: 'Targets',      icon: 'Crosshair',       group: 'main'                                      },
     { id: 'scans',     label: 'Scans',        icon: 'ScanLine',        group: 'main',   badge: '8',   badgeColor: 'violet' },
     { id: 'findings',  label: 'Findings',     icon: 'ShieldAlert',     group: 'main',   badge: '34',  badgeColor: 'red'    },
+    { id: 'risks',     label: 'Risk Register', icon: 'Shield',         group: 'main'                                      },
     { id: 'reports',   label: 'Reports',      icon: 'FileText',        group: 'main'                                      },
     { id: 'ai',        label: 'AI Assistant', icon: 'Sparkles',        group: 'tools',  badge: 'NEW', badgeColor: 'brand'  },
     { id: 'users',     label: 'Users',        icon: 'Users',           group: 'admin'                                     },

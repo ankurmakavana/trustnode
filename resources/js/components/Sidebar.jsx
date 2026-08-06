@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 
 const iconMap = {
     LayoutDashboard, Server, Crosshair, ScanLine, ShieldAlert,
-    FileText, Sparkles, Users, Settings,
+    FileText, Sparkles, Users, Settings, Shield,
 };
 
 const badgeVariants = {

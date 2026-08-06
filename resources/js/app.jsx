@@ -22,6 +22,9 @@ import LoginPage from './pages/LoginPage';
 import FindingsPage from './pages/FindingsPage';
 import FindingFormPage from './pages/FindingFormPage';
 import FindingDetailPage from './pages/FindingDetailPage';
+import RiskDashboardPage from './pages/RiskDashboardPage';
+import RiskFormPage from './pages/RiskFormPage';
+import RiskDetailPage from './pages/RiskDetailPage';
 import { useAuth } from './context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
@@ -31,6 +34,7 @@ const pageLabels = {
     targets:   'Targets',
     scans:     'Scans',
     findings:  'Findings',
+    risks:     'Risk Register',
     reports:   'Reports',
     ai:        'AI Assistant',
     users:     'Users',
@@ -49,6 +53,7 @@ export default function App() {
     const [activeTargetId, setActiveTargetId] = useState(null);
     const [activeScanId, setActiveScanId] = useState(null);
     const [activeFindingId, setActiveFindingId] = useState(null);
+    const [activeRiskId, setActiveRiskId] = useState(null);
 
     const handleNavigate = (page) => {
         setActivePage(page);
@@ -57,6 +62,7 @@ export default function App() {
         setActiveTargetId(null);
         setActiveScanId(null);
         setActiveFindingId(null);
+        setActiveRiskId(null);
     };
 
     const handleViewDetail = (id) => {
@@ -68,6 +74,8 @@ export default function App() {
             setActiveScanId(id);
         } else if (activePage === 'findings') {
             setActiveFindingId(id);
+        } else if (activePage === 'risks') {
+            setActiveRiskId(id);
         }
         setCurrentView('detail');
     };
@@ -88,6 +96,8 @@ export default function App() {
             setActiveScanId(id);
         } else if (activePage === 'findings') {
             setActiveFindingId(id);
+        } else if (activePage === 'risks') {
+            setActiveRiskId(id);
         }
         setCurrentView('edit');
     };
@@ -263,6 +273,43 @@ export default function App() {
                 default:
                     return (
                         <FindingsPage 
+                            onNavigateToCreate={handleViewCreate}
+                            onNavigateToEdit={handleViewEdit}
+                            onNavigateToDetail={handleViewDetail}
+                        />
+                    );
+            }
+        }
+
+        if (activePage === 'risks') {
+            switch (currentView) {
+                case 'create':
+                    return (
+                        <RiskFormPage 
+                            onSave={handleFormSaved} 
+                            onCancel={() => setCurrentView('list')} 
+                        />
+                    );
+                case 'edit':
+                    return (
+                        <RiskFormPage 
+                            riskId={activeRiskId} 
+                            onSave={handleFormSaved} 
+                            onCancel={() => setCurrentView('list')} 
+                        />
+                    );
+                case 'detail':
+                    return (
+                        <RiskDetailPage 
+                            riskId={activeRiskId} 
+                            onBack={() => setCurrentView('list')} 
+                            onEdit={handleViewEdit} 
+                        />
+                    );
+                case 'list':
+                default:
+                    return (
+                        <RiskDashboardPage 
                             onNavigateToCreate={handleViewCreate}
                             onNavigateToEdit={handleViewEdit}
                             onNavigateToDetail={handleViewDetail}
