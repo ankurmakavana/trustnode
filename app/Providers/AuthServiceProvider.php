@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\Scan;
 use App\Models\Target;
 use App\Models\User;
 use App\Observers\PermissionObserver;
@@ -40,6 +41,7 @@ final class AuthServiceProvider extends ServiceProvider
     protected $policies = [
         User::class => UserPolicy::class,
         Target::class => TargetPolicy::class,
+        Scan::class => ScanPolicy::class,
     ];
 
     public function boot(): void

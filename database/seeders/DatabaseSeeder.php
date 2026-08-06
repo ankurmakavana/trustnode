@@ -40,5 +40,8 @@ class DatabaseSeeder extends Seeder
 
         // 5. Seed Target Management Data
         $this->call(TargetSeeder::class);
+
+        // 6. Seed Scan Management Data
+        $this->call(ScanSeeder::class);
     }
 }
