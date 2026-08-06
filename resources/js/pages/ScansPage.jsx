@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Search, Plus, RefreshCw, ChevronLeft, ChevronRight,
-    Eye, Edit2, Trash2, Square, Pause, Play, RotateCcw,
+    Eye, Edit2, Trash2, Square, Pause, RotateCcw,
     FileText, X, ScanLine, AlertTriangle, CheckCircle2,
     Activity, Clock, Loader2, Filter, CalendarDays,
+    MoreVertical, StopCircle, Terminal, Play, ChevronDown,
+    CheckSquare, Square as SquareIcon,
 } from 'lucide-react';
 import axios from 'axios';
 import { ScanStatusBadge, ScanTypeBadge, ScanEngineBadge, ProgressBar, ScanRowSkeleton } from '../components/ui/primitives_scans';
@@ -61,72 +63,114 @@ function SummaryCard({ label, value, icon: Icon, color, sub }) {
     );
 }
 
-// ─── Context-Aware Action Buttons ─────────────────────────────────────────────
+// ─── Schedule Humanizer ───────────────────────────────────────────────────────
 
-function ScanActions({ scan, onDetail, onEdit, onDelete }) {
-    const status = String(scan.status ?? '').toLowerCase();
-
-    return (
-        <div className="inline-flex items-center gap-0.5">
-            {/* Always available: view */}
-            <ActionBtn
-                icon={Eye}
-                label="View Details"
-                onClick={() => onDetail(scan.id)}
-                cls="text-slate-400 hover:text-brand-600 hover:bg-brand-50"
-            />
-
-            {/* Running → pause (visual only, no backend action yet), stop */}
-            {status === 'running' && (
-                <>
-                    <ActionBtn icon={Pause}  label="Pause Scan"   onClick={() => {}} cls="text-slate-400 hover:text-amber-600 hover:bg-amber-50" />
-                    <ActionBtn icon={Square} label="Stop Scan"    onClick={() => onDelete(scan)} cls="text-slate-400 hover:text-rose-600 hover:bg-rose-50" />
-                </>
-            )}
-
-            {/* Queued → cancel */}
-            {status === 'queued' && (
-                <ActionBtn icon={X} label="Cancel Scan" onClick={() => onDelete(scan)} cls="text-slate-400 hover:text-rose-600 hover:bg-rose-50" />
-            )}
-
-            {/* Completed → edit (run again), view findings placeholder */}
-            {status === 'completed' && (
-                <>
-                    <ActionBtn icon={FileText}   label="View Report"  onClick={() => onDetail(scan.id)} cls="text-slate-400 hover:text-emerald-600 hover:bg-emerald-50" />
-                    <ActionBtn icon={RotateCcw}  label="Run Again"    onClick={() => onEdit(scan.id)}   cls="text-slate-400 hover:text-blue-600 hover:bg-blue-50" />
-                </>
-            )}
-
-            {/* Failed → retry, edit */}
-            {(status === 'failed') && (
-                <>
-                    <ActionBtn icon={RotateCcw} label="Retry Scan"  onClick={() => onEdit(scan.id)} cls="text-slate-400 hover:text-violet-600 hover:bg-violet-50" />
-                    <ActionBtn icon={Edit2}     label="Edit Config"  onClick={() => onEdit(scan.id)} cls="text-slate-400 hover:text-slate-700 hover:bg-slate-100" />
-                </>
-            )}
-
-            {/* Scheduled / default → edit, delete */}
-            {(status === 'scheduled' || status === 'cancelled' || !['running','queued','completed','failed'].includes(status)) && (
-                <>
-                    <ActionBtn icon={Edit2}  label="Edit Config"  onClick={() => onEdit(scan.id)}  cls="text-slate-400 hover:text-slate-700 hover:bg-slate-100" />
-                    <ActionBtn icon={Trash2} label="Delete Scan"  onClick={() => onDelete(scan)}   cls="text-slate-400 hover:text-rose-600 hover:bg-rose-50" />
-                </>
-            )}
-        </div>
-    );
+function humanSchedule(cron) {
+    if (!cron) return null;
+    const c = String(cron).trim().toLowerCase();
+    if (c === '@daily'   || c === '0 0 * * *')    return 'Every Day';
+    if (c === '@hourly'  || c === '0 * * * *')    return 'Every Hour';
+    if (c === '@weekly'  || c === '0 0 * * 0')    return 'Weekly';
+    if (c === '@monthly' || c === '0 0 1 * *')    return 'Monthly';
+    if (c === '@yearly'  || c === '0 0 1 1 *')    return 'Yearly';
+    if (c === '@reboot')                           return 'On Reboot';
+    // Detect daily-at-X
+    const dailyAt = c.match(/^(\d+)\s+(\d+)\s+\*\s+\*\s+\*$/);
+    if (dailyAt) return `Daily at ${dailyAt[2].padStart(2,'0')}:${dailyAt[1].padStart(2,'0')}`;
+    // Detect every-N-hours
+    const everyH = c.match(/^0\s+\*\/(\d+)\s+\*\s+\*\s+\*$/);
+    if (everyH) return `Every ${everyH[1]}h`;
+    // Detect every-N-minutes
+    const everyM = c.match(/^\*\/(\d+)\s+\*\s+\*\s+\*\s+\*$/);
+    if (everyM) return `Every ${everyM[1]}m`;
+    return 'Custom Cron';
 }
 
-function ActionBtn({ icon: Icon, label, onClick, cls }) {
+// ─── Action Dropdown ──────────────────────────────────────────────────────────
+
+function ScanActionMenu({ scan, onDetail, onEdit, onDelete }) {
+    const [open, setOpen] = useState(false);
+    const ref             = useRef(null);
+    const status          = String(scan.status ?? '').toLowerCase();
+
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [open]);
+
+    const items = [];
+
+    // View — always
+    items.push({ label: 'View Details', icon: Eye,       cls: 'text-slate-700', action: () => onDetail(scan.id) });
+
+    if (status === 'running') {
+        items.push({ label: 'View Live',  icon: Activity,    cls: 'text-blue-600',   action: () => onDetail(scan.id) });
+        items.push({ label: 'Pause',      icon: Pause,       cls: 'text-amber-600',  action: () => {} });
+        items.push({ label: 'Stop',       icon: StopCircle,  cls: 'text-rose-600',   action: () => onDelete(scan), danger: true });
+    }
+    if (status === 'queued') {
+        items.push({ label: 'Cancel',     icon: X,           cls: 'text-rose-600',   action: () => onDelete(scan), danger: true });
+    }
+    if (status === 'completed') {
+        items.push({ label: 'View Findings', icon: FileText,  cls: 'text-emerald-600', action: () => onDetail(scan.id) });
+        items.push({ label: 'View Report',   icon: FileText,  cls: 'text-slate-700',   action: () => onDetail(scan.id) });
+        items.push({ label: 'Run Again',     icon: RotateCcw, cls: 'text-blue-600',    action: () => onEdit(scan.id) });
+    }
+    if (status === 'failed') {
+        items.push({ label: 'Retry',      icon: RotateCcw,  cls: 'text-violet-600', action: () => onEdit(scan.id) });
+        items.push({ label: 'View Logs',  icon: Terminal,   cls: 'text-slate-700',  action: () => onDetail(scan.id) });
+    }
+    if (!['running','queued','completed','failed'].includes(status)) {
+        items.push({ label: 'Edit Config', icon: Edit2,  cls: 'text-slate-700', action: () => onEdit(scan.id) });
+        items.push({ label: 'Delete',      icon: Trash2, cls: 'text-rose-600',  action: () => onDelete(scan), danger: true });
+    }
+
     return (
-        <button
-            type="button"
-            title={label}
-            aria-label={label}
-            onClick={onClick}
-            className={`p-1.5 rounded-md transition-colors ${cls}`}
-        >
-            <Icon size={14} strokeWidth={2} />
-        </button>
+        <div ref={ref} className="relative flex items-center justify-end" onClick={e => e.stopPropagation()}>
+            <button
+                type="button"
+                onClick={() => setOpen(o => !o)}
+                aria-label="Actions"
+                aria-haspopup="true"
+                aria-expanded={open}
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-semibold border transition-all ${
+                    open
+                        ? 'bg-slate-100 border-slate-300 text-slate-800'
+                        : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-800'
+                }`}
+            >
+                <MoreVertical size={13} strokeWidth={2} />
+            </button>
+
+            {open && (
+                <div
+                    role="menu"
+                    className="absolute right-0 top-full mt-1 z-50 w-44 bg-white border border-slate-200 rounded-xl shadow-lg shadow-slate-200/60 py-1 overflow-hidden"
+                >
+                    {items.map((item, idx) => {
+                        const Icon = item.icon;
+                        return (
+                            <button
+                                key={idx}
+                                type="button"
+                                role="menuitem"
+                                onClick={() => { item.action(); setOpen(false); }}
+                                className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium transition-colors ${
+                                    item.danger
+                                        ? 'text-rose-600 hover:bg-rose-50'
+                                        : 'text-slate-700 hover:bg-slate-50'
+                                }`}
+                            >
+                                <Icon size={13} strokeWidth={2} className={item.cls} />
+                                {item.label}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -134,33 +178,35 @@ function ActionBtn({ icon: Icon, label, onClick, cls }) {
 
 function EmptyState({ hasFilters, onClear, onCreate }) {
     return (
-        <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center mb-5">
-                <ScanLine size={28} className="text-slate-400" strokeWidth={1.5} />
+        <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
+            {/* Illustration */}
+            <div className="relative mb-6">
+                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 border border-slate-200 flex items-center justify-center shadow-inner">
+                    <ScanLine size={36} className="text-slate-300" strokeWidth={1.5} />
+                </div>
+                {!hasFilters && (
+                    <div className="absolute -right-1 -bottom-1 w-7 h-7 rounded-lg bg-brand-500/10 border border-brand-200 flex items-center justify-center">
+                        <Plus size={13} className="text-brand-500" strokeWidth={2.5} />
+                    </div>
+                )}
             </div>
-            <h3 className="text-base font-bold text-slate-800 mb-1">
+            <h3 className="text-base font-bold text-slate-800 mb-1.5">
                 {hasFilters ? 'No scans match your filters' : 'No scan runs yet'}
             </h3>
-            <p className="text-sm text-slate-500 max-w-xs mb-6">
+            <p className="text-sm text-slate-500 max-w-sm mb-7 leading-relaxed">
                 {hasFilters
-                    ? 'Try adjusting or clearing your search and filter criteria.'
-                    : 'Configure and trigger your first vulnerability assessment run.'}
+                    ? 'Try adjusting or clearing your search and filter criteria to see results.'
+                    : 'Configure and trigger your first vulnerability assessment run to start monitoring.'}
             </p>
             {hasFilters ? (
-                <button
-                    type="button"
-                    onClick={onClear}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition"
-                >
-                    <X size={14} /> Clear Filters
+                <button type="button" onClick={onClear}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition shadow-sm">
+                    <X size={14} strokeWidth={2.5} /> Clear Filters
                 </button>
             ) : (
-                <button
-                    type="button"
-                    onClick={onCreate}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition shadow-sm"
-                >
-                    <Plus size={14} /> Create First Scan
+                <button type="button" onClick={onCreate}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition shadow-sm">
+                    <Plus size={14} strokeWidth={2.5} /> Create First Scan
                 </button>
             )}
         </div>
@@ -171,18 +217,15 @@ function EmptyState({ hasFilters, onClear, onCreate }) {
 
 function ErrorState({ message, onRetry }) {
     return (
-        <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center mb-4">
-                <AlertTriangle size={24} className="text-rose-500" strokeWidth={1.5} />
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center mb-5">
+                <AlertTriangle size={28} className="text-rose-400" strokeWidth={1.5} />
             </div>
             <h3 className="text-sm font-bold text-slate-800 mb-1">Failed to load scans</h3>
-            <p className="text-xs text-slate-500 max-w-xs mb-5">{message}</p>
-            <button
-                type="button"
-                onClick={onRetry}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition"
-            >
-                <RefreshCw size={13} /> Retry
+            <p className="text-xs text-slate-500 max-w-xs mb-6 leading-relaxed">{message}</p>
+            <button type="button" onClick={onRetry}
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-lg transition shadow-sm">
+                <RefreshCw size={13} strokeWidth={2.5} /> Retry
             </button>
         </div>
     );
@@ -190,11 +233,69 @@ function ErrorState({ message, onRetry }) {
 
 // ─── Column Header ────────────────────────────────────────────────────────────
 
-function Th({ children, className = '' }) {
+function Th({ children, className = '', align = 'left' }) {
     return (
-        <th className={`px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap select-none ${className}`}>
+        <th className={`px-4 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap select-none ${
+            align === 'right' ? 'text-right' : 'text-left'
+        } ${className}`}>
             {children}
         </th>
+    );
+}
+
+// ─── Progress Cell ────────────────────────────────────────────────────────────
+
+function ProgressCell({ progress = 0, status, duration }) {
+    const pct = Math.min(100, Math.max(0, Number(progress) || 0));
+    const isRunning   = status === 'running';
+    const isCompleted = status === 'completed';
+
+    let barCls = 'bg-slate-300';
+    if (isRunning)           barCls = 'bg-blue-500';
+    if (isCompleted)         barCls = 'bg-emerald-500';
+    if (status === 'failed') barCls = 'bg-rose-500';
+    if (status === 'queued') barCls = 'bg-amber-400';
+
+    // Rough estimate: if running and we know % and duration so far, extrapolate remaining
+    let eta = null;
+    if (isRunning && pct > 2 && duration) {
+        const totalEst = (duration / pct) * 100;
+        const rem      = Math.max(0, Math.round(totalEst - duration));
+        if (rem > 0) eta = rem < 60 ? `~${rem}s left` : `~${Math.round(rem/60)}m left`;
+    }
+
+    return (
+        <div className="w-full min-w-[140px] space-y-1">
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/80">
+                    <div
+                        className={`h-full rounded-full transition-all duration-700 ${barCls} ${isRunning ? 'animate-pulse' : ''}`}
+                        style={{ width: `${pct}%` }}
+                    />
+                </div>
+                {isCompleted ? (
+                    <CheckCircle2 size={13} className="text-emerald-500 shrink-0" strokeWidth={2.5} />
+                ) : (
+                    <span className="text-[11px] font-bold tabular-nums text-slate-500 shrink-0 min-w-[28px] text-right">{pct}%</span>
+                )}
+            </div>
+            {eta && <div className="text-[10px] text-blue-500 font-medium">{eta}</div>}
+        </div>
+    );
+}
+
+// ─── Schedule Cell ────────────────────────────────────────────────────────────
+
+function ScheduleCell({ schedule }) {
+    const label = humanSchedule(schedule);
+    if (!label) {
+        return <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 font-medium"><Play size={10} strokeWidth={2.5} className="text-slate-300" />Manual</span>;
+    }
+    return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">
+            <Clock size={10} strokeWidth={2.5} className="text-slate-400" />
+            {label}
+        </span>
     );
 }
 
@@ -224,7 +325,8 @@ export default function ScansPage({ onNavigateToCreate, onNavigateToEdit, onNavi
     const [sortBy,         setSortBy]         = useState('created_at');
     const [sortOrder,      setSortOrder]      = useState('desc');
     const [page,           setPage]           = useState(1);
-    const [perPage]                           = useState(15);
+    const [perPage,        setPerPage]       = useState(15);
+    const [selectedRows,   setSelectedRows]   = useState(new Set());
     const [totalPages,     setTotalPages]     = useState(1);
     const [totalItems,     setTotalItems]     = useState(0);
 
@@ -492,40 +594,71 @@ export default function ScansPage({ onNavigateToCreate, onNavigateToEdit, onNavi
             {/* ── Table Card ────────────────────────────────────────────── */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
 
-                {/* Result count + sort */}
-                {!loading && !error && scans.length > 0 && (
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
-                        <span className="text-xs font-medium text-slate-500">
-                            Showing <span className="font-bold text-slate-700">{from}–{to}</span> of{' '}
-                            <span className="font-bold text-slate-700">{totalItems}</span> scans
-                            {hasFilters && <span className="ml-1 text-slate-400">(filtered)</span>}
-                        </span>
-                        <select
-                            value={`${sortBy}:${sortOrder}`}
-                            onChange={e => {
-                                const [col, dir] = e.target.value.split(':');
-                                setSortBy(col); setSortOrder(dir); setPage(1);
-                            }}
-                            aria-label="Sort order"
-                            className="text-xs border border-slate-200 rounded-md px-2 py-1 bg-white text-slate-600 focus:outline-none focus:border-brand-400"
-                        >
-                            <option value="created_at:desc">Newest first</option>
-                            <option value="created_at:asc">Oldest first</option>
-                            <option value="name:asc">Name A–Z</option>
-                            <option value="name:desc">Name Z–A</option>
-                            <option value="status:asc">Status</option>
-                            <option value="progress:desc">Progress</option>
-                        </select>
+                {/* ── Table meta bar ─────────────────────────────────── */}
+                {!loading && !error && (
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/40">
+                        <div className="flex items-center gap-3">
+                            {selectedRows.size > 0 && (
+                                <span className="text-xs font-semibold text-brand-600">
+                                    {selectedRows.size} selected
+                                </span>
+                            )}
+                            {scans.length > 0 && (
+                                <span className="text-xs text-slate-500">
+                                    Showing <span className="font-semibold text-slate-700">{from}–{to}</span> of{' '}
+                                    <span className="font-semibold text-slate-700">{totalItems}</span> scans
+                                    {hasFilters && <span className="ml-1 text-slate-400">(filtered)</span>}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {refreshing && (
+                                <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                                    <Loader2 size={10} className="animate-spin" /> Refreshing
+                                </span>
+                            )}
+                            <select
+                                value={`${sortBy}:${sortOrder}`}
+                                onChange={e => {
+                                    const [col, dir] = e.target.value.split(':');
+                                    setSortBy(col); setSortOrder(dir); setPage(1);
+                                }}
+                                aria-label="Sort order"
+                                className="text-xs border border-slate-200 rounded-md px-2 py-1 bg-white text-slate-600 focus:outline-none focus:border-brand-400 appearance-none pr-6"
+                            >
+                                <option value="created_at:desc">Newest first</option>
+                                <option value="created_at:asc">Oldest first</option>
+                                <option value="name:asc">Name A–Z</option>
+                                <option value="name:desc">Name Z–A</option>
+                                <option value="status:asc">Status</option>
+                                <option value="progress:desc">Progress</option>
+                            </select>
+                        </div>
                     </div>
                 )}
 
+                {/* ── Table ──────────────────────────────────────────── */}
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm" role="table" aria-label="Scans table">
+                    <table className="w-full text-sm border-collapse" role="table" aria-label="Scans table">
+
                         {/* Sticky header */}
-                        <thead className="sticky top-0 z-10">
+                        <thead className="sticky top-0 z-20">
                             <tr className="bg-slate-50 border-b border-slate-200">
-                                <Th className="pl-5">Scan</Th>
-                                <Th>Target</Th>
+                                {/* Checkbox */}
+                                <th className="w-10 pl-4 pr-2 py-3.5">
+                                    <input
+                                        type="checkbox"
+                                        aria-label="Select all scans"
+                                        checked={scans.length > 0 && selectedRows.size === scans.length}
+                                        onChange={e => {
+                                            if (e.target.checked) setSelectedRows(new Set(scans.map(s => s.id)));
+                                            else setSelectedRows(new Set());
+                                        }}
+                                        className="w-3.5 h-3.5 rounded border-slate-300 accent-brand-600 cursor-pointer"
+                                    />
+                                </th>
+                                <Th className="pl-2 min-w-[220px]">Scan</Th>
+                                <Th className="min-w-[160px]">Target</Th>
                                 <Th>Type</Th>
                                 <Th>Engine</Th>
                                 <Th>Status</Th>
@@ -533,153 +666,211 @@ export default function ScansPage({ onNavigateToCreate, onNavigateToEdit, onNavi
                                 <Th>Schedule</Th>
                                 <Th>Started</Th>
                                 <Th>Duration</Th>
-                                <Th className="pr-5 text-right">Actions</Th>
+                                <Th align="right" className="pr-4 min-w-[60px]">Actions</Th>
                             </tr>
                         </thead>
 
                         <tbody className="divide-y divide-slate-100">
-                            {/* Loading skeletons */}
-                            {loading && Array.from({ length: 6 }).map((_, i) => <ScanRowSkeleton key={i} />)}
 
-                            {/* Error */}
+                            {/* ── Loading skeletons */}
+                            {loading && Array.from({ length: 8 }).map((_, i) => (
+                                <tr key={i} className="border-b border-slate-100">
+                                    {Array.from({ length: 11 }).map((__, j) => (
+                                        <td key={j} className="px-4 py-4">
+                                            <div
+                                                className="h-3.5 bg-slate-100 rounded animate-pulse"
+                                                style={{ width: j === 0 ? '24px' : j === 1 ? '72%' : j === 2 ? '55%' : j === 6 ? '90%' : '45%' }}
+                                            />
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+
+                            {/* ── Error */}
                             {!loading && error && (
                                 <tr>
-                                    <td colSpan={10}>
+                                    <td colSpan={11}>
                                         <ErrorState message={error} onRetry={() => fetchScans()} />
                                     </td>
                                 </tr>
                             )}
 
-                            {/* Empty */}
+                            {/* ── Empty */}
                             {!loading && !error && scans.length === 0 && (
                                 <tr>
-                                    <td colSpan={10}>
-                                        <EmptyState
-                                            hasFilters={hasFilters}
-                                            onClear={clearFilters}
-                                            onCreate={onNavigateToCreate}
-                                        />
+                                    <td colSpan={11}>
+                                        <EmptyState hasFilters={hasFilters} onClear={clearFilters} onCreate={onNavigateToCreate} />
                                     </td>
                                 </tr>
                             )}
 
-                            {/* Data rows */}
-                            {!loading && !error && scans.map(scan => (
-                                <tr
-                                    key={scan.id}
-                                    className="hover:bg-slate-50/70 transition-colors group"
-                                    role="row"
-                                >
-                                    {/* Scan name + description */}
-                                    <td className="pl-5 pr-4 py-3.5 max-w-[220px]">
-                                        <button
-                                            type="button"
-                                            onClick={() => onNavigateToDetail(scan.id)}
-                                            className="text-left w-full"
-                                            aria-label={`View details for ${scan.name}`}
-                                        >
-                                            <div className="font-semibold text-slate-800 group-hover:text-brand-600 transition-colors truncate">
+                            {/* ── Data rows */}
+                            {!loading && !error && scans.map(scan => {
+                                const isSelected = selectedRows.has(scan.id);
+                                return (
+                                    <tr
+                                        key={scan.id}
+                                        role="row"
+                                        aria-selected={isSelected}
+                                        onClick={() => onNavigateToDetail(scan.id)}
+                                        className={`group cursor-pointer transition-colors ${
+                                            isSelected
+                                                ? 'bg-brand-50/60'
+                                                : 'hover:bg-slate-50/80'
+                                        }`}
+                                    >
+                                        {/* Checkbox */}
+                                        <td className="w-10 pl-4 pr-2 py-4" onClick={e => e.stopPropagation()}>
+                                            <input
+                                                type="checkbox"
+                                                aria-label={`Select ${scan.name}`}
+                                                checked={isSelected}
+                                                onChange={e => {
+                                                    const next = new Set(selectedRows);
+                                                    if (e.target.checked) next.add(scan.id);
+                                                    else next.delete(scan.id);
+                                                    setSelectedRows(next);
+                                                }}
+                                                className="w-3.5 h-3.5 rounded border-slate-300 accent-brand-600 cursor-pointer"
+                                            />
+                                        </td>
+
+                                        {/* Scan */}
+                                        <td className="pl-2 pr-4 py-3.5 max-w-[240px]">
+                                            <div className="font-semibold text-slate-800 group-hover:text-brand-600 transition-colors truncate text-[13px] leading-tight">
                                                 {scan.name}
                                             </div>
                                             {scan.description && (
-                                                <div className="text-[11px] text-slate-400 truncate mt-0.5 max-w-[200px]">
+                                                <div className="text-[11px] text-slate-400 truncate mt-0.5 max-w-[220px]">
                                                     {scan.description}
                                                 </div>
                                             )}
-                                        </button>
-                                    </td>
+                                            <div className="flex items-center gap-2 mt-1.5">
+                                                {scan.created_by?.name && (
+                                                    <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+                                                        <span className="w-3.5 h-3.5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-500">
+                                                            {scan.created_by.name.charAt(0).toUpperCase()}
+                                                        </span>
+                                                        {scan.created_by.name}
+                                                    </span>
+                                                )}
+                                                {scan.started_at && (
+                                                    <span className="text-[10px] text-slate-400" title={fmt(scan.started_at)}>
+                                                        {fmtRelative(scan.started_at)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
 
-                                    {/* Target */}
-                                    <td className="px-4 py-3.5 max-w-[180px]">
-                                        <span className="font-mono text-[11px] text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded truncate block">
-                                            {scan.target ?? '—'}
-                                        </span>
-                                    </td>
+                                        {/* Target */}
+                                        <td className="px-4 py-3.5 max-w-[180px]">
+                                            {scan.target ? (
+                                                <span className="font-mono text-[11px] text-slate-600 bg-slate-50 border border-slate-200 px-2 py-1 rounded-md truncate block max-w-[160px] hover:text-brand-600 hover:border-brand-200 hover:bg-brand-50 transition-colors">
+                                                    {scan.target}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[11px] text-slate-400 italic">—</span>
+                                            )}
+                                        </td>
 
-                                    {/* Type */}
-                                    <td className="px-4 py-3.5 whitespace-nowrap">
-                                        <ScanTypeBadge type={scan.type} />
-                                    </td>
+                                        {/* Type */}
+                                        <td className="px-4 py-3.5 whitespace-nowrap">
+                                            <ScanTypeBadge type={scan.type} />
+                                        </td>
 
-                                    {/* Engine */}
-                                    <td className="px-4 py-3.5 whitespace-nowrap">
-                                        <ScanEngineBadge engine={scan.engine} />
-                                    </td>
+                                        {/* Engine */}
+                                        <td className="px-4 py-3.5 whitespace-nowrap">
+                                            <ScanEngineBadge engine={scan.engine} />
+                                        </td>
 
-                                    {/* Status */}
-                                    <td className="px-4 py-3.5 whitespace-nowrap">
-                                        <ScanStatusBadge status={scan.status} />
-                                    </td>
+                                        {/* Status */}
+                                        <td className="px-4 py-3.5 whitespace-nowrap">
+                                            <ScanStatusBadge status={scan.status} />
+                                        </td>
 
-                                    {/* Progress */}
-                                    <td className="px-4 py-3.5 w-[160px]">
-                                        <ProgressBar progress={scan.progress} status={scan.status} compact />
-                                    </td>
+                                        {/* Progress */}
+                                        <td className="px-4 py-3.5 w-[170px]">
+                                            <ProgressCell progress={scan.progress} status={scan.status} duration={scan.duration} />
+                                        </td>
 
-                                    {/* Schedule */}
-                                    <td className="px-4 py-3.5 whitespace-nowrap">
-                                        {scan.schedule ? (
-                                            <span className="font-mono text-[11px] text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">
-                                                {scan.schedule}
-                                            </span>
-                                        ) : (
-                                            <span className="text-xs text-slate-400 italic">Manual</span>
-                                        )}
-                                    </td>
+                                        {/* Schedule */}
+                                        <td className="px-4 py-3.5 whitespace-nowrap">
+                                            <ScheduleCell schedule={scan.schedule} />
+                                        </td>
 
-                                    {/* Started */}
-                                    <td className="px-4 py-3.5 whitespace-nowrap text-xs text-slate-500" title={scan.started_at ? fmt(scan.started_at) : ''}>
-                                        {scan.started_at ? fmtRelative(scan.started_at) : '—'}
-                                    </td>
+                                        {/* Started */}
+                                        <td className="px-4 py-3.5 whitespace-nowrap">
+                                            {scan.started_at ? (
+                                                <span className="text-[12px] text-slate-500" title={fmt(scan.started_at)}>
+                                                    {fmtRelative(scan.started_at)}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[12px] text-slate-300">—</span>
+                                            )}
+                                        </td>
 
-                                    {/* Duration */}
-                                    <td className="px-4 py-3.5 whitespace-nowrap text-xs text-slate-500 font-mono">
-                                        {fmtDuration(scan.duration)}
-                                    </td>
+                                        {/* Duration */}
+                                        <td className="px-4 py-3.5 whitespace-nowrap">
+                                            <span className="text-[12px] font-mono text-slate-500">{fmtDuration(scan.duration)}</span>
+                                        </td>
 
-                                    {/* Actions */}
-                                    <td className="pr-5 pl-2 py-3.5 text-right">
-                                        <ScanActions
-                                            scan={scan}
-                                            onDetail={onNavigateToDetail}
-                                            onEdit={onNavigateToEdit}
-                                            onDelete={handleDelete}
-                                        />
-                                    </td>
-                                </tr>
-                            ))}
+                                        {/* Actions */}
+                                        <td className="pr-4 pl-2 py-3.5" onClick={e => e.stopPropagation()}>
+                                            <ScanActionMenu
+                                                scan={scan}
+                                                onDetail={onNavigateToDetail}
+                                                onEdit={onNavigateToEdit}
+                                                onDelete={handleDelete}
+                                            />
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
 
-                {/* ── Pagination Footer ─────────────────────────────────── */}
-                {!loading && !error && totalPages > 1 && (
-                    <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-                        <span className="text-xs text-slate-500 font-medium order-2 sm:order-1">
-                            Page <span className="font-bold text-slate-700">{page}</span> of{' '}
-                            <span className="font-bold text-slate-700">{totalPages}</span>
-                        </span>
+                {/* ── Pagination Footer ────────────────────────────── */}
+                {!loading && !error && totalItems > 0 && (
+                    <div className="border-t border-slate-100 bg-slate-50/40 px-5 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+
+                        {/* Left: rows-per-page + count */}
+                        <div className="flex items-center gap-3 text-xs text-slate-500 order-2 sm:order-1">
+                            <span className="hidden sm:inline">
+                                <span className="font-semibold text-slate-700">{totalItems}</span> total scans
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-slate-400">Rows per page</span>
+                                <select
+                                    value={perPage}
+                                    onChange={e => { setPerPage(Number(e.target.value)); setPage(1); }}
+                                    aria-label="Rows per page"
+                                    className="border border-slate-200 rounded-md px-1.5 py-0.5 text-xs bg-white text-slate-600 focus:outline-none focus:border-brand-400"
+                                >
+                                    {[10,15,25,50].map(n => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                            </div>
+                            <span>
+                                Page <span className="font-semibold text-slate-700">{page}</span> of{' '}
+                                <span className="font-semibold text-slate-700">{totalPages}</span>
+                            </span>
+                        </div>
+
+                        {/* Right: navigation */}
                         <div className="flex items-center gap-1 order-1 sm:order-2" role="navigation" aria-label="Pagination">
-                            <button
-                                type="button"
-                                onClick={() => setPage(1)}
-                                disabled={page === 1}
+                            <button type="button" onClick={() => setPage(1)} disabled={page === 1}
                                 aria-label="First page"
-                                className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                                className="h-7 px-2 text-xs border border-slate-200 rounded-md bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition font-medium text-slate-500"
                             >«</button>
-                            <button
-                                type="button"
-                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                disabled={page === 1}
+                            <button type="button" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
                                 aria-label="Previous page"
-                                className="p-1.5 border border-slate-200 rounded-md bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                            >
-                                <ChevronLeft size={13} />
-                            </button>
-                            {/* Page number chips */}
+                                className="h-7 w-7 flex items-center justify-center border border-slate-200 rounded-md bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-500"
+                            ><ChevronLeft size={13} /></button>
+
+                            {/* Page chips */}
                             {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                                const p = Math.min(Math.max(page - 2 + i, 1), totalPages - 4 + i);
-                                return p;
+                                const rawP = page - 2 + i;
+                                return Math.min(Math.max(rawP, 1), totalPages);
                             }).filter((v, i, a) => a.indexOf(v) === i && v >= 1 && v <= totalPages).map(p => (
                                 <button
                                     key={p}
@@ -687,42 +878,27 @@ export default function ScansPage({ onNavigateToCreate, onNavigateToEdit, onNavi
                                     onClick={() => setPage(p)}
                                     aria-label={`Page ${p}`}
                                     aria-current={p === page ? 'page' : undefined}
-                                    className={`w-7 h-7 text-xs font-semibold rounded-md border transition ${
+                                    className={`h-7 w-7 text-xs font-semibold rounded-md border transition ${
                                         p === page
-                                            ? 'bg-brand-600 text-white border-brand-600'
+                                            ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
                                             : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                                     }`}
-                                >
-                                    {p}
-                                </button>
+                                >{p}</button>
                             ))}
-                            <button
-                                type="button"
-                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                                disabled={page === totalPages}
+
+                            <button type="button" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
                                 aria-label="Next page"
-                                className="p-1.5 border border-slate-200 rounded-md bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                            >
-                                <ChevronRight size={13} />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setPage(totalPages)}
-                                disabled={page === totalPages}
+                                className="h-7 w-7 flex items-center justify-center border border-slate-200 rounded-md bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-500"
+                            ><ChevronRight size={13} /></button>
+                            <button type="button" onClick={() => setPage(totalPages)} disabled={page === totalPages}
                                 aria-label="Last page"
-                                className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                                className="h-7 px-2 text-xs border border-slate-200 rounded-md bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition font-medium text-slate-500"
                             >»</button>
                         </div>
-                    </div>
-                )}
-
-                {/* Refreshing indicator */}
-                {refreshing && !loading && (
-                    <div className="absolute top-2 right-2 flex items-center gap-1.5 text-xs text-slate-400 bg-white border border-slate-200 rounded-full px-2.5 py-1 shadow-sm">
-                        <Loader2 size={10} className="animate-spin" /> Refreshing…
                     </div>
                 )}
             </div>
         </div>
     );
 }
+
