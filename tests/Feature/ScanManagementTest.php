@@ -148,4 +148,31 @@ class ScanManagementTest extends TestCase
 
         $response->assertStatus(403);
     }
+
+    /**
+     * Test targetRelation belongsTo mapping logic.
+     */
+    public function test_scan_belongs_to_target_relationship()
+    {
+        $target = \App\Models\Target::create([
+            'name' => 'Edge Gateway Firewall',
+            'type' => \App\Enums\Target\TargetType::IP_ADDRESS,
+            'value' => '10.10.1.254',
+            'created_by' => $this->admin->id,
+        ]);
+
+        $scan = Scan::create([
+            'name' => 'SSO Gate Vuln Assessment',
+            'type' => ScanType::WEB_APPLICATION,
+            'engine' => ScanEngine::OWASP_ZAP,
+            'target' => '10.10.1.254',
+            'status' => ScanStatus::QUEUED,
+            'progress' => 0,
+            'created_by' => $this->admin->id,
+        ]);
+
+        $this->assertNotNull($scan->targetRelation);
+        $this->assertEquals($target->id, $scan->targetRelation->id);
+        $this->assertEquals('Edge Gateway Firewall', $scan->targetRelation->name);
+    }
 }

@@ -64,6 +64,11 @@ class Scan extends Model
         return $this->belongsTo(User::class, 'updated_by');
     }
 
+    public function targetRelation(): BelongsTo
+    {
+        return $this->belongsTo(Target::class, 'target', 'value');
+    }
+
     public function activityLogs(): HasMany
     {
         return $this->hasMany(ScanActivityLog::class);
