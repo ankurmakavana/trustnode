@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Finding\FindingController;
+use App\Http\Controllers\Report\ReportController;
 use App\Http\Controllers\Risk\RiskController;
 use App\Http\Controllers\Scan\ScanController;
 use App\Http\Controllers\Target\TargetController;
@@ -58,4 +59,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/risks/{risk}/treatment', [RiskController::class, 'addTreatment']);
     Route::post('/risks/{risk}/accept', [RiskController::class, 'accept']);
     Route::apiResource('/risks', RiskController::class);
+
+    // Report Management Endpoints
+    Route::post('/reports/{report}/duplicate', [ReportController::class, 'duplicate']);
+    Route::post('/reports/{report}/archive', [ReportController::class, 'archive']);
+    Route::apiResource('/reports', ReportController::class);
 });

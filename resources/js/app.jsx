@@ -25,6 +25,8 @@ import FindingDetailPage from './pages/FindingDetailPage';
 import RiskDashboardPage from './pages/RiskDashboardPage';
 import RiskFormPage from './pages/RiskFormPage';
 import RiskDetailPage from './pages/RiskDetailPage';
+import ReportsPage from './pages/ReportsPage';
+import ReportDetailPage from './pages/ReportDetailPage';
 import { useAuth } from './context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
@@ -54,6 +56,7 @@ export default function App() {
     const [activeScanId, setActiveScanId] = useState(null);
     const [activeFindingId, setActiveFindingId] = useState(null);
     const [activeRiskId, setActiveRiskId] = useState(null);
+    const [activeReportId, setActiveReportId] = useState(null);
 
     const handleNavigate = (page) => {
         setActivePage(page);
@@ -63,6 +66,7 @@ export default function App() {
         setActiveScanId(null);
         setActiveFindingId(null);
         setActiveRiskId(null);
+        setActiveReportId(null);
     };
 
     const handleViewDetail = (id) => {
@@ -76,6 +80,8 @@ export default function App() {
             setActiveFindingId(id);
         } else if (activePage === 'risks') {
             setActiveRiskId(id);
+        } else if (activePage === 'reports') {
+            setActiveReportId(id);
         }
         setCurrentView('detail');
     };
@@ -98,6 +104,8 @@ export default function App() {
             setActiveFindingId(id);
         } else if (activePage === 'risks') {
             setActiveRiskId(id);
+        } else if (activePage === 'reports') {
+            setActiveReportId(id);
         }
         setCurrentView('edit');
     };
@@ -310,6 +318,27 @@ export default function App() {
                 default:
                     return (
                         <RiskDashboardPage 
+                            onNavigateToCreate={handleViewCreate}
+                            onNavigateToEdit={handleViewEdit}
+                            onNavigateToDetail={handleViewDetail}
+                        />
+                    );
+            }
+        }
+        if (activePage === 'reports') {
+            switch (currentView) {
+                case 'detail':
+                    return (
+                        <ReportDetailPage 
+                            reportId={activeReportId} 
+                            onBack={() => setCurrentView('list')} 
+                            onEdit={handleViewEdit} 
+                        />
+                    );
+                case 'list':
+                default:
+                    return (
+                        <ReportsPage 
                             onNavigateToCreate={handleViewCreate}
                             onNavigateToEdit={handleViewEdit}
                             onNavigateToDetail={handleViewDetail}
