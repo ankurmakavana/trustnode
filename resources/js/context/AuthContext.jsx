@@ -16,10 +16,11 @@ export function AuthProvider({ children }) {
             if (res.ok) {
                 // Fetch current user details or use mock user structure for state
                 setUser({
-                    displayName: 'Administrator',
+                    displayName: 'TrustNode Admin',
+                    email: 'admin@trustnode.local',
                     role: 'Administrator',
-                    initials: 'AD',
-                    email: 'admin@trustnode.internal'
+                    roleSlug: 'administrator',
+                    initials: 'TA'
                 });
             } else {
                 setUser(null);
@@ -55,12 +56,16 @@ export function AuthProvider({ children }) {
         }
 
         const data = await res.json();
-        // Set user from response resource structure
+        const userData = data.data || {};
+        const name = userData.name || 'TrustNode Admin';
+        const roleObj = userData.role || {};
+        
         setUser({
-            displayName: data.data?.name || 'Administrator',
-            role: data.data?.role || 'Administrator',
-            initials: data.data?.name ? data.data.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'AD',
-            email: data.data?.email || email
+            displayName: name,
+            email: userData.email || email,
+            role: typeof roleObj === 'object' ? (roleObj.name || 'Administrator') : (roleObj || 'Administrator'),
+            roleSlug: typeof roleObj === 'object' ? (roleObj.slug || 'administrator') : 'administrator',
+            initials: name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : 'TA'
         });
     };
 
