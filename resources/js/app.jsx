@@ -1,4 +1,8 @@
+import './bootstrap';
+import '../css/app.css';
 import React, { useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { AuthProvider } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardPage from './pages/DashboardPage';
@@ -254,5 +258,16 @@ export default function App() {
                 </footer>
             </div>
         </div>
+    );
+}
+
+const root = document.getElementById('app');
+if (root) {
+    createRoot(root).render(
+        <React.StrictMode>
+            <AuthProvider>
+                <App />
+            </AuthProvider>
+        </React.StrictMode>
     );
 }
