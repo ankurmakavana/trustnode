@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Finding\FindingController;
 use App\Http\Controllers\Scan\ScanController;
 use App\Http\Controllers\Target\TargetController;
 use Illuminate\Support\Facades\Route;
@@ -47,4 +48,8 @@ Route::middleware('auth')->group(function (): void {
     // Scan Management Endpoints
     Route::get('/scans/{scan}/activity', [ScanController::class, 'activityLogs']);
     Route::apiResource('/scans', ScanController::class);
+
+    // Finding Management Endpoints
+    Route::get('/findings/{finding}/activity', [FindingController::class, 'activityLogs']);
+    Route::apiResource('/findings', FindingController::class);
 });

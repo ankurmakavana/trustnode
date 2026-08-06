@@ -19,6 +19,9 @@ import ScanDetailPage from './pages/ScanDetailPage';
 import ScanReportPage from './pages/ScanReportPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 import LoginPage from './pages/LoginPage';
+import FindingsPage from './pages/FindingsPage';
+import FindingFormPage from './pages/FindingFormPage';
+import FindingDetailPage from './pages/FindingDetailPage';
 import { useAuth } from './context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
@@ -45,6 +48,7 @@ export default function App() {
     const [activeAssetId, setActiveAssetId] = useState(null);
     const [activeTargetId, setActiveTargetId] = useState(null);
     const [activeScanId, setActiveScanId] = useState(null);
+    const [activeFindingId, setActiveFindingId] = useState(null);
 
     const handleNavigate = (page) => {
         setActivePage(page);
@@ -52,6 +56,7 @@ export default function App() {
         setActiveAssetId(null);
         setActiveTargetId(null);
         setActiveScanId(null);
+        setActiveFindingId(null);
     };
 
     const handleViewDetail = (id) => {
@@ -61,6 +66,8 @@ export default function App() {
             setActiveTargetId(id);
         } else if (activePage === 'scans') {
             setActiveScanId(id);
+        } else if (activePage === 'findings') {
+            setActiveFindingId(id);
         }
         setCurrentView('detail');
     };
@@ -79,6 +86,8 @@ export default function App() {
             setActiveTargetId(id);
         } else if (activePage === 'scans') {
             setActiveScanId(id);
+        } else if (activePage === 'findings') {
+            setActiveFindingId(id);
         }
         setCurrentView('edit');
     };
@@ -92,6 +101,7 @@ export default function App() {
         setActiveAssetId(null);
         setActiveTargetId(null);
         setActiveScanId(null);
+        setActiveFindingId(null);
     };
 
     const renderPage = () => {
@@ -219,6 +229,43 @@ export default function App() {
                             onNavigateToEdit={handleViewEdit}
                             onNavigateToDetail={handleViewDetail}
                             onNavigateToReport={handleViewReport}
+                        />
+                    );
+            }
+        }
+
+        if (activePage === 'findings') {
+            switch (currentView) {
+                case 'create':
+                    return (
+                        <FindingFormPage 
+                            onSave={handleFormSaved} 
+                            onCancel={() => setCurrentView('list')} 
+                        />
+                    );
+                case 'edit':
+                    return (
+                        <FindingFormPage 
+                            findingId={activeFindingId} 
+                            onSave={handleFormSaved} 
+                            onCancel={() => setCurrentView('list')} 
+                        />
+                    );
+                case 'detail':
+                    return (
+                        <FindingDetailPage 
+                            findingId={activeFindingId} 
+                            onBack={() => setCurrentView('list')} 
+                            onEdit={handleViewEdit} 
+                        />
+                    );
+                case 'list':
+                default:
+                    return (
+                        <FindingsPage 
+                            onNavigateToCreate={handleViewCreate}
+                            onNavigateToEdit={handleViewEdit}
+                            onNavigateToDetail={handleViewDetail}
                         />
                     );
             }
