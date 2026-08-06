@@ -14,6 +14,7 @@ import TargetFormPage from './pages/TargetFormPage';
 import TargetDetailPage from './pages/TargetDetailPage';
 import ScansPage from './pages/ScansPage';
 import ScanFormPage from './pages/ScanFormPage';
+import ScanWizardPage from './pages/ScanWizardPage';
 import ScanDetailPage from './pages/ScanDetailPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 import LoginPage from './pages/LoginPage';
@@ -172,9 +173,9 @@ export default function App() {
             switch (currentView) {
                 case 'create':
                     return (
-                        <ScanFormPage 
-                            onSave={handleFormSaved} 
-                            onCancel={() => setCurrentView('list')} 
+                        <ScanWizardPage
+                            onSave={handleFormSaved}
+                            onCancel={() => setCurrentView('list')}
                         />
                     );
                 case 'edit':
