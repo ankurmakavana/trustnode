@@ -27,6 +27,8 @@ import RiskFormPage from './pages/RiskFormPage';
 import RiskDetailPage from './pages/RiskDetailPage';
 import ReportsPage from './pages/ReportsPage';
 import ReportDetailPage from './pages/ReportDetailPage';
+import ComplianceDashboardPage from './pages/ComplianceDashboardPage';
+import ComplianceDetailPage from './pages/ComplianceDetailPage';
 import { useAuth } from './context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
@@ -38,6 +40,7 @@ const pageLabels = {
     findings:  'Findings',
     risks:     'Risk Register',
     reports:   'Reports',
+    compliance: 'Compliance',
     ai:        'AI Assistant',
     users:     'Users',
     settings:  'Settings',
@@ -57,6 +60,7 @@ export default function App() {
     const [activeFindingId, setActiveFindingId] = useState(null);
     const [activeRiskId, setActiveRiskId] = useState(null);
     const [activeReportId, setActiveReportId] = useState(null);
+    const [activeComplianceCode, setActiveComplianceCode] = useState(null);
 
     const handleNavigate = (page) => {
         setActivePage(page);
@@ -67,6 +71,7 @@ export default function App() {
         setActiveFindingId(null);
         setActiveRiskId(null);
         setActiveReportId(null);
+        setActiveComplianceCode(null);
     };
 
     const handleViewDetail = (id) => {
@@ -82,6 +87,8 @@ export default function App() {
             setActiveRiskId(id);
         } else if (activePage === 'reports') {
             setActiveReportId(id);
+        } else if (activePage === 'compliance') {
+            setActiveComplianceCode(id);
         }
         setCurrentView('detail');
     };
@@ -106,6 +113,8 @@ export default function App() {
             setActiveRiskId(id);
         } else if (activePage === 'reports') {
             setActiveReportId(id);
+        } else if (activePage === 'compliance') {
+            setActiveComplianceCode(id);
         }
         setCurrentView('edit');
     };
@@ -341,6 +350,24 @@ export default function App() {
                         <ReportsPage 
                             onNavigateToCreate={handleViewCreate}
                             onNavigateToEdit={handleViewEdit}
+                            onNavigateToDetail={handleViewDetail}
+                        />
+                    );
+            }
+        }
+        if (activePage === 'compliance') {
+            switch (currentView) {
+                case 'detail':
+                    return (
+                        <ComplianceDetailPage 
+                            frameworkCode={activeComplianceCode} 
+                            onBack={() => setCurrentView('list')} 
+                        />
+                    );
+                case 'list':
+                default:
+                    return (
+                        <ComplianceDashboardPage 
                             onNavigateToDetail={handleViewDetail}
                         />
                     );

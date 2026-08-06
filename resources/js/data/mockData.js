@@ -194,6 +194,7 @@ export const mockNavItems = [
     { id: 'findings',  label: 'Findings',     icon: 'ShieldAlert',     group: 'main',   badge: '34',  badgeColor: 'red'    },
     { id: 'risks',     label: 'Risk Register', icon: 'Shield',         group: 'main'                                      },
     { id: 'reports',   label: 'Reports',      icon: 'FileText',        group: 'main'                                      },
+    { id: 'compliance', label: 'Compliance',  icon: 'CheckSquare',     group: 'main'                                      },
     { id: 'ai',        label: 'AI Assistant', icon: 'Sparkles',        group: 'tools',  badge: 'NEW', badgeColor: 'brand'  },
     { id: 'users',     label: 'Users',        icon: 'Users',           group: 'admin'                                     },
     { id: 'settings',  label: 'Settings',     icon: 'Settings',        group: 'admin'                                     },

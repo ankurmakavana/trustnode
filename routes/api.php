@@ -6,6 +6,7 @@ use App\Http\Controllers\Asset\AssetController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\PasswordController;
+use App\Http\Controllers\Compliance\ComplianceController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Finding\FindingController;
 use App\Http\Controllers\Report\ReportController;
@@ -64,4 +65,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/reports/{report}/duplicate', [ReportController::class, 'duplicate']);
     Route::post('/reports/{report}/archive', [ReportController::class, 'archive']);
     Route::apiResource('/reports', ReportController::class);
+
+    // Compliance Management Endpoints
+    Route::get('/compliance/stats', [ComplianceController::class, 'stats']);
+    Route::get('/compliance/{code}', [ComplianceController::class, 'show']);
+    Route::get('/compliance', [ComplianceController::class, 'index']);
 });

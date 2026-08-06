@@ -7,6 +7,7 @@ use App\Enums\Finding\FindingStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
@@ -94,5 +95,12 @@ class Finding extends Model
     public function activityLogs(): HasMany
     {
         return $this->hasMany(FindingActivityLog::class);
+    }
+
+    public function complianceControls(): BelongsToMany
+    {
+        return $this->belongsToMany(ComplianceControl::class, 'finding_compliance', 'finding_id', 'control_id')
+            ->withPivot('status', 'notes')
+            ->withTimestamps();
     }
 }
