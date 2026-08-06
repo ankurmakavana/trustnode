@@ -16,6 +16,7 @@ import ScansPage from './pages/ScansPage';
 import ScanFormPage from './pages/ScanFormPage';
 import ScanWizardPage from './pages/ScanWizardPage';
 import ScanDetailPage from './pages/ScanDetailPage';
+import ScanReportPage from './pages/ScanReportPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 import LoginPage from './pages/LoginPage';
 import { useAuth } from './context/AuthContext';
@@ -62,6 +63,13 @@ export default function App() {
             setActiveScanId(id);
         }
         setCurrentView('detail');
+    };
+
+    const handleViewReport = (id) => {
+        if (activePage === 'scans') {
+            setActiveScanId(id);
+            setCurrentView('report');
+        }
     };
 
     const handleViewEdit = (id) => {
@@ -192,6 +200,15 @@ export default function App() {
                             scanId={activeScanId} 
                             onBack={() => setCurrentView('list')} 
                             onEdit={handleViewEdit} 
+                            onReport={handleViewReport}
+                        />
+                    );
+                case 'report':
+                    return (
+                        <ScanReportPage
+                            scanId={activeScanId}
+                            onBack={() => setCurrentView('list')}
+                            onViewDetail={handleViewDetail}
                         />
                     );
                 case 'list':
@@ -201,6 +218,7 @@ export default function App() {
                             onNavigateToCreate={handleViewCreate}
                             onNavigateToEdit={handleViewEdit}
                             onNavigateToDetail={handleViewDetail}
+                            onNavigateToReport={handleViewReport}
                         />
                     );
             }

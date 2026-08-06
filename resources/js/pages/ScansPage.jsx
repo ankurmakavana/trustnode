@@ -88,7 +88,7 @@ function humanSchedule(cron) {
 
 // ─── Action Dropdown ──────────────────────────────────────────────────────────
 
-function ScanActionMenu({ scan, onDetail, onEdit, onDelete }) {
+function ScanActionMenu({ scan, onDetail, onEdit, onDelete, onReport }) {
     const [open, setOpen] = useState(false);
     const ref             = useRef(null);
     const status          = String(scan.status ?? '').toLowerCase();
@@ -102,7 +102,7 @@ function ScanActionMenu({ scan, onDetail, onEdit, onDelete }) {
 
     const items = [];
 
-    // View — always
+    // View Details — always
     items.push({ label: 'View Details', icon: Eye,       cls: 'text-slate-700', action: () => onDetail(scan.id) });
 
     if (status === 'running') {
@@ -115,7 +115,7 @@ function ScanActionMenu({ scan, onDetail, onEdit, onDelete }) {
     }
     if (status === 'completed') {
         items.push({ label: 'View Findings', icon: FileText,  cls: 'text-emerald-600', action: () => onDetail(scan.id) });
-        items.push({ label: 'View Report',   icon: FileText,  cls: 'text-slate-700',   action: () => onDetail(scan.id) });
+        items.push({ label: 'View Report',   icon: FileText,  cls: 'text-slate-700',   action: () => onReport(scan.id) });
         items.push({ label: 'Run Again',     icon: RotateCcw, cls: 'text-blue-600',    action: () => onEdit(scan.id) });
     }
     if (status === 'failed') {
@@ -309,7 +309,7 @@ const TYPE_LABELS   = { web_application:'Web Application', network_ip:'Network I
 const ENGINE_LABELS = { nmap:'Nmap', owasp_zap:'OWASP ZAP', nuclei:'Nuclei', nikto:'Nikto', trivy:'Trivy', nessus:'Nessus', custom:'Custom' };
 const STATUS_LABELS = { queued:'Queued', running:'Running', scheduled:'Scheduled', completed:'Completed', failed:'Failed', cancelled:'Cancelled' };
 
-export default function ScansPage({ onNavigateToCreate, onNavigateToEdit, onNavigateToDetail }) {
+export default function ScansPage({ onNavigateToCreate, onNavigateToEdit, onNavigateToDetail, onNavigateToReport }) {
     const [scans,      setScans]      = useState([]);
     const [stats,      setStats]      = useState(null);
     const [loading,    setLoading]    = useState(true);
@@ -821,6 +821,7 @@ export default function ScansPage({ onNavigateToCreate, onNavigateToEdit, onNavi
                                                 onDetail={onNavigateToDetail}
                                                 onEdit={onNavigateToEdit}
                                                 onDelete={handleDelete}
+                                                onReport={onNavigateToReport}
                                             />
                                         </td>
                                     </tr>

@@ -7,7 +7,7 @@ import axios from 'axios';
 import { ScanStatusBadge, ScanTypeBadge, ScanEngineBadge, ProgressBar } from '../components/ui/primitives_scans';
 import { Skeleton } from '../components/ui/primitives';
 
-export default function ScanDetailPage({ scanId, onBack, onEdit }) {
+export default function ScanDetailPage({ scanId, onBack, onEdit, onReport }) {
     const [scan, setScan] = useState(null);
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -88,6 +88,14 @@ export default function ScanDetailPage({ scanId, onBack, onEdit }) {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        {onReport && (
+                            <button
+                                onClick={() => onReport(scan.id)}
+                                className="px-3.5 py-1.5 text-xs font-semibold text-brand-600 bg-brand-50 border border-brand-200 hover:bg-brand-100 rounded-lg shadow-sm transition"
+                            >
+                                View Report
+                            </button>
+                        )}
                         <button
                             onClick={() => onEdit(scan.id)}
                             className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg shadow-sm transition"
