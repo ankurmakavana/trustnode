@@ -2,30 +2,62 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext(null);
 
+/**
+ * Read the CSRF token injected by Laravel into the page meta tag.
+ * app.blade.php must contain: <meta name="csrf-token" content="{{ csrf_token() }}">
+ */
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+}
+
+/**
+ * Build a normalised user object from the /api/auth/me response payload.
+ */
+function buildUser(data) {
+    const name    = data.name  || 'TrustNode User';
+    const roleObj = data.role  || {};
+    return {
+        uuid:        data.uuid  || null,
+        displayName: name,
+        email:       data.email || '',
+        status:      data.status || 'active',
+        role:        typeof roleObj === 'object' ? (roleObj.name || 'Administrator') : (roleObj || 'Administrator'),
+        roleSlug:    typeof roleObj === 'object' ? (roleObj.slug || 'administrator') : 'administrator',
+        initials:    name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'TN',
+    };
+}
+
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState(null);
+    const [user,    setUser]    = useState(null);
     const [loading, setLoading] = useState(true);
 
+    /**
+     * Check current session by calling the public /api/auth/me endpoint.
+     *
+     * This endpoint ALWAYS returns HTTP 200:
+     *   - { authenticated: true,  data: { ... } }  → user is logged in
+     *   - { authenticated: false }                  → no active session
+     *
+     * This means the browser console will NEVER show a 401 on page load.
+     */
     const checkAuthStatus = async () => {
         try {
-            // We use the dashboard/stats call as a lightweight validation check.
-            // If it succeeds with 200, we know our session is alive and valid.
-            const res = await fetch('/api/dashboard/stats', {
-                headers: { 'Accept': 'application/json' }
+            const res = await fetch('/api/auth/me', {
+                credentials: 'include',
+                headers:     { 'Accept': 'application/json' },
             });
+
             if (res.ok) {
-                // Fetch current user details or use mock user structure for state
-                setUser({
-                    displayName: 'TrustNode Admin',
-                    email: 'admin@trustnode.local',
-                    role: 'Administrator',
-                    roleSlug: 'administrator',
-                    initials: 'TA'
-                });
+                const json = await res.json();
+                if (json.authenticated && json.data) {
+                    setUser(buildUser(json.data));
+                } else {
+                    setUser(null);
+                }
             } else {
                 setUser(null);
             }
-        } catch (err) {
+        } catch {
             setUser(null);
         } finally {
             setLoading(false);
@@ -36,15 +68,21 @@ export function AuthProvider({ children }) {
         checkAuthStatus();
     }, []);
 
+    /**
+     * Submit credentials to /api/login.
+     * credentials:'include' ensures the browser stores the session cookie
+     * returned by Set-Cookie in the response headers.
+     */
     const login = async (email, password) => {
         const res = await fetch('/api/login', {
-            method: 'POST',
+            method:      'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                'Accept':       'application/json',
+                'X-CSRF-TOKEN': getCsrfToken(),
             },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ email, password }),
         });
 
         if (!res.ok) {
@@ -52,35 +90,34 @@ export function AuthProvider({ children }) {
                 const data = await res.json();
                 throw { validation: data.errors };
             }
-            throw new Error('Authentication failed. Please verify credentials.');
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.message || 'Authentication failed. Please verify your credentials.');
         }
 
-        const data = await res.json();
+        const data     = await res.json();
         const userData = data.data || {};
-        const name = userData.name || 'TrustNode Admin';
-        const roleObj = userData.role || {};
-        
-        setUser({
-            displayName: name,
-            email: userData.email || email,
-            role: typeof roleObj === 'object' ? (roleObj.name || 'Administrator') : (roleObj || 'Administrator'),
-            roleSlug: typeof roleObj === 'object' ? (roleObj.slug || 'administrator') : 'administrator',
-            initials: name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : 'TA'
-        });
+        setUser(buildUser(userData));
     };
 
+    /**
+     * Terminate the current session on the backend and clear local state.
+     * credentials:'include' ensures the session cookie is sent so Laravel
+     * can invalidate the correct session row.
+     */
     const logout = async () => {
         setLoading(true);
         try {
             await fetch('/api/logout', {
-                method: 'POST',
+                method:      'POST',
+                credentials: 'include',
                 headers: {
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-                }
+                    'Accept':       'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken(),
+                },
             });
         } catch (err) {
-            console.error('Logout request error:', err);
+            // Network error — still clear local state so the UI resets
+            console.error('Logout request failed:', err);
         } finally {
             setUser(null);
             setLoading(false);

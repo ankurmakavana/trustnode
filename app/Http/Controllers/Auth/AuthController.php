@@ -43,6 +43,38 @@ final class AuthController extends Controller
     }
 
     /**
+     * Return the currently authenticated user, or {"authenticated": false}.
+     * Always returns HTTP 200 — never 401 — so the SPA can check session
+     * status without producing console errors on unauthenticated page loads.
+     */
+    public function me(Request $request): JsonResponse
+    {
+        /** @var User|null $user */
+        $user = $request->user();
+
+        if (! $user) {
+            return response()->json(['authenticated' => false]);
+        }
+
+        $user->load('role');
+
+        return response()->json([
+            'authenticated' => true,
+            'data' => [
+                'uuid' => $user->uuid,
+                'name' => $user->name,
+                'email' => $user->email,
+                'status' => $user->status->value,
+                'role' => $user->role ? [
+                    'name' => $user->role->name,
+                    'slug' => $user->role->slug,
+                ] : null,
+                'last_login_at' => $user->last_login_at?->toIso8601String(),
+            ],
+        ]);
+    }
+
+    /**
      * Terminate the active authenticated session.
      */
     public function logout(Request $request): JsonResponse

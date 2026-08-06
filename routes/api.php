@@ -11,6 +11,9 @@ use App\Http\Controllers\Scan\ScanController;
 use App\Http\Controllers\Target\TargetController;
 use Illuminate\Support\Facades\Route;
 
+// Public auth-status check — always 200, never 401
+Route::get('/auth/me', [AuthController::class, 'me']);
+
 Route::middleware('guest')->group(function (): void {
     Route::post('/login', [AuthController::class, 'login'])
         ->middleware('throttle:5,1');

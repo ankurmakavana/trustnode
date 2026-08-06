@@ -5,9 +5,11 @@ namespace Tests\Feature;
 use App\Enums\Scan\ScanEngine;
 use App\Enums\Scan\ScanStatus;
 use App\Enums\Scan\ScanType;
+use App\Enums\Target\TargetType;
 use App\Enums\UserRole;
 use App\Models\Role;
 use App\Models\Scan;
+use App\Models\Target;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -154,9 +156,9 @@ class ScanManagementTest extends TestCase
      */
     public function test_scan_belongs_to_target_relationship()
     {
-        $target = \App\Models\Target::create([
+        $target = Target::create([
             'name' => 'Edge Gateway Firewall',
-            'type' => \App\Enums\Target\TargetType::IP_ADDRESS,
+            'type' => TargetType::IP_ADDRESS,
             'value' => '10.10.1.254',
             'created_by' => $this->admin->id,
         ]);
