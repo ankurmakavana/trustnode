@@ -2,7 +2,9 @@ import './bootstrap';
 import '../css/app.css';
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AuthProvider } from './context/AuthContext';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardPage from './pages/DashboardPage';
@@ -29,7 +31,9 @@ import ReportsPage from './pages/ReportsPage';
 import ReportDetailPage from './pages/ReportDetailPage';
 import ComplianceDashboardPage from './pages/ComplianceDashboardPage';
 import ComplianceDetailPage from './pages/ComplianceDetailPage';
-import { useAuth } from './context/AuthContext';
+import IntegrationsPage from './pages/IntegrationsPage';
+import ConnectorPage from './pages/ConnectorPage';
+import IntegrationDetailPage from './pages/IntegrationDetailPage';
 import { Loader2 } from 'lucide-react';
 
 const pageLabels = {
@@ -41,343 +45,153 @@ const pageLabels = {
     risks:     'Risk Register',
     reports:   'Reports',
     compliance: 'Compliance',
+    integrations: 'Integrations',
     ai:        'AI Assistant',
     users:     'Users',
     settings:  'Settings',
 };
 
-export default function App() {
+// ─── Route Wrappers to map URL params to component props ─────────────────────
+function AssetDetailRoute() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    return <AssetDetailPage assetId={id} onBack={() => navigate('/assets')} onEdit={(id) => navigate(`/assets/${id}/edit`)} />;
+}
+
+function AssetEditRoute() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    return <AssetFormPage assetId={id} onSave={() => navigate('/assets')} onCancel={() => navigate('/assets')} />;
+}
+
+function TargetDetailRoute() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    return <TargetDetailPage targetId={id} onBack={() => navigate('/targets')} onEdit={(id) => navigate(`/targets/${id}/edit`)} />;
+}
+
+function TargetEditRoute() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    return <TargetFormPage targetId={id} onSave={() => navigate('/targets')} onCancel={() => navigate('/targets')} />;
+}
+
+function ScanDetailRoute() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    return (
+        <ScanDetailPage 
+            scanId={id} 
+            onBack={() => navigate('/scans')} 
+            onEdit={(id) => navigate(`/scans/${id}/edit`)} 
+            onReport={(id) => navigate(`/scans/${id}/report`)} 
+        />
+    );
+}
+
+// ─── ScanEditRoute ───────────────────────────────────────────────────────────
+function ScanEditRoute() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    return <ScanFormPage scanId={id} onSave={() => navigate('/scans')} onCancel={() => navigate('/scans')} />;
+}
+
+function ScanReportRoute() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    return <ScanReportPage scanId={id} onBack={() => navigate('/scans')} onViewDetail={(id) => navigate(`/findings/${id}`)} />;
+}
+
+function FindingDetailRoute() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    return <FindingDetailPage findingId={id} onBack={() => navigate('/findings')} onEdit={(id) => navigate(`/findings/${id}/edit`)} />;
+}
+
+function FindingEditRoute() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    return <FindingFormPage findingId={id} onSave={() => navigate('/findings')} onCancel={() => navigate('/findings')} />;
+}
+
+function RiskDetailRoute() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    return <RiskDetailPage riskId={id} onBack={() => navigate('/risk-register')} onEdit={(id) => navigate(`/risk-register/${id}/edit`)} />;
+}
+
+function RiskEditRoute() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    return <RiskFormPage riskId={id} onSave={() => navigate('/risk-register')} onCancel={() => navigate('/risk-register')} />;
+}
+
+function ReportDetailRoute() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    return <ReportDetailPage reportId={id} onBack={() => navigate('/reports')} onEdit={(id) => navigate(`/reports/${id}/edit`)} />;
+}
+
+function ComplianceDetailRoute() {
+    const { framework } = useParams();
+    const navigate = useNavigate();
+    return <ComplianceDetailPage frameworkCode={framework} onBack={() => navigate('/compliance')} />;
+}
+
+function ConnectorRoute() {
+    const { connector } = useParams();
+    const navigate = useNavigate();
+    return (
+        <ConnectorPage 
+            connectorCode={connector} 
+            onBack={() => navigate('/integrations')} 
+        />
+    );
+}
+
+function IntegrationDetailRoute() {
+    const { connector, connection } = useParams();
+    const navigate = useNavigate();
+    return (
+        <IntegrationDetailPage 
+            integrationId={connection} 
+            onBack={() => navigate(`/integrations/${connector}`)} 
+        />
+    );
+}
+
+function MainAppLayout() {
     const { user, loading } = useAuth();
-    const [activePage,   setActivePage]   = useState('dashboard');
-    const [sidebarOpen,  setSidebarOpen]  = useState(true);
-    const [darkMode,     setDarkMode]     = useState(false);
-    
-    // Sub-view page routing states
-    const [currentView,  setCurrentView]  = useState('list'); // list, create, edit, detail
-    const [activeAssetId, setActiveAssetId] = useState(null);
-    const [activeTargetId, setActiveTargetId] = useState(null);
-    const [activeScanId, setActiveScanId] = useState(null);
-    const [activeFindingId, setActiveFindingId] = useState(null);
-    const [activeRiskId, setActiveRiskId] = useState(null);
-    const [activeReportId, setActiveReportId] = useState(null);
-    const [activeComplianceCode, setActiveComplianceCode] = useState(null);
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [darkMode, setDarkMode] = useState(false);
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    // Map active path to sidebar active page highlighting
+    const getActivePage = () => {
+        const path = location.pathname;
+        if (path.startsWith('/dashboard')) return 'dashboard';
+        if (path.startsWith('/assets')) return 'assets';
+        if (path.startsWith('/targets')) return 'targets';
+        if (path.startsWith('/scans')) return 'scans';
+        if (path.startsWith('/findings')) return 'findings';
+        if (path.startsWith('/risk-register')) return 'risks';
+        if (path.startsWith('/reports')) return 'reports';
+        if (path.startsWith('/compliance')) return 'compliance';
+        if (path.startsWith('/integrations')) return 'integrations';
+        if (path.startsWith('/users')) return 'users';
+        if (path.startsWith('/settings')) return 'settings';
+        return 'dashboard';
+    };
 
     const handleNavigate = (page) => {
-        setActivePage(page);
-        setCurrentView('list');
-        setActiveAssetId(null);
-        setActiveTargetId(null);
-        setActiveScanId(null);
-        setActiveFindingId(null);
-        setActiveRiskId(null);
-        setActiveReportId(null);
-        setActiveComplianceCode(null);
-    };
-
-    const handleViewDetail = (id) => {
-        if (activePage === 'assets') {
-            setActiveAssetId(id);
-        } else if (activePage === 'targets') {
-            setActiveTargetId(id);
-        } else if (activePage === 'scans') {
-            setActiveScanId(id);
-        } else if (activePage === 'findings') {
-            setActiveFindingId(id);
-        } else if (activePage === 'risks') {
-            setActiveRiskId(id);
-        } else if (activePage === 'reports') {
-            setActiveReportId(id);
-        } else if (activePage === 'compliance') {
-            setActiveComplianceCode(id);
-        }
-        setCurrentView('detail');
-    };
-
-    const handleViewReport = (id) => {
-        if (activePage === 'scans') {
-            setActiveScanId(id);
-            setCurrentView('report');
+        if (page === 'risks') {
+            navigate('/risk-register');
+        } else {
+            navigate(`/${page}`);
         }
     };
 
-    const handleViewEdit = (id) => {
-        if (activePage === 'assets') {
-            setActiveAssetId(id);
-        } else if (activePage === 'targets') {
-            setActiveTargetId(id);
-        } else if (activePage === 'scans') {
-            setActiveScanId(id);
-        } else if (activePage === 'findings') {
-            setActiveFindingId(id);
-        } else if (activePage === 'risks') {
-            setActiveRiskId(id);
-        } else if (activePage === 'reports') {
-            setActiveReportId(id);
-        } else if (activePage === 'compliance') {
-            setActiveComplianceCode(id);
-        }
-        setCurrentView('edit');
-    };
-
-    const handleViewCreate = () => {
-        setCurrentView('create');
-    };
-
-    const handleFormSaved = () => {
-        setCurrentView('list');
-        setActiveAssetId(null);
-        setActiveTargetId(null);
-        setActiveScanId(null);
-        setActiveFindingId(null);
-    };
-
-    const renderPage = () => {
-        if (activePage === 'dashboard') {
-            return <DashboardPage />;
-        }
-
-        if (activePage === 'assets') {
-            switch (currentView) {
-                case 'create':
-                    return (
-                        <AssetFormPage 
-                            onSave={handleFormSaved} 
-                            onCancel={() => setCurrentView('list')} 
-                            onUnauthorized={() => {}}
-                        />
-                    );
-                case 'edit':
-                    return (
-                        <AssetFormPage 
-                            assetId={activeAssetId} 
-                            onSave={handleFormSaved} 
-                            onCancel={() => setCurrentView('list')} 
-                            onUnauthorized={() => {}}
-                        />
-                    );
-                case 'detail':
-                    return (
-                        <AssetDetailPage 
-                            assetId={activeAssetId} 
-                            onBack={() => setCurrentView('list')} 
-                            onEdit={handleViewEdit} 
-                            onUnauthorized={() => {}}
-                        />
-                    );
-                case 'list':
-                default:
-                    return (
-                        <AssetsPage 
-                            onNavigateToCreate={handleViewCreate}
-                            onNavigateToEdit={handleViewEdit}
-                            onNavigateToDetail={handleViewDetail}
-                            onUnauthorized={() => {}}
-                        />
-                    );
-            }
-        }
-
-        if (activePage === 'targets') {
-            switch (currentView) {
-                case 'create':
-                    return (
-                        <TargetFormPage 
-                            onSave={handleFormSaved} 
-                            onCancel={() => setCurrentView('list')} 
-                        />
-                    );
-                case 'edit':
-                    return (
-                        <TargetFormPage 
-                            targetId={activeTargetId} 
-                            onSave={handleFormSaved} 
-                            onCancel={() => setCurrentView('list')} 
-                        />
-                    );
-                case 'detail':
-                    return (
-                        <TargetDetailPage 
-                            targetId={activeTargetId} 
-                            onBack={() => setCurrentView('list')} 
-                            onEdit={handleViewEdit} 
-                        />
-                    );
-                case 'list':
-                default:
-                    return (
-                        <TargetsPage 
-                            onNavigateToCreate={handleViewCreate}
-                            onNavigateToEdit={handleViewEdit}
-                            onNavigateToDetail={handleViewDetail}
-                        />
-                    );
-            }
-        }
-
-        if (activePage === 'scans') {
-            switch (currentView) {
-                case 'create':
-                    return (
-                        <ScanWizardPage
-                            onSave={handleFormSaved}
-                            onCancel={() => setCurrentView('list')}
-                        />
-                    );
-                case 'edit':
-                    return (
-                        <ScanFormPage 
-                            scanId={activeScanId} 
-                            onSave={handleFormSaved} 
-                            onCancel={() => setCurrentView('list')} 
-                        />
-                    );
-                case 'detail':
-                    return (
-                        <ScanDetailPage 
-                            scanId={activeScanId} 
-                            onBack={() => setCurrentView('list')} 
-                            onEdit={handleViewEdit} 
-                            onReport={handleViewReport}
-                        />
-                    );
-                case 'report':
-                    return (
-                        <ScanReportPage
-                            scanId={activeScanId}
-                            onBack={() => setCurrentView('list')}
-                            onViewDetail={handleViewDetail}
-                        />
-                    );
-                case 'list':
-                default:
-                    return (
-                        <ScansPage 
-                            onNavigateToCreate={handleViewCreate}
-                            onNavigateToEdit={handleViewEdit}
-                            onNavigateToDetail={handleViewDetail}
-                            onNavigateToReport={handleViewReport}
-                        />
-                    );
-            }
-        }
-
-        if (activePage === 'findings') {
-            switch (currentView) {
-                case 'create':
-                    return (
-                        <FindingFormPage 
-                            onSave={handleFormSaved} 
-                            onCancel={() => setCurrentView('list')} 
-                        />
-                    );
-                case 'edit':
-                    return (
-                        <FindingFormPage 
-                            findingId={activeFindingId} 
-                            onSave={handleFormSaved} 
-                            onCancel={() => setCurrentView('list')} 
-                        />
-                    );
-                case 'detail':
-                    return (
-                        <FindingDetailPage 
-                            findingId={activeFindingId} 
-                            onBack={() => setCurrentView('list')} 
-                            onEdit={handleViewEdit} 
-                        />
-                    );
-                case 'list':
-                default:
-                    return (
-                        <FindingsPage 
-                            onNavigateToCreate={handleViewCreate}
-                            onNavigateToEdit={handleViewEdit}
-                            onNavigateToDetail={handleViewDetail}
-                        />
-                    );
-            }
-        }
-
-        if (activePage === 'risks') {
-            switch (currentView) {
-                case 'create':
-                    return (
-                        <RiskFormPage 
-                            onSave={handleFormSaved} 
-                            onCancel={() => setCurrentView('list')} 
-                        />
-                    );
-                case 'edit':
-                    return (
-                        <RiskFormPage 
-                            riskId={activeRiskId} 
-                            onSave={handleFormSaved} 
-                            onCancel={() => setCurrentView('list')} 
-                        />
-                    );
-                case 'detail':
-                    return (
-                        <RiskDetailPage 
-                            riskId={activeRiskId} 
-                            onBack={() => setCurrentView('list')} 
-                            onEdit={handleViewEdit} 
-                        />
-                    );
-                case 'list':
-                default:
-                    return (
-                        <RiskDashboardPage 
-                            onNavigateToCreate={handleViewCreate}
-                            onNavigateToEdit={handleViewEdit}
-                            onNavigateToDetail={handleViewDetail}
-                        />
-                    );
-            }
-        }
-        if (activePage === 'reports') {
-            switch (currentView) {
-                case 'detail':
-                    return (
-                        <ReportDetailPage 
-                            reportId={activeReportId} 
-                            onBack={() => setCurrentView('list')} 
-                            onEdit={handleViewEdit} 
-                        />
-                    );
-                case 'list':
-                default:
-                    return (
-                        <ReportsPage 
-                            onNavigateToCreate={handleViewCreate}
-                            onNavigateToEdit={handleViewEdit}
-                            onNavigateToDetail={handleViewDetail}
-                        />
-                    );
-            }
-        }
-        if (activePage === 'compliance') {
-            switch (currentView) {
-                case 'detail':
-                    return (
-                        <ComplianceDetailPage 
-                            frameworkCode={activeComplianceCode} 
-                            onBack={() => setCurrentView('list')} 
-                        />
-                    );
-                case 'list':
-                default:
-                    return (
-                        <ComplianceDashboardPage 
-                            onNavigateToDetail={handleViewDetail}
-                        />
-                    );
-            }
-        }
-
-        return <PlaceholderPage title={pageLabels[activePage] || activePage} />;
-    };
-
-    // Show initial session validation loading screen
     if (loading) {
         return (
             <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3">
@@ -387,10 +201,11 @@ export default function App() {
         );
     }
 
-    // Redirect guest users to Login Page
     if (!user) {
         return <LoginPage />;
     }
+
+    const activePage = getActivePage();
 
     return (
         <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -412,7 +227,60 @@ export default function App() {
 
                 <main className="flex-1 overflow-y-auto">
                     <div className="max-w-screen-2xl mx-auto px-5 py-6">
-                        {renderPage()}
+                        <Routes>
+                            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                            <Route path="/dashboard" element={<DashboardPage />} />
+                            
+                            {/* Assets */}
+                            <Route path="/assets" element={<AssetsPage onNavigateToCreate={() => navigate('/assets/new')} onNavigateToEdit={(id) => navigate(`/assets/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/assets/${id}`)} />} />
+                            <Route path="/assets/new" element={<AssetFormPage onSave={() => navigate('/assets')} onCancel={() => navigate('/assets')} />} />
+                            <Route path="/assets/:id" element={<AssetDetailRoute />} />
+                            <Route path="/assets/:id/edit" element={<AssetEditRoute />} />
+
+                            {/* Targets */}
+                            <Route path="/targets" element={<TargetsPage onNavigateToCreate={() => navigate('/targets/new')} onNavigateToEdit={(id) => navigate(`/targets/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/targets/${id}`)} />} />
+                            <Route path="/targets/new" element={<TargetFormPage onSave={() => navigate('/targets')} onCancel={() => navigate('/targets')} />} />
+                            <Route path="/targets/:id" element={<TargetDetailRoute />} />
+                            <Route path="/targets/:id/edit" element={<TargetEditRoute />} />
+
+                            {/* Scans */}
+                            <Route path="/scans" element={<ScansPage onNavigateToCreate={() => navigate('/scans/new')} onNavigateToEdit={(id) => navigate(`/scans/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/scans/${id}`)} onNavigateToReport={(id) => navigate(`/scans/${id}/report`)} />} />
+                            <Route path="/scans/new" element={<ScanWizardPage onSave={() => navigate('/scans')} onCancel={() => navigate('/scans')} />} />
+                            <Route path="/scans/:id" element={<ScanDetailRoute />} />
+                            <Route path="/scans/:id/edit" element={<ScanEditRoute />} />
+                            <Route path="/scans/:id/report" element={<ScanReportRoute />} />
+
+                            {/* Findings */}
+                            <Route path="/findings" element={<FindingsPage onNavigateToCreate={() => navigate('/findings/new')} onNavigateToEdit={(id) => navigate(`/findings/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/findings/${id}`)} />} />
+                            <Route path="/findings/new" element={<FindingFormPage onSave={() => navigate('/findings')} onCancel={() => navigate('/findings')} />} />
+                            <Route path="/findings/:id" element={<FindingDetailRoute />} />
+                            <Route path="/findings/:id/edit" element={<FindingEditRoute />} />
+
+                            {/* Risk Register */}
+                            <Route path="/risk-register" element={<RiskDashboardPage onNavigateToCreate={() => navigate('/risk-register/new')} onNavigateToEdit={(id) => navigate(`/risk-register/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/risk-register/${id}`)} />} />
+                            <Route path="/risk-register/new" element={<RiskFormPage onSave={() => navigate('/risk-register')} onCancel={() => navigate('/risk-register')} />} />
+                            <Route path="/risk-register/:id" element={<RiskDetailRoute />} />
+                            <Route path="/risk-register/:id/edit" element={<RiskEditRoute />} />
+
+                            {/* Reports */}
+                            <Route path="/reports" element={<ReportsPage onNavigateToCreate={() => {}} onNavigateToEdit={(id) => navigate(`/reports/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/reports/${id}`)} />} />
+                            <Route path="/reports/:id" element={<ReportDetailRoute />} />
+
+                            {/* Compliance */}
+                            <Route path="/compliance" element={<ComplianceDashboardPage onNavigateToDetail={(code) => navigate(`/compliance/${code}`)} />} />
+                            <Route path="/compliance/:framework" element={<ComplianceDetailRoute />} />
+
+                            {/* Integrations */}
+                            <Route path="/integrations" element={<IntegrationsPage onNavigateToConnector={(connector) => navigate(`/integrations/${connector.code}`)} onNavigateToDetail={(conn) => navigate(`/integrations/${conn.code}/${conn.uuid}`)} />} />
+                            <Route path="/integrations/:connector" element={<ConnectorRoute />} />
+                            <Route path="/integrations/:connector/:connection" element={<IntegrationDetailRoute />} />
+
+                            {/* Users & Settings */}
+                            <Route path="/users" element={<PlaceholderPage title="Users" />} />
+                            <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
+                            
+                            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                        </Routes>
                     </div>
                 </main>
 
@@ -427,6 +295,16 @@ export default function App() {
                 </footer>
             </div>
         </div>
+    );
+}
+
+export default function App() {
+    return (
+        <ErrorBoundary>
+            <BrowserRouter>
+                <MainAppLayout />
+            </BrowserRouter>
+        </ErrorBoundary>
     );
 }
 

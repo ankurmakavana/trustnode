@@ -9,6 +9,7 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Compliance\ComplianceController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Finding\FindingController;
+use App\Http\Controllers\Integration\IntegrationController;
 use App\Http\Controllers\Report\ReportController;
 use App\Http\Controllers\Risk\RiskController;
 use App\Http\Controllers\Scan\ScanController;
@@ -70,4 +71,12 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/compliance/stats', [ComplianceController::class, 'stats']);
     Route::get('/compliance/{code}', [ComplianceController::class, 'show']);
     Route::get('/compliance', [ComplianceController::class, 'index']);
+
+    // Integration Management Endpoints
+    Route::get('/integrations/stats', [IntegrationController::class, 'stats']);
+    Route::get('/integrations/connector/{code}', [IntegrationController::class, 'byConnector']);
+    Route::post('/integrations/{integration}/validate', [IntegrationController::class, 'validateConnection']);
+    Route::post('/integrations/{integration}/import', [IntegrationController::class, 'importData']);
+    Route::post('/integrations/{integration}/disconnect', [IntegrationController::class, 'disconnect']);
+    Route::apiResource('/integrations', IntegrationController::class);
 });
