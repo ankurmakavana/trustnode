@@ -37,6 +37,7 @@ class Finding extends Model
         'assigned_analyst',
         'created_by',
         'updated_by',
+        'import_job_id',
     ];
 
     protected $casts = [
@@ -102,5 +103,10 @@ class Finding extends Model
         return $this->belongsToMany(ComplianceControl::class, 'finding_compliance', 'finding_id', 'control_id')
             ->withPivot('status', 'notes')
             ->withTimestamps();
+    }
+
+    public function importJob(): BelongsTo
+    {
+        return $this->belongsTo(ImportJob::class);
     }
 }

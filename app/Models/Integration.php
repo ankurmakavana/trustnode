@@ -61,4 +61,11 @@ class Integration extends Model
     {
         return $this->hasMany(IntegrationHistory::class)->orderBy('created_at', 'desc');
     }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->where('id', $value)
+            ->orWhere('uuid', $value)
+            ->firstOrFail();
+    }
 }

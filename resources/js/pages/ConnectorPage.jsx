@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { getConnector } from '../data/connectorCatalog';
+import ImportWizard from '../components/ImportWizard';
 
 const ENVS = ['Production', 'Staging', 'Development', 'DMZ', 'QA', 'Testing', 'Client'];
 
@@ -692,6 +693,7 @@ export default function ConnectorPage({ connectorCode, onBack }) {
     const [drawerConn, setDrawerConn]   = useState(null);
     const [validatingAll, setValAll]    = useState(false);
     const [importingAll, setImpAll]     = useState(false);
+    const [showImportWizard, setShowImportWizard] = useState(false);
 
     // Active dropdown action ID
     const [activeActionMenu, setActiveActionMenu] = useState(null);
@@ -772,8 +774,8 @@ export default function ConnectorPage({ connectorCode, onBack }) {
                     <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, height: 40, borderRadius: 12, border: '1px solid #e2e8f0', background: 'white', padding: '0 16px' }} disabled={validatingAll} onClick={validateAll}>
                         {validatingAll ? <Loader2 size={16} className="spin" /> : <Shield size={16} />} Validate All
                     </button>
-                    <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, height: 40, borderRadius: 12, border: '1px solid #e2e8f0', background: 'white', padding: '0 16px' }} disabled={importingAll} onClick={importAll}>
-                        {importingAll ? <Loader2 size={16} className="spin" /> : <Upload size={16} />} Import Results
+                    <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, height: 40, borderRadius: 12, border: '1px solid #e2e8f0', background: 'white', padding: '0 16px' }} onClick={() => setShowImportWizard(true)}>
+                        <Upload size={16} /> Import Results
                     </button>
                     <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, height: 40, borderRadius: 12, background: '#4f46e5', border: 'none', padding: '0 16px', color: 'white', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }} onClick={() => setShowAddDrawer(true)}>
                         <Plus size={16} /> Add Connection
@@ -977,6 +979,12 @@ export default function ConnectorPage({ connectorCode, onBack }) {
                     onClose={() => setDrawerConn(null)}
                     onRefresh={loadConnections} />
             )}
+            <ImportWizard
+                isOpen={showImportWizard}
+                onClose={() => setShowImportWizard(false)}
+                connectorCode={connector.code}
+                integrationId={connections[0]?.id}
+                onComplete={loadConnections} />
         </div>
     );
 }

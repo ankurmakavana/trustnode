@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { CONNECTOR_CATALOG, getConnector } from '../data/connectorCatalog';
+import ImportWizard from '../components/ImportWizard';
 
 // ─── Category pills ────────────────────────────────────────────────────────────
 const CATEGORIES = [
@@ -566,7 +567,7 @@ function AddConnectionDrawer({ connector, onClose, onSaved }) {
 }
 
 // ─── Connection Detail Drawer ─────────────────────────────────────────────────
-function ConnectionDetailDrawer({ conn, onClose, onRefresh }) {
+function ConnectionDetailDrawer({ conn, onClose, onRefresh, onImportClick }) {
     const connector = getConnector(conn.code);
     const [detail, setDetail]   = useState(null);
     const [loading, setLoading] = useState(true);
@@ -611,9 +612,8 @@ function ConnectionDetailDrawer({ conn, onClose, onRefresh }) {
                         onClick={() => doAction('validate', () => axios.post(`/api/integrations/${conn.uuid}/validate`))}>
                         {acting === 'validate' ? <Loader2 size={11} className="spin" /> : <Shield size={11} />} Validate
                     </button>
-                    <button className="btn btn-secondary btn-sm" disabled={acting === 'import'}
-                        onClick={() => doAction('import', () => axios.post(`/api/integrations/${conn.uuid}/import`))}>
-                        {acting === 'import' ? <Loader2 size={11} className="spin" /> : <Upload size={11} />} Import
+                    <button className="btn btn-secondary btn-sm" onClick={onImportClick}>
+                        <Upload size={11} /> Import
                     </button>
                     <button className="btn btn-danger btn-sm" disabled={acting === 'disconnect'}
                         onClick={async () => { if (!window.confirm(`Disconnect "${data.name}"?`)) return; await doAction('disconnect', () => axios.post(`/api/integrations/${conn.uuid}/disconnect`)); onClose(); }}>
@@ -813,6 +813,7 @@ function MarketplaceTab({ connections, connCountByCode, onNavigateToConnector, o
 function MyConnectionsTab({ connections, loading, onRefresh }) {
     const [search, setSearch]         = useState('');
     const [drawerConn, setDrawerConn] = useState(null);
+    const [showImportWizard, setShowImportWizard] = useState(false);
 
     const filtered = connections.filter(c =>
         !search ||
@@ -924,8 +925,15 @@ function MyConnectionsTab({ connections, loading, onRefresh }) {
                 <ConnectionDetailDrawer
                     conn={drawerConn}
                     onClose={() => setDrawerConn(null)}
-                    onRefresh={onRefresh} />
+                    onRefresh={onRefresh}
+                    onImportClick={() => setShowImportWizard(true)} />
             )}
+            <ImportWizard
+                isOpen={showImportWizard}
+                onClose={() => setShowImportWizard(false)}
+                connectorCode={drawerConn?.code}
+                integrationId={drawerConn?.id}
+                onComplete={onRefresh} />
         </div>
     );
 }

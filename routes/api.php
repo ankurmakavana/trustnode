@@ -9,6 +9,7 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Compliance\ComplianceController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Finding\FindingController;
+use App\Http\Controllers\Import\ImportController;
 use App\Http\Controllers\Integration\IntegrationController;
 use App\Http\Controllers\Report\ReportController;
 use App\Http\Controllers\Risk\RiskController;
@@ -76,7 +77,15 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/integrations/stats', [IntegrationController::class, 'stats']);
     Route::get('/integrations/connector/{code}', [IntegrationController::class, 'byConnector']);
     Route::post('/integrations/{integration}/validate', [IntegrationController::class, 'validateConnection']);
-    Route::post('/integrations/{integration}/import', [IntegrationController::class, 'importData']);
+    Route::post('/integrations/{integration}/import', [ImportController::class, 'triggerConnectionImport']);
     Route::post('/integrations/{integration}/disconnect', [IntegrationController::class, 'disconnect']);
     Route::apiResource('/integrations', IntegrationController::class);
+
+    // Import Engine Endpoints
+    Route::post('/imports/upload', [ImportController::class, 'upload']);
+    Route::post('/imports/preview', [ImportController::class, 'preview']);
+    Route::get('/imports/history', [ImportController::class, 'history']);
+    Route::get('/imports', [ImportController::class, 'index']);
+    Route::get('/imports/{job}', [ImportController::class, 'show']);
+    Route::delete('/imports/{job}', [ImportController::class, 'destroy']);
 });

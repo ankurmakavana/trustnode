@@ -31,6 +31,7 @@ class Scan extends Model
         'duration',
         'created_by',
         'updated_by',
+        'import_job_id',
     ];
 
     protected $casts = [
@@ -72,5 +73,10 @@ class Scan extends Model
     public function activityLogs(): HasMany
     {
         return $this->hasMany(ScanActivityLog::class);
+    }
+
+    public function importJob(): BelongsTo
+    {
+        return $this->belongsTo(ImportJob::class);
     }
 }

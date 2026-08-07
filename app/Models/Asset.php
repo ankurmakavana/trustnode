@@ -31,6 +31,7 @@ class Asset extends Model
         'asset_group_id',
         'created_by',
         'updated_by',
+        'import_job_id',
     ];
 
     protected static function booted()
@@ -90,5 +91,10 @@ class Asset extends Model
     public function updater(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function importJob(): BelongsTo
+    {
+        return $this->belongsTo(ImportJob::class);
     }
 }
