@@ -38,6 +38,9 @@ class Finding extends Model
         'created_by',
         'updated_by',
         'import_job_id',
+        'fingerprint',
+        'url',
+        'scanner',
     ];
 
     protected $casts = [
@@ -45,6 +48,8 @@ class Finding extends Model
         'status' => FindingStatus::class,
         'cvss_score' => 'float',
     ];
+
+    protected static $nextFindingNumber = null;
 
     protected static function boot()
     {
@@ -55,10 +60,12 @@ class Finding extends Model
                 $finding->uuid = (string) Str::uuid();
             }
             if (empty($finding->finding_id)) {
-                // Autogenerate unique Finding ID string
-                $latest = self::orderBy('id', 'desc')->first();
-                $nextNum = $latest ? ($latest->id + 1) : 1;
-                $finding->finding_id = 'TN-FIND-'.str_pad($nextNum, 6, '0', STR_PAD_LEFT);
+                if (self::$nextFindingNumber === null) {
+                    $latest = self::orderBy('id', 'desc')->first();
+                    self::$nextFindingNumber = $latest ? ($latest->id + 1) : 1;
+                }
+                $finding->finding_id = 'TN-FIND-'.str_pad(self::$nextFindingNumber, 6, '0', STR_PAD_LEFT);
+                self::$nextFindingNumber++;
             }
         });
     }

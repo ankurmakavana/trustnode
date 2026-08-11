@@ -189,6 +189,7 @@ export const mockRecentScans = [
 export const mockNavItems = [
     { id: 'dashboard', label: 'Dashboard',    icon: 'LayoutDashboard', group: 'main'   },
     { id: 'assets',    label: 'Assets',       icon: 'Server',          group: 'main',   badge: '247'                      },
+    { id: 'repositories', label: 'Repositories', icon: 'GitBranch',    group: 'main'                                      },
     { id: 'targets',   label: 'Targets',      icon: 'Crosshair',       group: 'main'                                      },
     { id: 'scans',     label: 'Scans',        icon: 'ScanLine',        group: 'main',   badge: '8',   badgeColor: 'violet' },
     { id: 'findings',  label: 'Findings',     icon: 'ShieldAlert',     group: 'main',   badge: '34',  badgeColor: 'red'    },

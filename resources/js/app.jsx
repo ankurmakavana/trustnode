@@ -34,9 +34,11 @@ import ComplianceDetailPage from './pages/ComplianceDetailPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import ConnectorPage from './pages/ConnectorPage';
 import IntegrationDetailPage from './pages/IntegrationDetailPage';
+import RepositoriesPage from './pages/RepositoriesPage';
 import { Loader2 } from 'lucide-react';
 
 const pageLabels = {
+    repositories: 'Repositories',
     dashboard: 'Dashboard',
     assets:    'Assets',
     targets:   'Targets',
@@ -172,6 +174,7 @@ function MainAppLayout() {
         const path = location.pathname;
         if (path.startsWith('/dashboard')) return 'dashboard';
         if (path.startsWith('/assets')) return 'assets';
+        if (path.startsWith('/repositories')) return 'repositories';
         if (path.startsWith('/targets')) return 'targets';
         if (path.startsWith('/scans')) return 'scans';
         if (path.startsWith('/findings')) return 'findings';
@@ -236,6 +239,9 @@ function MainAppLayout() {
                             <Route path="/assets/new" element={<AssetFormPage onSave={() => navigate('/assets')} onCancel={() => navigate('/assets')} />} />
                             <Route path="/assets/:id" element={<AssetDetailRoute />} />
                             <Route path="/assets/:id/edit" element={<AssetEditRoute />} />
+
+                            {/* Repositories */}
+                            <Route path="/repositories" element={<RepositoriesPage />} />
 
                             {/* Targets */}
                             <Route path="/targets" element={<TargetsPage onNavigateToCreate={() => navigate('/targets/new')} onNavigateToEdit={(id) => navigate(`/targets/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/targets/${id}`)} />} />

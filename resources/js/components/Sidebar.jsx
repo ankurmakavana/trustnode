@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     LayoutDashboard, Server, Crosshair, ScanLine, ShieldAlert,
-    FileText, Sparkles, Users, Settings, ChevronLeft, Shield, CheckSquare, Blocks,
+    FileText, Sparkles, Users, Settings, ChevronLeft, Shield, CheckSquare, Blocks, GitBranch
 } from 'lucide-react';
 import { mockNavItems, navGroups, mockCurrentUser } from '../data/mockData';
 import { Avatar, Badge } from './ui/primitives';
@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 
 const iconMap = {
     LayoutDashboard, Server, Crosshair, ScanLine, ShieldAlert,
-    FileText, Sparkles, Users, Settings, Shield, CheckSquare, Blocks,
+    FileText, Sparkles, Users, Settings, Shield, CheckSquare, Blocks, GitBranch
 };
 
 const badgeVariants = {

@@ -10,6 +10,8 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
+use App\Services\Import\DuplicateDetectionService;
+
 class CreateAssetsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -33,12 +35,15 @@ class CreateAssetsJob implements ShouldQueue
         $this->scans = $scans;
     }
 
-    public function handle(AssetMapper $mapper)
+    public function handle(AssetMapper $mapper, DuplicateDetectionService $dups)
     {
         $this->jobModel->logs()->create([
             'level' => 'info',
             'message' => 'Saving asset records to database.',
         ]);
+
+        $assetValues = collect($this->assets)->pluck('value')->toArray();
+        $dups->preload([], $assetValues);
 
         $resolvedAssets = [];
         $savedCount = 0;

@@ -43,8 +43,12 @@ class CalculateRiskJob implements ShouldQueue
             'message' => 'Calculating and updating asset risk scores.',
         ]);
 
+        // Eager load asset relationship using Eloquent Collection to avoid N+1 queries
+        $findingsCollection = new \Illuminate\Database\Eloquent\Collection($this->findings);
+        $findingsCollection->loadMissing('asset');
+
         $processedAssetIds = [];
-        foreach ($this->findings as $finding) {
+        foreach ($findingsCollection as $finding) {
             if ($finding->asset && ! in_array($finding->asset_id, $processedAssetIds)) {
                 try {
                     $mapper->recalculateAssetRisk($finding->asset);

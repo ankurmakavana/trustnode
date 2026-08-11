@@ -11,6 +11,8 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
+use App\Services\Import\DuplicateDetectionService;
+
 class CreateFindingsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -34,8 +36,11 @@ class CreateFindingsJob implements ShouldQueue
         $this->scans = $scans;
     }
 
-    public function handle(FindingMapper $mapper)
+    public function handle(FindingMapper $mapper, DuplicateDetectionService $dups)
     {
+        $assetIds = collect($this->resolvedAssets)->pluck('id')->toArray();
+        $dups->preload($assetIds, []);
+
         $this->jobModel->logs()->create([
             'level' => 'info',
             'message' => 'Saving vulnerability findings to database.',

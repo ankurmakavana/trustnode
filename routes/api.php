@@ -13,6 +13,7 @@ use App\Http\Controllers\Import\ImportController;
 use App\Http\Controllers\Integration\IntegrationController;
 use App\Http\Controllers\Report\ReportController;
 use App\Http\Controllers\Risk\RiskController;
+use App\Http\Controllers\Repository\RepositoryController;
 use App\Http\Controllers\Scan\ScanController;
 use App\Http\Controllers\Target\TargetController;
 use Illuminate\Support\Facades\Route;
@@ -52,6 +53,7 @@ Route::middleware('auth')->group(function (): void {
 
     // Scan Management Endpoints
     Route::get('/scans/{scan}/activity', [ScanController::class, 'activityLogs']);
+    Route::get('/scans/{scan}/report/download', [ScanController::class, 'downloadReport'])->name('scans.report.download');
     Route::apiResource('/scans', ScanController::class);
 
     // Finding Management Endpoints
@@ -72,6 +74,12 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/compliance/stats', [ComplianceController::class, 'stats']);
     Route::get('/compliance/{code}', [ComplianceController::class, 'show']);
     Route::get('/compliance', [ComplianceController::class, 'index']);
+
+    // Git Repository Management Endpoints
+    Route::post('/repositories/validate-access', [RepositoryController::class, 'validateAccess']);
+    Route::post('/repositories/{repository}/scan', [RepositoryController::class, 'scan']);
+    Route::get('/repositories/{repository}/scans', [RepositoryController::class, 'scans']);
+    Route::apiResource('/repositories', RepositoryController::class);
 
     // Integration Management Endpoints
     Route::get('/integrations/stats', [IntegrationController::class, 'stats']);

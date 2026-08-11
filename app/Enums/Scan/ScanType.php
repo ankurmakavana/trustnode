@@ -10,4 +10,5 @@ enum ScanType: string
     case API_VULNERABILITY = 'api_vulnerability';
     case CONTAINER_AUDIT = 'container_audit';
     case CLOUD_INFRASTRUCTURE = 'cloud_infrastructure';
+    case REPOSITORY = 'repository';
 }

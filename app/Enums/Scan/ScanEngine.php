@@ -9,4 +9,5 @@ enum ScanEngine: string
     case NUCLEI = 'nuclei';
     case TRIVY = 'trivy';
     case NESSUS = 'nessus';
+    case REPOSITORY_SCANNER = 'repositoryscanner';
 }

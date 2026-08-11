@@ -150,6 +150,13 @@ class ImportResultsTest extends TestCase
             'import_job_id' => $job->id,
         ]);
 
+        dump([
+            'status' => $job->fresh()->status,
+            'progress' => $job->fresh()->progress,
+            'error_message' => $job->fresh()->error_message,
+            'logs' => $job->fresh()->logs()->get()->pluck('message')->toArray(),
+        ]);
+
         $this->assertDatabaseHas('findings', [
             'title' => 'Open Port 443 (https)',
             'import_job_id' => $job->id,

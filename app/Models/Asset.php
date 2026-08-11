@@ -97,4 +97,9 @@ class Asset extends Model
     {
         return $this->belongsTo(ImportJob::class);
     }
+
+    public function findings(): HasMany
+    {
+        return $this->hasMany(Finding::class);
+    }
 }

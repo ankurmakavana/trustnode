@@ -98,4 +98,42 @@ class ScanController extends Controller
 
         return ScanActivityLogResource::collection($logs);
     }
+
+    public function downloadReport(Scan $scan)
+    {
+        $findings = \App\Models\Finding::where('scan_id', $scan->id)->get();
+        $repository = \App\Models\Repository::where('name', $scan->target)->first();
+
+        if (!$repository) {
+            $repository = (object)[
+                'name' => $scan->target,
+                'visibility' => 'unknown',
+                'default_branch' => 'main'
+            ];
+        }
+
+        $severityCounts = [
+            'critical' => 0,
+            'high' => 0,
+            'medium' => 0,
+            'low' => 0,
+            'info' => 0
+        ];
+
+        foreach ($findings as $finding) {
+            $sev = strtolower($finding->severity->value ?? $finding->severity);
+            if (array_key_exists($sev, $severityCounts)) {
+                $severityCounts[$sev]++;
+            } else {
+                $severityCounts['info']++;
+            }
+        }
+
+        return view('reports.repository_scan', [
+            'scan' => $scan,
+            'findings' => $findings,
+            'repository' => $repository,
+            'severityCounts' => $severityCounts
+        ]);
+    }
 }
