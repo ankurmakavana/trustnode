@@ -4,14 +4,13 @@ namespace App\Jobs;
 
 use App\Models\Finding;
 use App\Models\ImportJob;
+use App\Services\Import\DuplicateDetectionService;
 use App\Services\Import\FindingMapper;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-
-use App\Services\Import\DuplicateDetectionService;
 
 class CreateFindingsJob implements ShouldQueue
 {

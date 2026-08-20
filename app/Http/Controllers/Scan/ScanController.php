@@ -8,8 +8,14 @@ use App\Http\Requests\Scan\StoreScanRequest;
 use App\Http\Requests\Scan\UpdateScanRequest;
 use App\Http\Resources\Scan\ScanActivityLogResource;
 use App\Http\Resources\Scan\ScanResource;
+use App\Models\Finding;
+use App\Models\Repository;
 use App\Models\Scan;
+use App\Models\ScanReport;
+use App\Jobs\GenerateScanReport;
 use App\Services\Scan\ScanService;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -43,6 +49,16 @@ class ScanController extends Controller
 
         $dto = ScanData::fromArray($request->validated());
         $scan = $this->scanService->create($dto, $request->user());
+
+        if ($scan->type === \App\Enums\Scan\ScanType::NETWORK_IP) {
+            \App\Jobs\ScanInfrastructureJob::dispatch($scan);
+        } elseif ($scan->type === \App\Enums\Scan\ScanType::DATABASE) {
+            $creds = $request->input('credentials', []);
+            $vault = app(\App\Services\Scan\Database\DatabaseCredentialVault::class);
+            $token = $vault->store($creds);
+            
+            \App\Jobs\ScanDatabaseJob::dispatch($scan, $token);
+        }
 
         return (new ScanResource($scan->load(['creator'])))
             ->response()
@@ -99,41 +115,67 @@ class ScanController extends Controller
         return ScanActivityLogResource::collection($logs);
     }
 
+    public function generateReport(Request $request, Scan $scan): JsonResponse
+    {
+        $this->authorize('viewAny', Scan::class);
+
+        $existing = ScanReport::where('scan_id', $scan->id)
+            ->whereIn('status', ['queued', 'generating'])
+            ->latest()
+            ->first();
+
+        if ($existing) {
+            return response()->json([
+                'message' => 'Report is already generating.',
+                'report_id' => $existing->id,
+                'status' => $existing->status
+            ], 202);
+        }
+
+        $report = ScanReport::create([
+            'scan_id' => $scan->id,
+            'requested_by' => $request->user()->id,
+            'status' => 'queued',
+        ]);
+
+        GenerateScanReport::dispatch($report);
+
+        return response()->json([
+            'message' => 'Report generation queued.',
+            'report_id' => $report->id,
+            'status' => 'queued'
+        ], 202);
+    }
+
+    public function reportStatus(Scan $scan): JsonResponse
+    {
+        $this->authorize('viewAny', Scan::class);
+
+        $report = ScanReport::where('scan_id', $scan->id)->latest()->first();
+
+        if (! $report) {
+            return response()->json(['message' => 'No report found.'], 404);
+        }
+
+        return response()->json($report);
+    }
+
     public function downloadReport(Scan $scan)
     {
-        $findings = \App\Models\Finding::where('scan_id', $scan->id)->get();
-        $repository = \App\Models\Repository::where('name', $scan->target)->first();
+        $this->authorize('viewAny', Scan::class);
 
-        if (!$repository) {
-            $repository = (object)[
-                'name' => $scan->target,
-                'visibility' => 'unknown',
-                'default_branch' => 'main'
-            ];
+        $report = ScanReport::where('scan_id', $scan->id)->where('status', 'completed')->latest()->first();
+
+        if (! $report || ! $report->file_path || ! Storage::disk('local')->exists($report->file_path)) {
+            return response()->json(['message' => 'Report not available or still generating.'], 404);
         }
 
-        $severityCounts = [
-            'critical' => 0,
-            'high' => 0,
-            'medium' => 0,
-            'low' => 0,
-            'info' => 0
-        ];
+        $date = $scan->created_at ? $scan->created_at->format('Y-m-d') : date('Y-m-d');
+        $safeRepoName = str_replace(['/', '\\', '_'], '-', $scan->target ?? 'repo');
+        $filename = "trustnode-{$safeRepoName}-scan-{$date}.pdf";
 
-        foreach ($findings as $finding) {
-            $sev = strtolower($finding->severity->value ?? $finding->severity);
-            if (array_key_exists($sev, $severityCounts)) {
-                $severityCounts[$sev]++;
-            } else {
-                $severityCounts['info']++;
-            }
-        }
-
-        return view('reports.repository_scan', [
-            'scan' => $scan,
-            'findings' => $findings,
-            'repository' => $repository,
-            'severityCounts' => $severityCounts
+        return Storage::disk('local')->download($report->file_path, $filename, [
+            'Content-Type' => 'application/pdf',
         ]);
     }
 }

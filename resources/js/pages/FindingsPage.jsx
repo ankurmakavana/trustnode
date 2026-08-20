@@ -370,7 +370,7 @@ export default function FindingsPage({ onNavigateToCreate, onNavigateToEdit, onN
                                     <th className="py-3.5 px-4 w-24">CVSS</th>
                                     <th className="py-3.5 px-4 w-40">Target</th>
                                     <th className="py-3.5 px-4 w-40">Scan</th>
-                                    <th className="py-3.5 px-4 w-40">Asset</th>
+                                    <th className="py-3.5 px-4 w-40">Target / Asset</th>
                                     <th className="py-3.5 px-4 w-28">Status</th>
                                     <th className="py-3.5 px-4 w-32">Detected</th>
                                     <th className="py-3.5 px-4 w-32">Updated</th>
@@ -443,6 +443,14 @@ export default function FindingsPage({ onNavigateToCreate, onNavigateToEdit, onN
                                             {f.asset ? (
                                                 <span className="font-semibold text-slate-700 block truncate">
                                                     {f.asset.name}
+                                                </span>
+                                            ) : f.target ? (
+                                                <span className="font-semibold text-slate-700 block truncate">
+                                                    {f.target.name}
+                                                </span>
+                                            ) : f.url ? (
+                                                <span className="font-semibold text-slate-700 block truncate" title={f.url}>
+                                                    {f.url.length > 25 ? f.url.substring(0, 25) + '...' : f.url}
                                                 </span>
                                             ) : (
                                                 <span className="text-slate-350 italic">Unmapped</span>

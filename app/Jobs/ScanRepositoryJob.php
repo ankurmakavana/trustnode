@@ -4,28 +4,32 @@ namespace App\Jobs;
 
 use App\Enums\Finding\FindingSeverity;
 use App\Enums\Finding\FindingStatus;
+use App\Mail\SecurityAlertMail;
 use App\Models\Asset;
 use App\Models\Finding;
+use App\Models\Report;
 use App\Models\Repository;
 use App\Models\Scan;
-use App\Models\Report;
 use App\Services\Import\FingerprintService;
 use App\Services\Repository\RepositoryService;
 use App\Services\Scan\RepositoryScanner;
-use App\Mail\SecurityAlertMail;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use App\Notifications\ScanCompletedNotification;
+use App\Notifications\ScanFailedNotification;
 
 class ScanRepositoryJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected Scan $scan;
+
     protected Repository $repository;
 
     public function __construct(Scan $scan, Repository $repository)
@@ -39,29 +43,25 @@ class ScanRepositoryJob implements ShouldQueue
         RepositoryScanner $scanner,
         FingerprintService $fingerprintService
     ) {
+        Log::info('ScanRepositoryJob starting for scan '.$this->scan->id);
+
         $this->scan->update([
             'status' => 'running',
-            'progress' => 10,
             'started_at' => now(),
         ]);
 
         $workspacePath = $repositoryService->createTemporaryWorkspace($this->scan->uuid);
 
         try {
-            $this->scan->update(['progress' => 30]);
 
             // 1. Checkout repository
             $checkedOut = $repositoryService->checkout($this->repository, $workspacePath);
-            if (!$checkedOut) {
-                throw new \RuntimeException("Git clone command failed.");
+            if (! $checkedOut) {
+                throw new \RuntimeException('Git clone command failed.');
             }
-
-            $this->scan->update(['progress' => 50]);
 
             // 2. Perform static analysis scan
             $findings = $scanner->scan($workspacePath, $this->repository->repository_url);
-
-            $this->scan->update(['progress' => 70]);
 
             // 3. Obtain or create Asset representation
             $asset = Asset::firstOrCreate(
@@ -103,10 +103,11 @@ class ScanRepositoryJob implements ShouldQueue
                 $findingModel = Finding::updateOrCreate(
                     [
                         'fingerprint' => $fingerprint,
-                        'asset_id' => $asset->id,
+                        'scan_id' => $this->scan->id,
                     ],
                     [
                         'title' => $dto->title,
+                        'asset_id' => $asset->id,
                         'severity' => $severity,
                         'status' => FindingStatus::OPEN,
                         'category' => $dto->category ?? 'SAST',
@@ -117,7 +118,6 @@ class ScanRepositoryJob implements ShouldQueue
                         'evidence' => $dto->evidence ?? '',
                         'url' => $dto->url ?? '',
                         'scanner' => 'RepositoryScanner',
-                        'scan_id' => $this->scan->id,
                         'created_by' => $this->scan->created_by,
                     ]
                 );
@@ -125,10 +125,8 @@ class ScanRepositoryJob implements ShouldQueue
                 $savedFindings[] = $findingModel;
             }
 
-            $this->scan->update(['progress' => 90]);
-
             // 5. Generate Professional vulnerability HTML report
-            $reportTitle = "Repository Vulnerability Assessment - " . $this->repository->name;
+            $reportTitle = 'Repository Vulnerability Assessment - '.$this->repository->name;
             $htmlContent = view('reports.repository_scan', [
                 'repository' => $this->repository,
                 'scan' => $this->scan,
@@ -164,34 +162,59 @@ class ScanRepositoryJob implements ShouldQueue
                 'status' => 'Connected',
             ]);
 
-            // 7. Dispatch Email Notification if vulnerabilities exist
+            // 7. Dispatch Notification
             $hasVulnerabilities = ($severityCounts['critical'] > 0 || $severityCounts['high'] > 0 || $severityCounts['medium'] > 0 || $severityCounts['low'] > 0);
-            if ($hasVulnerabilities) {
-                $user = $this->scan->creator;
-                if ($user && $user->email) {
-                    Mail::to($user->email)->send(new SecurityAlertMail(
-                        $this->repository->name,
-                        $this->repository->default_branch,
-                        $severityCounts,
-                        $report->uuid,
-                        $this->scan->uuid
-                    ));
-                }
-            }
+            
+            \App\Services\Notification\NotificationRouter::dispatch(
+                \App\Enums\Notification\NotificationType::SCAN_COMPLETED,
+                new \App\Services\Notification\NotificationContext(scan: $this->scan, repository: $this->repository),
+                new ScanCompletedNotification($this->scan, array_sum($severityCounts))
+            );
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            Log::error('ScanRepositoryJob failed: '.$e->getMessage(), ['exception' => $e]);
             $this->scan->update([
                 'status' => 'failed',
-                'progress' => 100,
                 'completed_at' => now(),
             ]);
 
             $this->repository->update([
                 'status' => 'Failed',
             ]);
+
+            \App\Services\Notification\NotificationRouter::dispatch(
+                \App\Enums\Notification\NotificationType::SCAN_FAILED,
+                new \App\Services\Notification\NotificationContext(scan: $this->scan, repository: $this->repository),
+                new ScanFailedNotification($this->scan, 'Scan failed during execution.')
+            );
         } finally {
             // Always cleanup workspace directory safely
             $repositoryService->cleanWorkspace($workspacePath);
         }
+    }
+
+    /**
+     * Handle a job failure.
+     */
+    public function failed(\Throwable $exception): void
+    {
+        Log::error('ScanRepositoryJob failed fatally: '.$exception->getMessage(), ['exception' => $exception]);
+        
+        $this->scan->update([
+            'status' => 'failed',
+            'completed_at' => now(),
+        ]);
+
+        if (isset($this->repository)) {
+            $this->repository->update([
+                'status' => 'Failed',
+            ]);
+        }
+
+        \App\Services\Notification\NotificationRouter::dispatch(
+            \App\Enums\Notification\NotificationType::SCAN_FAILED,
+            new \App\Services\Notification\NotificationContext(scan: $this->scan, repository: $this->repository ?? null),
+            new ScanFailedNotification($this->scan, 'Scan failed fatally.')
+        );
     }
 }

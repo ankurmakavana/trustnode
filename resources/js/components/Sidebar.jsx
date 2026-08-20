@@ -1,11 +1,32 @@
 import React from 'react';
 import {
     LayoutDashboard, Server, Crosshair, ScanLine, ShieldAlert,
-    FileText, Sparkles, Users, Settings, ChevronLeft, Shield, CheckSquare, Blocks, GitBranch
+    FileText, Sparkles, Users, Settings, ChevronLeft, Shield, CheckSquare, Blocks, GitBranch, Lock
 } from 'lucide-react';
-import { mockNavItems, navGroups, mockCurrentUser } from '../data/mockData';
 import { Avatar, Badge } from './ui/primitives';
 import { useAuth } from '../context/AuthContext';
+
+const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard', group: 'main' },
+    { id: 'assets', label: 'Assets', icon: 'Server', group: 'main' },
+    { id: 'repositories', label: 'Repositories', icon: 'GitBranch', group: 'main' },
+    { id: 'targets', label: 'Targets', icon: 'Crosshair', group: 'main' },
+    { id: 'scans', label: 'Scans', icon: 'ScanLine', group: 'main' },
+    { id: 'findings', label: 'Findings', icon: 'ShieldAlert', group: 'main' },
+    { id: 'risks', label: 'Risk Register', icon: 'Shield', group: 'main' },
+    { id: 'reports', label: 'Reports', icon: 'FileText', group: 'main' },
+    { id: 'compliance', label: 'Compliance', icon: 'CheckSquare', group: 'main' },
+    { id: 'integrations', label: 'Integrations', icon: 'Blocks', group: 'main', locked: true },
+    { id: 'ai', label: 'AI Assistant', icon: 'Sparkles', group: 'tools', locked: true, badge: 'LOCKED', badgeColor: 'slate' },
+    { id: 'users', label: 'Users', icon: 'Users', group: 'admin', locked: true },
+    { id: 'settings', label: 'Settings', icon: 'Settings', group: 'admin' },
+];
+
+const navGroups = [
+    { id: 'main', label: 'Workspace' },
+    { id: 'tools', label: 'Tools' },
+    { id: 'admin', label: 'Admin' },
+];
 
 const iconMap = {
     LayoutDashboard, Server, Crosshair, ScanLine, ShieldAlert,
@@ -13,28 +34,30 @@ const iconMap = {
 };
 
 const badgeVariants = {
-    red:    'red',
+    red: 'red',
     violet: 'violet',
-    brand:  'brand',
+    brand: 'brand',
 };
 
 function NavItem({ item, active, collapsed, onNavigate }) {
-    const Icon   = iconMap[item.icon];
+    const Icon = iconMap[item.icon];
     const bColor = badgeVariants[item.badgeColor] || 'slate';
 
     return (
         <button
-            onClick={() => onNavigate(item.id)}
+            onClick={() => !item.locked && onNavigate(item.id)}
             title={collapsed ? item.label : undefined}
+            disabled={item.locked}
             aria-current={active ? 'page' : undefined}
             className={`
                 relative w-full flex items-center gap-2.5
                 px-2.5 py-2 rounded-lg text-sm font-medium
                 transition-all duration-150 group
                 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500
-                ${active
+                ${item.locked ? 'opacity-50 cursor-not-allowed' : ''}
+                ${active && !item.locked
                     ? 'bg-brand-50 text-brand-700'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                    : (!item.locked ? 'text-slate-600 hover:bg-slate-50 hover:text-slate-900' : 'text-slate-400')}
             `}
         >
             {/* Active indicator pill */}
@@ -56,7 +79,10 @@ function NavItem({ item, active, collapsed, onNavigate }) {
 
             {!collapsed && (
                 <>
-                    <span className="flex-1 text-left truncate">{item.label}</span>
+                    <span className="flex-1 text-left truncate flex items-center gap-2">
+                        {item.label}
+                        {item.locked && <Lock size={12} className="text-slate-400" />}
+                    </span>
                     {item.badge && (
                         <Badge variant={bColor}>{item.badge}</Badge>
                     )}
@@ -99,17 +125,17 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle })
         fetch('/api/targets?per_page=1', {
             headers: { 'Accept': 'application/json' }
         })
-        .then(res => res.json())
-        .then(data => {
-            if (data?.meta?.total !== undefined) {
-                setTargetsCount(String(data.meta.total));
-            }
-        })
-        .catch(() => {});
+            .then(res => res.json())
+            .then(data => {
+                if (data?.meta?.total !== undefined) {
+                    setTargetsCount(String(data.meta.total));
+                }
+            })
+            .catch(() => { });
     }, [user, activePage]);
 
     // Replace the items list with dynamic targets counter
-    const dynamicNavItems = mockNavItems.map(item => {
+    const dynamicNavItems = navItems.map(item => {
         if (item.id === 'targets') {
             return { ...item, badge: targetsCount };
         }

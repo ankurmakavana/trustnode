@@ -1,10 +1,10 @@
 import React from 'react';
 import { ExternalLink } from 'lucide-react';
-import { mockRecentScans } from '../data/mockData';
 import {
     Card, CardHeader, ViewAllLink,
-    StatusBadge, SeverityBadge, ProgressBar, MonoChip,
+    StatusBadge, ProgressBar, MonoChip,
 } from './ui/primitives';
+import { SeverityBadge } from './ui/primitives_findings';
 
 const TABLE_HEADERS = ['Assessment', 'Target', 'Status', 'Progress', 'Findings', 'Duration', ''];
 
@@ -76,7 +76,7 @@ function ScanRow({ scan }) {
     );
 }
 
-export default function ScansTable() {
+export default function ScansTable({ data = [] }) {
     return (
         <Card padding={false}>
             <div className="px-5 py-4 border-b border-slate-100">
@@ -103,8 +103,8 @@ export default function ScansTable() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                        {mockRecentScans.map((scan) => (
-                            <ScanRow key={scan.id} scan={scan} />
+                        {data.map((scan) => (
+                            <ScanRow key={scan.id || Math.random()} scan={scan} />
                         ))}
                     </tbody>
                 </table>

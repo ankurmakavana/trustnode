@@ -14,9 +14,6 @@ export default function FindingDetailPage({ findingId, onBack, onEdit }) {
     const [error, setError] = useState(null);
     const [isManagerOrAdmin, setIsManagerOrAdmin] = useState(false);
 
-    // AI Remediation States
-    const [aiStatus, setAiStatus] = useState('not_generated'); 
-    const [generatingProgress, setGeneratingProgress] = useState(0);
 
     // Evidence States
     const [evidences, setEvidences] = useState([]);
@@ -38,77 +35,23 @@ export default function FindingDetailPage({ findingId, onBack, onEdit }) {
                 setFinding(f);
                 setLogs(logsRes.data.data || []);
 
-                // Seed realistic VAPT evidence database mock based on category/title
-                const isWeb = f.category === 'web_application' || f.title.toLowerCase().includes('xss') || f.title.toLowerCase().includes('sql');
-                const mockEvs = [
-                    {
-                        uuid: 'ev-001',
-                        type: 'http_request',
-                        title: 'Captured Attack Vector HTTP Request',
-                        description: 'Raw ingress HTTP request headers containing payload parameters.',
-                        content: `POST /api/auth/login HTTP/1.1\nHost: trustnode.local\nContent-Type: application/json\nUser-Agent: Mozilla/5.0\n\n{\n  "username": "admin\' OR \'1\'=\'1",\n  "password": "tempPass123!"\n}`,
-                        filename: 'attack_request.http',
-                        mime_type: 'text/plain',
-                        size: '240 B',
-                        hash: '4f28c50d32152631aef71a2588fbd103',
-                        created_at: new Date(Date.now() - 3600000).toISOString(),
-                        created_by: 'Automated Scan Engine'
-                    },
-                    {
-                        uuid: 'ev-002',
-                        type: 'http_response',
-                        title: 'Target Server Leakage HTTP Response',
-                        description: 'HTTP response body containing SQL system error messages.',
-                        content: `HTTP/1.1 500 Internal Server Error\nContent-Type: text/html; charset=UTF-8\n\n<html>\n  <body>\n    <h3>SQL syntax error in query template:</h3>\n    <p>SELECT * FROM accounts WHERE user = 'admin' OR '1'='1' AND pass = 'tempPass123!'</p>\n  </body>\n</html>`,
-                        filename: 'leakage_response.http',
-                        mime_type: 'text/html',
-                        size: '310 B',
-                        hash: 'a8b9015cdef31930b8d5a15159efd142',
-                        created_at: new Date(Date.now() - 3500000).toISOString(),
-                        created_by: 'Automated Scan Engine'
-                    },
-                    {
-                        uuid: 'ev-003',
-                        type: 'screenshot',
-                        title: 'Database Schema Leak Verification',
-                        description: 'Mock capture showing database table structures exposed via logs.',
-                        content: '[Mock Screenshot: Database Admin Portal bypass state showing tables: users, sessions, settings]',
-                        filename: 'db_schema_leak.png',
-                        mime_type: 'image/png',
-                        size: '142 KB',
-                        hash: '7e8f9b01519d30b8ef4a1599a14def90',
-                        created_at: new Date(Date.now() - 3400000).toISOString(),
-                        created_by: 'Security Analyst'
-                    },
-                    {
-                        uuid: 'ev-004',
-                        type: 'terminal_output',
-                        title: 'Nmap TCP Syn Port Scan Trace',
-                        description: 'Diagnostic output verifying open ports configuration status.',
-                        content: `Starting Nmap 7.92 ( https://nmap.org ) at 2026-08-06 20:12\nNmap scan report for 10.10.1.254\nHost is up (0.0021s latency).\nNot shown: 997 closed tcp ports (reset)\nPORT     STATE SERVICE\n80/tcp   open  http\n443/tcp  open  https\n8081/tcp open  blackice-icecap\n\nNmap done: 1 IP address scanned in 1.45 seconds`,
-                        filename: 'nmap_trace.log',
-                        mime_type: 'text/plain',
-                        size: '380 B',
-                        hash: '3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b',
-                        created_at: new Date(Date.now() - 3300000).toISOString(),
-                        created_by: 'Scan Worker node-4'
-                    },
-                    {
-                        uuid: 'ev-005',
-                        type: 'text_note',
-                        title: 'Penetration Testing Summary Notes',
-                        description: 'Triage annotation added during manual analysis validation.',
-                        content: `Validation Notes:\nVerified that the login portal executes queries without binding input variables. Attacker payload ' OR '1'='1 bypasses authentication logic. High likelihood of total DB access.`,
-                        filename: 'analyst_notes.txt',
-                        mime_type: 'text/plain',
-                        size: '185 B',
-                        hash: '9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c',
-                        created_at: new Date(Date.now() - 3200000).toISOString(),
-                        created_by: 'Security Analyst'
-                    }
-                ];
-                setEvidences(mockEvs);
-                setActiveEvidence(mockEvs[0]);
+                // Use actual evidence from finding or fallback to empty array
+                const evs = f.evidence_records || (f.evidence ? [{
+                    uuid: 'ev-legacy',
+                    type: 'text_note',
+                    title: 'Legacy Evidence Record',
+                    description: 'Raw evidence extracted from legacy finding structure.',
+                    content: f.evidence,
+                    filename: 'evidence.txt',
+                    mime_type: 'text/plain',
+                    size: 'Unknown',
+                    hash: '-',
+                    created_at: f.created_at || new Date().toISOString(),
+                    created_by: 'System'
+                }] : []);
+
+                setEvidences(evs);
+                setActiveEvidence(evs.length > 0 ? evs[0] : null);
             } catch (err) {
                 console.error('Failed to load finding details:', err);
                 setError('Failed to load finding details from database.');
@@ -131,48 +74,15 @@ export default function FindingDetailPage({ findingId, onBack, onEdit }) {
         checkRole();
     }, []);
 
-    const handleGenerateAI = () => {
-        if (aiStatus !== 'not_generated') return;
-        setAiStatus('generating');
-        setGeneratingProgress(10);
-        
-        const interval = setInterval(() => {
-            setGeneratingProgress(prev => {
-                if (prev >= 90) {
-                    clearInterval(interval);
-                    return 90;
-                }
-                return prev + 20;
-            });
-        }, 305);
-
-        setTimeout(() => {
-            clearInterval(interval);
-            setGeneratingProgress(100);
-            setAiStatus('ready');
-        }, 1500);
-    };
-
-    const handleApprove = () => {
-        if (aiStatus !== 'ready') return;
-        setAiStatus('approved');
-    };
-
-    const handleReject = () => {
-        if (aiStatus !== 'ready') return;
-        setAiStatus('rejected');
-    };
 
     const handleCopy = () => {
-        const text = `AI REMEDIATION ASSESSMENT PLAN - ${finding?.finding_id}\n` +
+        if (!finding) return;
+        const text = `REMEDIATION PLAN - ${finding?.finding_id || finding?.id}\n` +
                      `Title: ${finding?.title}\n` +
-                     `CVSS Score: ${finding?.cvss_score || 'N/A'}\n` +
-                     `Severity: ${finding?.severity || 'Medium'}\n\n` +
-                     `EXECUTIVE SUMMARY\nThe VAPT assessment identified input handling issues. Corrective validation is required.\n\n` +
-                     `ROOT CAUSE ANALYSIS\nLack of parameterization templates during query mapping.\n\n` +
-                     `RECOMMENDED FIX\nImplement secure parameterized query bindings.`;
+                     `Severity: ${finding?.severity || 'Unknown'}\n\n` +
+                     `REMEDIATION\n${finding?.remediation || 'No remediation provided.'}`;
         navigator.clipboard.writeText(text);
-        alert('AI Remediation plan copied to clipboard!');
+        alert('Remediation plan copied to clipboard!');
     };
 
     const getEvidenceIcon = (type) => {
@@ -458,226 +368,33 @@ export default function FindingDetailPage({ findingId, onBack, onEdit }) {
                         </div>
                     </div>
 
-                    {/* AI Remediation Assistant V1 Section */}
+                    {/* Remediation Section */}
                     <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-5">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                                 <Shield className="text-brand-600" size={16} />
-                                AI Remediation Assistant
+                                Remediation Plan
                             </h3>
-                            <span className="text-[10px] bg-brand-50 text-brand-700 font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-brand-100">
-                                AI Engineer V1
-                            </span>
-                        </div>
-
-                        {/* Top Status Banner */}
-                        <div className={`p-4 rounded-xl border flex items-start gap-3 text-xs ${
-                            aiStatus === 'not_generated' ? 'bg-slate-50 border-slate-200 text-slate-600' :
-                            aiStatus === 'generating'    ? 'bg-blue-50/50 border-blue-200 text-blue-700 font-medium animate-pulse' :
-                            aiStatus === 'ready'         ? 'bg-amber-50/50 border-amber-250 text-amber-808' :
-                            aiStatus === 'approved'      ? 'bg-emerald-50 border-emerald-200 text-emerald-850' :
-                                                           'bg-rose-50 border-rose-200 text-rose-850'
-                        }`}>
-                            <Info size={16} className="shrink-0 mt-0.5" />
-                            <div className="space-y-1">
-                                <span className="font-bold block uppercase tracking-wide text-[10px]">
-                                    AI Remediation Status: {
-                                        aiStatus === 'not_generated' ? 'Not Generated' :
-                                        aiStatus === 'generating'    ? 'Generating Analysis Plan...' :
-                                        aiStatus === 'ready'         ? 'Ready for Triage' :
-                                        aiStatus === 'approved'      ? 'Approved' :
-                                                                       'Rejected'
-                                    }
-                                </span>
-                                <p className="text-[11px] leading-relaxed">
-                                    {aiStatus === 'not_generated' && 'No remediation plan has been computed yet. Request an assessment below.'}
-                                    {aiStatus === 'generating' && `Building complete vector assessment... (${generatingProgress}%)`}
-                                    {aiStatus === 'ready' && 'AI Security Agent has generated the remediation blueprint. Review parameters and confirm execution authorization.'}
-                                    {aiStatus === 'approved' && 'Remediation approved. Ready for future AI Fix Agent.'}
-                                    {aiStatus === 'rejected' && 'Remediation rejected.'}
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* AI Actions toolbar */}
-                        <div className="flex flex-wrap items-center gap-2.5">
-                            <button
-                                type="button"
-                                onClick={handleGenerateAI}
-                                disabled={aiStatus !== 'not_generated'}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg shadow-sm transition"
-                            >
-                                <Play size={12} />
-                                Generate AI Analysis
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleApprove}
-                                disabled={aiStatus !== 'ready'}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg shadow-sm transition"
-                            >
-                                <CheckCircle2 size={12} />
-                                Approve Remediation
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleReject}
-                                disabled={aiStatus !== 'ready'}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg shadow-sm transition"
-                            >
-                                <XCircle size={12} />
-                                Reject Remediation
-                            </button>
                             <button
                                 type="button"
                                 onClick={handleCopy}
-                                disabled={!['ready', 'approved', 'rejected'].includes(aiStatus)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg shadow-sm transition ml-auto"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg shadow-sm transition"
                             >
                                 <Copy size={12} />
                                 Copy Plan
                             </button>
                         </div>
-
-                        {/* AI Analysis Plan content */}
-                        {(aiStatus === 'ready' || aiStatus === 'approved' || aiStatus === 'rejected') && (
-                            <div className="border border-slate-150 rounded-xl p-5 bg-slate-50/50 space-y-6 text-xs text-slate-700">
-                                
-                                {/* Metrics Block */}
-                                <div className="grid grid-cols-3 gap-4 border-b border-slate-200 pb-4">
-                                    <div>
-                                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Confidence Score</span>
-                                        <span className="text-sm font-bold text-slate-800 mt-0.5 block">95%</span>
-                                    </div>
-                                    <div>
-                                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Estimated Fix Time</span>
-                                        <span className="text-sm font-bold text-slate-800 mt-0.5 block">15 mins</span>
-                                    </div>
-                                    <div>
-                                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Potential Breaking Risk</span>
-                                        <span className="text-xs font-bold text-amber-600 mt-1 block uppercase">Low Risk</span>
-                                    </div>
+                        
+                        <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                            {finding.remediation ? (
+                                finding.remediation
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-6 text-slate-400">
+                                    <ShieldAlert size={24} className="mb-2 opacity-50" />
+                                    <p>No remediation provided by scanner.</p>
                                 </div>
-
-                                {/* Executive Narrative */}
-                                <div className="space-y-1.5">
-                                    <h4 className="font-bold text-slate-850 uppercase text-[10px] tracking-wider">Executive Summary</h4>
-                                    <p className="leading-relaxed text-slate-600">
-                                        The security scan identified a vulnerability corresponding to inadequate sanitization vectors inside the authentication middleware routing paths. An attacker targeting this vector could manipulate session authentication payloads to bypass validation limits or extract credentials parameters.
-                                    </p>
-                                </div>
-
-                                {/* Root Cause */}
-                                <div className="space-y-1.5">
-                                    <h4 className="font-bold text-slate-850 uppercase text-[10px] tracking-wider">Root Cause Analysis</h4>
-                                    <p className="leading-relaxed text-slate-600">
-                                        Lack of parameterized statement mapping within raw database query builders allows unfiltered input characters (such as quotes or comments) to alter the SQL syntax structure.
-                                    </p>
-                                </div>
-
-                                {/* Threat vector risks */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                        <h4 className="font-bold text-slate-850 uppercase text-[10px] tracking-wider">Technical Risk</h4>
-                                        <p className="leading-relaxed text-slate-600">
-                                            Arbitrary data leakage, database server host compromise, and complete extraction of sensitive database records.
-                                        </p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h4 className="font-bold text-slate-850 uppercase text-[10px] tracking-wider">Business Risk</h4>
-                                        <p className="leading-relaxed text-slate-600">
-                                            Violations of regulatory standards (PCI-DSS, GDPR) and potential data breach reputational impacts.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Attack Scenario simulation */}
-                                <div className="space-y-1.5">
-                                    <h4 className="font-bold text-slate-850 uppercase text-[10px] tracking-wider">Attack Scenario</h4>
-                                    <p className="leading-relaxed text-slate-600">
-                                        1. Attacker sends a POST login request with payload containing injection characters. <br/>
-                                        2. System parses payload and concatenates string inputs directly into SQL string builders. <br/>
-                                        3. SQL parser executes the statement, returning full administrative access credentials.
-                                    </p>
-                                </div>
-
-                                {/* Fix Recommendation */}
-                                <div className="space-y-2 border-t border-slate-200 pt-4">
-                                    <h4 className="font-bold text-emerald-850 uppercase text-[10px] tracking-wider">Recommended Fix Plan</h4>
-                                    <p className="leading-relaxed text-slate-600">
-                                        Migrate the raw concatenation query syntax to standard parameterized bindings using the database framework driver constructs.
-                                    </p>
-                                </div>
-
-                                {/* Step by step */}
-                                <div className="space-y-2">
-                                    <h4 className="font-bold text-slate-850 uppercase text-[10px] tracking-wider">Step-by-Step Remediation</h4>
-                                    <ol className="list-decimal pl-4 space-y-1 text-slate-600">
-                                        <li>Identify the file reference matching the query definition.</li>
-                                        <li>Replace raw inline string injection variables with structured parameterized bindings (`?` or named parameters).</li>
-                                        <li>Bind request input variables cleanly into the execution parameters arrays.</li>
-                                    </ol>
-                                </div>
-
-                                {/* Configuration Changes */}
-                                <div className="space-y-1.5">
-                                    <h4 className="font-bold text-slate-850 uppercase text-[10px] tracking-wider">Configuration Changes</h4>
-                                    <pre className="bg-slate-100 border border-slate-200 rounded p-2.5 text-[10px] font-mono text-slate-700">
-                                        DB_STRICT_MODE=true
-                                    </pre>
-                                </div>
-
-                                {/* Code Level recommendations */}
-                                <div className="space-y-1.5">
-                                    <h4 className="font-bold text-slate-850 uppercase text-[10px] tracking-wider">Code-Level Recommendations</h4>
-                                    <pre className="bg-slate-900 border border-slate-950 rounded-lg p-3 text-[10.5px] font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap">
-                                        {`// Vulnerable Implementation\n` +
-                                         `$user = DB::select(\"SELECT * FROM users WHERE email = '\" . $request->input('email') . "'\");\n\n` +
-                                         `// Remediation Implementation\n` +
-                                         `$user = DB::select(\"SELECT * FROM users WHERE email = :email\", [\n` +
-                                         `    'email' => $request->input('email')\n` +
-                                         `]);`}
-                                    </pre>
-                                </div>
-
-                                {/* Validation steps */}
-                                <div className="space-y-2 border-t border-slate-200 pt-4">
-                                    <h4 className="font-bold text-slate-850 uppercase text-[10px] tracking-wider">Validation Steps</h4>
-                                    <p className="leading-relaxed text-slate-600">
-                                        Execute the identical login POST payload and verify the server outputs a strict SQL parsing exception instead of credentials records logs.
-                                    </p>
-                                </div>
-
-                                {/* Regression & Rollback */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                        <h4 className="font-bold text-slate-850 uppercase text-[10px] tracking-wider">Regression Testing Checklist</h4>
-                                        <ul className="list-disc pl-4 space-y-0.5 text-slate-600">
-                                            <li>Verify general user login functions.</li>
-                                            <li>Check session session token persistence.</li>
-                                            <li>Verify password recovery processes.</li>
-                                        </ul>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h4 className="font-bold text-slate-850 uppercase text-[10px] tracking-wider">Rollback Strategy</h4>
-                                        <p className="leading-relaxed text-slate-600">
-                                            Restore previous code configuration commits from VCS repository history tracking branches.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* References */}
-                                <div className="space-y-2 border-t border-slate-200 pt-4">
-                                    <h4 className="font-bold text-slate-850 uppercase text-[10px] tracking-wider">Security Taxonomy References</h4>
-                                    <div className="flex flex-wrap gap-2 text-[10px]">
-                                        <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-bold">OWASP: A03:2021-Injection</span>
-                                        <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-bold">CWE-89: SQL Injection</span>
-                                        {finding?.cve && <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-bold">CVE: {finding.cve}</span>}
-                                    </div>
-                                </div>
-
-                            </div>
-                        )}
+                            )}
+                        </div>
 
                         {/* Future Automation section (disabled placeholder) */}
                         <div className="border-t border-slate-100 pt-4 space-y-3">
@@ -702,15 +419,10 @@ export default function FindingDetailPage({ findingId, onBack, onEdit }) {
                                 ].map((item, i) => {
                                     const Icon = item.icon;
                                     return (
-                                        <button
-                                            key={i}
-                                            type="button"
-                                            disabled
-                                            className="flex items-center justify-center gap-1.5 py-2 px-2.5 border border-dashed border-slate-200 rounded-lg text-slate-350 cursor-not-allowed bg-slate-50/20 transition"
-                                        >
-                                            <Icon size={12} />
-                                            {item.label}
-                                        </button>
+                                        <div key={i} className="flex flex-col items-center justify-center p-3 rounded-lg border border-slate-100 bg-slate-50 text-slate-400 opacity-60 cursor-not-allowed">
+                                            <Icon size={14} className="mb-1.5" />
+                                            <span className="font-semibold text-center">{item.label}</span>
+                                        </div>
                                     );
                                 })}
                             </div>
@@ -730,8 +442,8 @@ export default function FindingDetailPage({ findingId, onBack, onEdit }) {
                                 <Crosshair className="text-slate-400 shrink-0 mt-0.5" size={16} />
                                 <div>
                                     <span className="text-[10px] text-slate-400 font-bold block uppercase">Target Environment</span>
-                                    <span className="text-xs font-semibold text-slate-700 block mt-0.5">
-                                        {finding.target ? finding.target.name : 'Unknown Target'}
+                                    <span className="text-xs font-semibold text-slate-700 block mt-0.5 break-all">
+                                        {finding.target ? finding.target.name : (finding.url || 'Unknown Target')}
                                     </span>
                                     {finding.target && (
                                         <span className="text-[10px] text-slate-400 font-mono block mt-0.5">{finding.target.value}</span>

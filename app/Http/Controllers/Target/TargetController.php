@@ -42,6 +42,7 @@ class TargetController extends Controller
      */
     public function store(StoreTargetRequest $request): JsonResponse
     {
+        abort(403, 'Target management is coming soon.');
         $this->authorize('create', Target::class);
 
         $dto = TargetData::fromArray($request->validated());

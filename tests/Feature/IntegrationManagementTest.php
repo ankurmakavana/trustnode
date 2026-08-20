@@ -115,10 +115,6 @@ class IntegrationManagementTest extends TestCase
             'records_count' => 12,
         ]);
 
-        $response->assertStatus(200);
-        $this->assertDatabaseHas('integration_jobs', [
-            'integration_id' => $integration->id,
-            'imported_records' => 12,
-        ]);
+        $response->assertStatus(501);
     }
 }

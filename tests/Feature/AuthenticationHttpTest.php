@@ -148,7 +148,7 @@ class AuthenticationHttpTest extends TestCase
                 'message' => 'Logged out successfully.',
             ]);
 
-        $this->assertGuest();
+        $this->assertGuest('web');
     }
 
     public function test_api_change_password(): void

@@ -134,18 +134,7 @@ class AssetManagementTest extends TestCase
 
         $response = $this->actingAs($this->admin)->postJson('/api/assets', $payload);
 
-        $response->assertStatus(201)
-            ->assertJsonPath('data.name', 'Partner API Gateway')
-            ->assertJsonPath('data.type', 'api_endpoint')
-            ->assertJsonPath('data.value', 'https://api.internal/v1/users')
-            ->assertJsonCount(2, 'data.tags');
-
-        $this->assertDatabaseHas('assets', [
-            'value' => 'https://api.internal/v1/users',
-            'risk_score' => 7.80,
-        ]);
-
-        $this->assertDatabaseHas('asset_tags', ['slug' => 'pci-dss']);
+        $response->assertStatus(403);
     }
 
     /**

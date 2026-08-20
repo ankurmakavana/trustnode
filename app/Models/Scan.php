@@ -18,6 +18,7 @@ class Scan extends Model
 
     protected $fillable = [
         'uuid',
+        'repository_id',
         'name',
         'description',
         'type',
@@ -48,6 +49,8 @@ class Scan extends Model
     {
         parent::boot();
 
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
+
         static::creating(function (Scan $scan) {
             if (empty($scan->uuid)) {
                 $scan->uuid = (string) Str::uuid();
@@ -70,9 +73,19 @@ class Scan extends Model
         return $this->belongsTo(Target::class, 'target', 'value');
     }
 
+    public function repository(): BelongsTo
+    {
+        return $this->belongsTo(Repository::class, 'repository_id');
+    }
+
     public function activityLogs(): HasMany
     {
         return $this->hasMany(ScanActivityLog::class);
+    }
+
+    public function findings(): HasMany
+    {
+        return $this->hasMany(Finding::class);
     }
 
     public function importJob(): BelongsTo

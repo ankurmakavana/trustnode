@@ -3,15 +3,17 @@ import {
     ArrowLeft, ArrowRight, Check, Loader2, AlertTriangle,
     Target, Layers, Globe, Search, Shield, Zap, Clock,
     Play, RotateCcw, AlertCircle, ScanLine, CheckCircle2,
-    Server, Wifi, Package, Cloud, Network, Eye, Lock,
+    Server, Wifi, Package, Cloud, Network, Eye, Lock, GitBranch,
 } from 'lucide-react';
 import axios from 'axios';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SCAN_TYPES = [
+    { value: 'repository',          label: 'Repository Scan',      icon: GitBranch, desc: 'SAST, dependency scanning, and secret detection' },
+    { value: 'network_ip',          label: 'Infrastructure Scan',  icon: Network, desc: 'Network host discovery and vulnerability scan' },
+    { value: 'database',            label: 'Database Security Scan',icon: Server,  desc: 'MySQL/MariaDB security and misconfiguration checks' },
     { value: 'web_application',     label: 'Web Application',      icon: Globe,   desc: 'OWASP Top 10, injection, XSS, auth flaws' },
-    { value: 'network_ip',          label: 'Network IP',           icon: Network, desc: 'Network host discovery and vulnerability scan' },
     { value: 'port_discovery',      label: 'Port Discovery',       icon: Wifi,    desc: 'TCP/UDP port enumeration and service fingerprinting' },
     { value: 'api_vulnerability',   label: 'API Vulnerability',    icon: Zap,     desc: 'REST/GraphQL endpoint fuzzing and schema validation' },
     { value: 'container_audit',     label: 'Container Audit',      icon: Package, desc: 'Docker/OCI image CVE scanning and config review' },
@@ -21,13 +23,14 @@ const SCAN_TYPES = [
 ];
 
 const SCAN_ENGINES = [
-    { value: 'nmap',      label: 'Nmap',      desc: 'Network discovery & security auditing' },
-    { value: 'owasp_zap', label: 'OWASP ZAP', desc: 'Web app security scanner from OWASP' },
-    { value: 'nuclei',    label: 'Nuclei',    desc: 'Fast, template-based vulnerability scanner' },
-    { value: 'nikto',     label: 'Nikto',     desc: 'Web server misconfiguration scanner' },
-    { value: 'trivy',     label: 'Trivy',     desc: 'Container and IaC vulnerability scanner' },
-    { value: 'nessus',    label: 'Nessus',    desc: 'Comprehensive commercial vulnerability scanner' },
-    { value: 'custom',    label: 'Custom',    desc: 'Custom engine via API or integration' },
+    { value: 'nmap',             label: 'Nmap',             desc: 'Network discovery & security auditing' },
+    { value: 'database_scanner', label: 'Database Scanner', desc: 'TrustNode native database security engine' },
+    { value: 'owasp_zap',        label: 'OWASP ZAP',        desc: 'Web app security scanner from OWASP' },
+    { value: 'nuclei',           label: 'Nuclei',           desc: 'Fast, template-based vulnerability scanner' },
+    { value: 'nikto',            label: 'Nikto',            desc: 'Web server misconfiguration scanner' },
+    { value: 'trivy',            label: 'Trivy',            desc: 'Container and IaC vulnerability scanner' },
+    { value: 'nessus',           label: 'Nessus',           desc: 'Comprehensive commercial vulnerability scanner' },
+    { value: 'custom',           label: 'Custom',           desc: 'Custom engine via API or integration' },
 ];
 
 const PROFILES = [
@@ -331,7 +334,16 @@ function StepTarget({ scope, target, setTarget, errors }) {
 
 // ─── Step 3 – Configuration ───────────────────────────────────────────────────
 
-function StepConfig({ form, setForm, errors }) {
+function StepConfig({ form, setForm, dbCreds, setDbCreds, target, errors }) {
+    // If DB type is selected, auto-select DB engine
+    useEffect(() => {
+        if (form.type === 'database' && form.engine !== 'database_scanner') {
+            setForm(f => ({ ...f, engine: 'database_scanner' }));
+        }
+        if (form.type === 'database' && !dbCreds.host && target) {
+            setDbCreds(c => ({ ...c, host: target }));
+        }
+    }, [form.type, form.engine, setForm, dbCreds.host, target, setDbCreds]);
     return (
         <div className="space-y-5">
             <div>
@@ -449,6 +461,56 @@ function StepConfig({ form, setForm, errors }) {
                     })}
                 </div>
             </div>
+
+            {form.type === 'database' && (
+                <div className="space-y-4 p-5 bg-slate-50 border border-slate-200 rounded-xl mt-4">
+                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <Server size={16} className="text-brand-500" />
+                        Database Credentials (MySQL / MariaDB)
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                        Credentials are encrypted in application memory and safely destroyed after connection. They are never stored permanently.
+                    </p>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <Label required>Database Type</Label>
+                            <input type="text" value="MySQL / MariaDB" disabled className={icls(false) + ' bg-slate-100 text-slate-500 opacity-80 cursor-not-allowed'} />
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                            <div className="col-span-3">
+                                <Label required>Host</Label>
+                                <input type="text" placeholder="e.g. 192.168.1.100" value={dbCreds.host} onChange={e => setDbCreds({ ...dbCreds, host: e.target.value })} className={icls(!!errors['credentials.host'])} />
+                                <FieldError msg={errors['credentials.host']} />
+                            </div>
+                            <div className="col-span-1">
+                                <Label required>Port</Label>
+                                <input type="number" placeholder="3306" value={dbCreds.port} onChange={e => setDbCreds({ ...dbCreds, port: e.target.value })} className={icls(!!errors['credentials.port'])} />
+                                <FieldError msg={errors['credentials.port']} />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <Label>Database Name (Optional)</Label>
+                            <input type="text" placeholder="e.g. production_db" value={dbCreds.database} onChange={e => setDbCreds({ ...dbCreds, database: e.target.value })} className={icls(!!errors['credentials.database'])} />
+                            <FieldError msg={errors['credentials.database']} />
+                        </div>
+                        <div>
+                            <Label required>Username</Label>
+                            <input type="text" placeholder="e.g. db_admin" value={dbCreds.username} onChange={e => setDbCreds({ ...dbCreds, username: e.target.value })} className={icls(!!errors['credentials.username'])} autoComplete="off" />
+                            <FieldError msg={errors['credentials.username']} />
+                        </div>
+                    </div>
+
+                    <div>
+                        <Label required>Password</Label>
+                        <input type="password" placeholder="••••••••••••" value={dbCreds.password} onChange={e => setDbCreds({ ...dbCreds, password: e.target.value })} className={icls(!!errors['credentials.password'])} autoComplete="new-password" />
+                        <FieldError msg={errors['credentials.password']} />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -621,9 +683,10 @@ export default function ScanWizardPage({ onSave, onCancel }) {
 
     const [scope,      setScope]      = useState('single');
     const [target,     setTarget]     = useState('');
-    const [form,       setForm]       = useState({ name: '', description: '', type: 'web_application', engine: 'owasp_zap', profile: 'standard' });
+    const [form,       setForm]       = useState({ name: '', description: '', type: 'network_ip', engine: 'nmap', profile: 'standard' });
     const [schedule,   setSchedule]   = useState('now');
     const [customCron, setCustomCron] = useState('');
+    const [dbCreds,    setDbCreds]    = useState({ driver: 'mysql', host: '', port: '3306', database: '', username: '', password: '' });
 
     const validate = useCallback((s) => {
         const e = {};
@@ -633,9 +696,15 @@ export default function ScanWizardPage({ onSave, onCancel }) {
         if (s === 3 && !form.type)                                   e.type       = 'Select a scan type.';
         if (s === 3 && !form.engine)                                 e.engine     = 'Select a scan engine.';
         if (s === 3 && !form.profile)                                e.profile    = 'Select a scan profile.';
+        if (s === 3 && form.type === 'database') {
+            if (!dbCreds.host?.trim())     e['credentials.host']     = 'Host is required.';
+            if (!dbCreds.port)             e['credentials.port']     = 'Port is required.';
+            if (!dbCreds.username?.trim()) e['credentials.username'] = 'Username is required.';
+            if (!dbCreds.password)         e['credentials.password'] = 'Password is required.';
+        }
         if (s === 4 && schedule === 'custom' && !customCron?.trim()) e.customCron = 'Enter a valid cron expression.';
         return e;
-    }, [scope, target, form, schedule, customCron]);
+    }, [scope, target, form, schedule, customCron, dbCreds]);
 
     const handleNext = useCallback(() => {
         const e = validate(step);
@@ -664,14 +733,29 @@ export default function ScanWizardPage({ onSave, onCancel }) {
             description: form.description?.trim() || null,
             type:        form.type,
             engine:      form.engine,
-            target:      target.trim(),
+            target:      form.type === 'database' ? `${dbCreds.host}:${dbCreds.port}` : target.trim(),
             schedule:    cronValue,
             status:      schedule === 'now' ? 'queued' : 'scheduled',
             progress:    0,
         };
+        
+        if (form.type === 'database') {
+            payload.credentials = {
+                driver: dbCreds.driver,
+                host: dbCreds.host,
+                port: Number(dbCreds.port),
+                database: dbCreds.database?.trim() || null,
+                username: dbCreds.username,
+                password: dbCreds.password,
+            };
+        }
 
         try {
             await axios.post('/api/scans', payload);
+            
+            // SECURITY: Immediately clear password state from memory after successful submit
+            setDbCreds(prev => ({ ...prev, password: '' }));
+            
             onSave();
         } catch (err) {
             if (err.response?.status === 422) {
@@ -738,7 +822,7 @@ export default function ScanWizardPage({ onSave, onCancel }) {
                 )}
                 {step === 1 && <StepScope    scope={scope}       setScope={setScope}        errors={errors} />}
                 {step === 2 && <StepTarget   scope={scope}       target={target}            setTarget={setTarget} errors={errors} />}
-                {step === 3 && <StepConfig   form={form}         setForm={setForm}          errors={errors} />}
+                {step === 3 && <StepConfig   form={form}         setForm={setForm}          dbCreds={dbCreds} setDbCreds={setDbCreds} target={target} errors={errors} />}
                 {step === 4 && <StepSchedule schedule={schedule} setSchedule={setSchedule} customCron={customCron} setCustomCron={setCustomCron} errors={errors} />}
                 {step === 5 && <StepReview   scope={scope}       target={target}            form={form} schedule={schedule} customCron={customCron} />}
             </div>

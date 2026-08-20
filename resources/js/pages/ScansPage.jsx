@@ -5,7 +5,7 @@ import {
     FileText, X, ScanLine, AlertTriangle, CheckCircle2,
     Activity, Clock, Loader2, Filter, CalendarDays,
     MoreVertical, StopCircle, Terminal, Play, ChevronDown,
-    CheckSquare, Square as SquareIcon,
+    CheckSquare, Square as SquareIcon, GitBranch,
 } from 'lucide-react';
 import axios from 'axios';
 import { ScanStatusBadge, ScanTypeBadge, ScanEngineBadge, ProgressBar, ScanRowSkeleton } from '../components/ui/primitives_scans';
@@ -204,9 +204,10 @@ function EmptyState({ hasFilters, onClear, onCreate }) {
                     <X size={14} strokeWidth={2.5} /> Clear Filters
                 </button>
             ) : (
-                <button type="button" onClick={onCreate}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition shadow-sm">
-                    <Plus size={14} strokeWidth={2.5} /> Create First Scan
+                <button type="button" disabled
+                    title="Infrastructure & DB scanning is coming soon. Go to Repositories to run a scan."
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold text-slate-400 bg-slate-100 rounded-lg shadow-sm border border-slate-200 cursor-not-allowed">
+                    <Lock size={14} strokeWidth={2.5} /> Create First Scan 🔒
                 </button>
             )}
         </div>
@@ -301,12 +302,12 @@ function ScheduleCell({ schedule }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const SCAN_TYPES    = ['web_application','network_ip','port_discovery','api_vulnerability','container_audit','cloud_infrastructure','internal_network','external_surface'];
-const SCAN_ENGINES  = ['nmap','owasp_zap','nuclei','nikto','trivy','nessus','custom'];
+const SCAN_TYPES    = ['web_application','network_ip','port_discovery','api_vulnerability','container_audit','cloud_infrastructure','internal_network','external_surface', 'repository', 'database'];
+const SCAN_ENGINES  = ['nmap','owasp_zap','nuclei','nikto','trivy','nessus','custom', 'database_scanner'];
 const SCAN_STATUSES = ['queued','running','scheduled','completed','failed','cancelled'];
 
-const TYPE_LABELS   = { web_application:'Web Application', network_ip:'Network IP', port_discovery:'Port Discovery', api_vulnerability:'API Vulnerability', container_audit:'Container Audit', cloud_infrastructure:'Cloud Infrastructure', internal_network:'Internal Network', external_surface:'External Surface' };
-const ENGINE_LABELS = { nmap:'Nmap', owasp_zap:'OWASP ZAP', nuclei:'Nuclei', nikto:'Nikto', trivy:'Trivy', nessus:'Nessus', custom:'Custom' };
+const TYPE_LABELS   = { web_application:'Web Application', network_ip:'Network IP / Infrastructure', port_discovery:'Port Discovery', api_vulnerability:'API Vulnerability', container_audit:'Container Audit', cloud_infrastructure:'Cloud Infrastructure', internal_network:'Internal Network', external_surface:'External Surface', repository: 'Repository Scan', database: 'Database Security Scan' };
+const ENGINE_LABELS = { nmap:'Nmap', owasp_zap:'OWASP ZAP', nuclei:'Nuclei', nikto:'Nikto', trivy:'Trivy', nessus:'Nessus', custom:'Custom', database_scanner: 'Database Scanner' };
 const STATUS_LABELS = { queued:'Queued', running:'Running', scheduled:'Scheduled', completed:'Completed', failed:'Failed', cancelled:'Cancelled' };
 
 export default function ScansPage({ onNavigateToCreate, onNavigateToEdit, onNavigateToDetail, onNavigateToReport }) {
@@ -439,8 +440,8 @@ export default function ScansPage({ onNavigateToCreate, onNavigateToEdit, onNavi
                     </button>
                     <button
                         type="button"
-                        onClick={onNavigateToCreate}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-lg shadow-sm border border-brand-700 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                        onClick={() => window.location.href = '/scans/new'}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition shadow-sm"
                     >
                         <Plus size={15} />
                         New Scan
@@ -712,7 +713,13 @@ export default function ScansPage({ onNavigateToCreate, onNavigateToEdit, onNavi
                                         key={scan.id}
                                         role="row"
                                         aria-selected={isSelected}
-                                        onClick={() => onNavigateToDetail(scan.id)}
+                                        onClick={() => {
+                                            if (scan.status === 'completed' && onNavigateToReport) {
+                                                onNavigateToReport(scan.id);
+                                            } else {
+                                                onNavigateToDetail(scan.id);
+                                            }
+                                        }}
                                         className={`group cursor-pointer transition-colors ${
                                             isSelected
                                                 ? 'bg-brand-50/60'
@@ -785,7 +792,12 @@ export default function ScansPage({ onNavigateToCreate, onNavigateToEdit, onNavi
 
                                         {/* Status */}
                                         <td className="px-4 py-3.5 whitespace-nowrap">
-                                            <ScanStatusBadge status={scan.status} />
+                                            <div className="flex flex-col items-start gap-1">
+                                                <ScanStatusBadge status={scan.status} />
+                                                <span className="text-[10px] text-slate-500 font-medium">
+                                                    {scan.findings_count === 0 ? '0 findings' : `${scan.findings_count} findings`}
+                                                </span>
+                                            </div>
                                         </td>
 
                                         {/* Progress */}

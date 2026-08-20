@@ -26,7 +26,11 @@ class UpdateScanRequest extends FormRequest
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'type' => ['sometimes', 'required', new Enum(ScanType::class)],
+            'type' => ['sometimes', new Enum(ScanType::class), function ($attribute, $value, $fail) {
+                if (!in_array($value, [ScanType::REPOSITORY->value, ScanType::NETWORK_IP->value])) {
+                    $fail('Only Repository and Network IP scanning are supported in this release.');
+                }
+            }],
             'engine' => ['sometimes', 'required', new Enum(ScanEngine::class)],
             'target' => ['sometimes', 'required', 'string', 'max:255'],
             'schedule' => ['nullable', 'string', 'max:255'],

@@ -42,6 +42,7 @@ class AssetController extends Controller
      */
     public function store(StoreAssetRequest $request): JsonResponse
     {
+        abort(403, 'Asset management is coming soon.');
         $this->authorize('create', Asset::class);
 
         $dto = AssetData::fromArray($request->validated());

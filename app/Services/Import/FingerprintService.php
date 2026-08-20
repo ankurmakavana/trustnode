@@ -9,7 +9,7 @@ class FingerprintService
     /**
      * Generate scanner-aware SHA256 fingerprint for a finding.
      */
-    public function generate(NormalizedFinding $dto, int $assetId): string
+    public function generate(NormalizedFinding $dto, ?int $assetId = null): string
     {
         $scanner = strtolower($dto->scanner ?? '');
 

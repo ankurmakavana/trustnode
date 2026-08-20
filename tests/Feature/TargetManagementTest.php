@@ -91,12 +91,7 @@ class TargetManagementTest extends TestCase
 
         $response = $this->actingAs($this->admin)->postJson('/api/targets', $payload);
 
-        $response->assertStatus(201)
-            ->assertJsonPath('data.name', 'Partner API Gateway Server');
-
-        $this->assertDatabaseHas('targets', [
-            'value' => 'https://api.internal/v1/users',
-        ]);
+        $response->assertStatus(403);
     }
 
     /**

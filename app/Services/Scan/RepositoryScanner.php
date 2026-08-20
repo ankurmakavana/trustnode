@@ -4,7 +4,6 @@ namespace App\Services\Scan;
 
 use App\DTOs\Import\NormalizedFinding;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Str;
 
 class RepositoryScanner
 {
@@ -26,7 +25,7 @@ class RepositoryScanner
             'title' => 'Exposed Private Token or Secret',
             'severity' => 'high',
             'category' => 'Secret',
-            'regex' => '/(secret|token|password|passwd|api_key|apikey|private_key)\s*[:=]\s*["'\''\s]*[a-zA-Z0-9_\-\.\/+=]{20,}["'\''\s]*/i',
+            'regex' => '/(secret|token|password|passwd|api_key|apikey|private_key)\s*[:=]\s*["\'\s]*[a-zA-Z0-9_\-\.\/+=]{20,}["\'\s]*/i',
             'description' => 'An API token, private key, or password was found hardcoded in the source code.',
             'remediation' => 'Move hardcoded credentials to configuration environment variables (.env) or a credential vault.',
         ],
@@ -69,7 +68,7 @@ class RepositoryScanner
             'regex' => '/(file_get_contents|readfile|file|fopen)\s*\(\s*[\$].*(dir|path|file|url).*\)/i',
             'description' => 'Unvalidated user input is concatenated into a file system read function, potentially allowing path traversal to read arbitrary system files.',
             'remediation' => 'Sanitize file paths using basename() or restrict operations to a whitelist of allowed files/directories.',
-        ]
+        ],
     ];
 
     /**
@@ -106,7 +105,7 @@ class RepositoryScanner
                         $lineContent = $lines[$lineNumber - 1] ?? '';
 
                         // Sanitize/mask evidence if it contains secrets
-                        $evidence = trim($lineContent);
+                        $evidence = mb_convert_encoding(trim($lineContent), 'UTF-8', 'UTF-8');
                         if ($rule['category'] === 'Secret') {
                             $evidence = $this->maskSecret($matchedText);
                         }
@@ -122,7 +121,7 @@ class RepositoryScanner
                             'remediation' => $rule['remediation'],
                             'technicalDetails' => "Vulnerability found in {$relativePath} on line {$lineNumber}.",
                             'evidence' => $evidence,
-                            'url' => $repositoryUrl . '/blob/main/' . $relativePath . '#L' . $lineNumber,
+                            'url' => $repositoryUrl.'/blob/main/'.$relativePath.'#L'.$lineNumber,
                             'path' => $relativePath,
                             'port' => null,
                             'protocol' => null,
@@ -147,7 +146,7 @@ class RepositoryScanner
             '/^\.git\//',
             '/^vendor\//',
             '/^node_modules\//',
-            '/\.(png|jpg|jpeg|gif|ico|zip|tar|gz|exe|bin|pdf|woff|woff2|eot|ttf|mp4)$/i',
+            '/\.(png|jpg|jpeg|gif|ico|zip|tar|gz|exe|bin|pdf|woff|woff2|eot|ttf|mp4|db|sqlite|sqlite3)$/i',
         ];
 
         foreach ($skippedPatterns as $pattern) {
@@ -169,6 +168,7 @@ class RepositoryScanner
         if ($len <= 8) {
             return '********';
         }
-        return substr($secret, 0, 4) . str_repeat('*', $len - 8) . substr($secret, -4);
+
+        return substr($secret, 0, 4).str_repeat('*', $len - 8).substr($secret, -4);
     }
 }

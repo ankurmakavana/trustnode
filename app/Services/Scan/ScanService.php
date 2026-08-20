@@ -18,7 +18,7 @@ class ScanService
      */
     public function list(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        $query = Scan::query()->with(['creator', 'updater']);
+        $query = Scan::query()->with(['creator', 'updater', 'repository'])->withCount('findings');
 
         if (! empty($filters['search'])) {
             $search = $filters['search'];
@@ -63,6 +63,20 @@ class ScanService
             $data = $dto->toArray();
             $data['created_by'] = $creator->id;
             $data['updated_by'] = $creator->id;
+
+            if (!empty($data['repository_id'])) {
+                // Lock repository if possible to serialize requests
+                \App\Models\Repository::where('id', $data['repository_id'])->lockForUpdate()->first();
+                
+                $activeScan = Scan::where('repository_id', $data['repository_id'])
+                    ->whereIn('status', [\App\Enums\Scan\ScanStatus::QUEUED, \App\Enums\Scan\ScanStatus::RUNNING])
+                    ->lockForUpdate()
+                    ->first();
+                    
+                if ($activeScan) {
+                    throw new \InvalidArgumentException('A scan is already active for this repository.');
+                }
+            }
 
             $scan = Scan::create($data);
 

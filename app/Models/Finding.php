@@ -49,23 +49,28 @@ class Finding extends Model
         'cvss_score' => 'float',
     ];
 
-    protected static $nextFindingNumber = null;
-
     protected static function boot()
     {
         parent::boot();
+
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
 
         static::creating(function (Finding $finding) {
             if (empty($finding->uuid)) {
                 $finding->uuid = (string) Str::uuid();
             }
             if (empty($finding->finding_id)) {
-                if (self::$nextFindingNumber === null) {
-                    $latest = self::orderBy('id', 'desc')->first();
-                    self::$nextFindingNumber = $latest ? ($latest->id + 1) : 1;
+                $latestId = \Illuminate\Support\Facades\DB::table('findings')->max('id');
+                $next = $latestId ? ($latestId + 1) : 1;
+                
+                // Ensure the finding_id is truly unique
+                $findingId = 'TN-FIND-'.str_pad($next, 6, '0', STR_PAD_LEFT);
+                while (\Illuminate\Support\Facades\DB::table('findings')->where('finding_id', $findingId)->exists()) {
+                    $next++;
+                    $findingId = 'TN-FIND-'.str_pad($next, 6, '0', STR_PAD_LEFT);
                 }
-                $finding->finding_id = 'TN-FIND-'.str_pad(self::$nextFindingNumber, 6, '0', STR_PAD_LEFT);
-                self::$nextFindingNumber++;
+                
+                $finding->finding_id = $findingId;
             }
         });
     }

@@ -54,25 +54,7 @@ export function StatusBadge({ status }) {
     );
 }
 
-// ── SeverityBadge ─────────────────────────────────────────────────────────────
-
-const severityVariants = {
-    critical: 'red',
-    high:     'orange',
-    medium:   'amber',
-    low:      'blue',
-    info:     'violet',
-};
-
-export function SeverityBadge({ severity }) {
-    if (!severity) return null;
-    const variant = severityVariants[severity.toLowerCase()] || 'slate';
-    return (
-        <Badge variant={variant}>
-            {severity.charAt(0).toUpperCase() + severity.slice(1).toLowerCase()}
-        </Badge>
-    );
-}
+// SeverityBadge has been consolidated to primitives_findings.jsx
 
 // ── ProgressBar ───────────────────────────────────────────────────────────────
 

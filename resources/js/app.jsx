@@ -20,6 +20,7 @@ import ScanWizardPage from './pages/ScanWizardPage';
 import ScanDetailPage from './pages/ScanDetailPage';
 import ScanReportPage from './pages/ScanReportPage';
 import PlaceholderPage from './pages/PlaceholderPage';
+import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import FindingsPage from './pages/FindingsPage';
 import FindingFormPage from './pages/FindingFormPage';
@@ -283,7 +284,7 @@ function MainAppLayout() {
 
                             {/* Users & Settings */}
                             <Route path="/users" element={<PlaceholderPage title="Users" />} />
-                            <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
+                            <Route path="/settings" element={<SettingsPage />} />
                             
                             <Route path="*" element={<Navigate to="/dashboard" replace />} />
                         </Routes>

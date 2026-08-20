@@ -6,6 +6,7 @@ use App\Models\ImportJob;
 use App\Services\Import\RiskMapper;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -44,7 +45,7 @@ class CalculateRiskJob implements ShouldQueue
         ]);
 
         // Eager load asset relationship using Eloquent Collection to avoid N+1 queries
-        $findingsCollection = new \Illuminate\Database\Eloquent\Collection($this->findings);
+        $findingsCollection = new Collection($this->findings);
         $findingsCollection->loadMissing('asset');
 
         $processedAssetIds = [];

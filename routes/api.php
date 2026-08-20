@@ -12,8 +12,10 @@ use App\Http\Controllers\Finding\FindingController;
 use App\Http\Controllers\Import\ImportController;
 use App\Http\Controllers\Integration\IntegrationController;
 use App\Http\Controllers\Report\ReportController;
-use App\Http\Controllers\Risk\RiskController;
+use App\Http\Controllers\SettingController;
+use App\Http\Controllers\UserPreferenceController;
 use App\Http\Controllers\Repository\RepositoryController;
+use App\Http\Controllers\Risk\RiskController;
 use App\Http\Controllers\Scan\ScanController;
 use App\Http\Controllers\Target\TargetController;
 use Illuminate\Support\Facades\Route;
@@ -36,7 +38,11 @@ Route::middleware('guest')->group(function (): void {
         ->middleware('throttle:5,1');
 });
 
-Route::middleware('auth')->group(function (): void {
+use App\Http\Controllers\Auth\TokenController;
+
+Route::middleware('auth:sanctum')->group(function (): void {
+    Route::post('/auth/tokens', [TokenController::class, 'store']);
+    Route::delete('/auth/tokens/{token}', [TokenController::class, 'destroy']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/password/change', [PasswordController::class, 'changePassword']);
 
@@ -53,6 +59,8 @@ Route::middleware('auth')->group(function (): void {
 
     // Scan Management Endpoints
     Route::get('/scans/{scan}/activity', [ScanController::class, 'activityLogs']);
+    Route::post('/scans/{scan}/report', [ScanController::class, 'generateReport']);
+    Route::get('/scans/{scan}/report/status', [ScanController::class, 'reportStatus']);
     Route::get('/scans/{scan}/report/download', [ScanController::class, 'downloadReport'])->name('scans.report.download');
     Route::apiResource('/scans', ScanController::class);
 
@@ -96,4 +104,19 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/imports', [ImportController::class, 'index']);
     Route::get('/imports/{job}', [ImportController::class, 'show']);
     Route::delete('/imports/{job}', [ImportController::class, 'destroy']);
+
+    // Notification Management Endpoints
+    Route::get('/notifications/unread-count', [\App\Http\Controllers\Notification\NotificationController::class, 'unreadCount']);
+    Route::post('/notifications/mark-all-read', [\App\Http\Controllers\Notification\NotificationController::class, 'markAllRead']);
+    Route::post('/notifications/{notification}/mark-read', [\App\Http\Controllers\Notification\NotificationController::class, 'markRead']);
+    Route::apiResource('/notifications', \App\Http\Controllers\Notification\NotificationController::class)->only(['index', 'show', 'destroy']);
+
+    // Settings Management Endpoints
+    Route::get('/settings/mail', [SettingController::class, 'getMailSettings']);
+    Route::put('/settings/mail', [SettingController::class, 'updateMailSettings']);
+    Route::post('/settings/test-email', [SettingController::class, 'testEmail']);
+
+    // User Preferences
+    Route::get('/users/preferences', [UserPreferenceController::class, 'index']);
+    Route::put('/users/preferences', [UserPreferenceController::class, 'update']);
 });

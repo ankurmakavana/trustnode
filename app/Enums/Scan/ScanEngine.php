@@ -10,4 +10,6 @@ enum ScanEngine: string
     case TRIVY = 'trivy';
     case NESSUS = 'nessus';
     case REPOSITORY_SCANNER = 'repositoryscanner';
+    case BURP_SUITE = 'burpsuite';
+    case DATABASE_SCANNER = 'databasescanner';
 }

@@ -60,7 +60,11 @@ services:
     ports:
       - "5173:5173"
     volumes:
-      - .:/app
+      - ./resources:/app/resources
+      - ./public:/app/public
+      - ./vite.config.js:/app/vite.config.js
+      - ./package.json:/app/package.json
+      - ./package-lock.json:/app/package-lock.json
       - trustnode-node-modules:/app/node_modules
     networks:
       - trustnode-network
@@ -99,7 +103,8 @@ services:
     build:
       context: .
       dockerfile: ./docker/php/Dockerfile
-    command: php artisan queue:work --queue=default,scans,notifications
+    command: php artisan queue:work --queue=default,scans,notifications --timeout=1800 --tries=1
+    restart: unless-stopped
     volumes:
       - .:/var/www/html
       - trustnode-vendor:/var/www/html/vendor

@@ -201,12 +201,9 @@ export default function ImportWizard({ isOpen, onClose, connectorCode, integrati
                                     status: 'open'
                                 }));
                             } catch(e) {
-                                // Default dummy display
-                                list = [
-                                    { severity: 'critical', title: 'Critical Vulnerability Identified', asset: '192.168.1.10', cve: 'CVE-2023-38646', cvss: '9.8', status: 'open' },
-                                    { severity: 'high', title: 'Privilege Escalation in Service Layer', asset: '192.168.1.12', cve: 'CVE-2023-4911', cvss: '7.8', status: 'open' },
-                                    { severity: 'medium', title: 'Missing Security Headers on Web Server', asset: 'https://app.trustnode.local', cve: '—', cvss: '5.3', status: 'open' }
-                                ];
+                                // Empty list when preview fails
+                                list = [];
+                                setError('Preview data format is invalid.');
                             }
                         }
                         setParsedFindings(list);

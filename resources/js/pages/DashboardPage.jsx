@@ -10,6 +10,10 @@ import { useAuth } from '../context/AuthContext';
 export default function DashboardPage() {
     const { checkAuthStatus } = useAuth();
     const [stats, setStats] = useState([]);
+    const [severityData, setSeverityData] = useState([]);
+    const [scanActivity, setScanActivity] = useState([]);
+    const [recentScans, setRecentScans] = useState([]);
+    const [recentActivity, setRecentActivity] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -28,7 +32,11 @@ export default function DashboardPage() {
                     throw new Error('Failed to load dashboard stats');
                 }
                 const data = await response.json();
-                setStats(data.stats);
+                setStats(data.stats || []);
+                setSeverityData(data.severityData || []);
+                setScanActivity(data.scanActivity || []);
+                setRecentScans(data.recentScans || []);
+                setRecentActivity(data.recentActivity || []);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -63,8 +71,8 @@ export default function DashboardPage() {
             {/* Section: Charts + Quick Actions */}
             <section aria-label="Charts and quick actions">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                    <SeverityChart />
-                    <ScanActivityChart />
+                    <SeverityChart data={severityData} />
+                    <ScanActivityChart data={scanActivity} />
                     <QuickActions />
                 </div>
             </section>
@@ -72,8 +80,8 @@ export default function DashboardPage() {
             {/* Section: Activity + Scans */}
             <section aria-label="Recent activity and assessments">
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    <ActivityTable />
-                    <ScansTable />
+                    <ActivityTable data={recentActivity} />
+                    <ScansTable data={recentScans} />
                 </div>
             </section>
 

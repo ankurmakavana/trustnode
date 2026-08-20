@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Plus, Search, SlidersHorizontal, Trash2, Edit3, Eye, 
-    ArrowUpDown, Loader2, RefreshCw 
+    ArrowUpDown, Loader2, RefreshCw, Lock
 } from 'lucide-react';
 import { Card, CardHeader, ViewAllLink, MonoChip, Skeleton } from '../components/ui/primitives';
 import { RiskBadge, AssetTypeBadge, ConfirmationDialog } from '../components/ui/primitives_assets';
@@ -155,10 +155,11 @@ export default function AssetsPage({ onNavigateToCreate, onNavigateToEdit, onNav
                         <RefreshCw size={14} className="text-slate-500" />
                     </button>
                     <button
-                        onClick={onNavigateToCreate}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                        disabled
+                        title="Asset management is coming soon."
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-400 bg-slate-100 rounded-lg shadow-sm border border-slate-200 cursor-not-allowed"
                     >
-                        <Plus size={14} /> Add Asset
+                        <Lock size={14} /> Add Asset 🔒
                     </button>
                 </div>
             </div>

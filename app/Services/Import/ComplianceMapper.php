@@ -9,7 +9,9 @@ use Illuminate\Support\Facades\DB;
 class ComplianceMapper
 {
     protected $webControl = null;
+
     protected $defaultControl = null;
+
     protected $preloaded = false;
 
     /**
@@ -22,12 +24,12 @@ class ComplianceMapper
         $control = null;
 
         if (str_contains($category, 'web')) {
-            if ($this->webControl === null && !$this->preloaded) {
+            if ($this->webControl === null && ! $this->preloaded) {
                 $this->webControl = ComplianceControl::where('code', 'like', 'A%')->first() ?: false;
             }
             $control = $this->webControl ?: null;
         } else {
-            if ($this->defaultControl === null && !$this->preloaded) {
+            if ($this->defaultControl === null && ! $this->preloaded) {
                 $this->defaultControl = ComplianceControl::first() ?: false;
             }
             $control = $this->defaultControl ?: null;

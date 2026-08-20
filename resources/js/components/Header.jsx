@@ -3,9 +3,10 @@ import {
     Search, Bell, Sun, Moon, ChevronDown,
     LogOut, User, Settings, ShieldAlert, ScanLine, FileText, Users,
 } from 'lucide-react';
-import { mockNotifications } from '../data/mockData';
 import { Avatar, IconButton } from './ui/primitives';
 import { useAuth } from '../context/AuthContext';
+
+const notifications = [];
 
 /* ── useClickOutside hook ─────────────────────────────────── */
 function useClickOutside(ref, handler) {
@@ -25,22 +26,22 @@ function useClickOutside(ref, handler) {
 /* ── Notification icon map ───────────────────────────────── */
 const notifIcons = {
     finding: ShieldAlert,
-    scan:    ScanLine,
-    report:  FileText,
-    user:    Users,
+    scan: ScanLine,
+    report: FileText,
+    user: Users,
 };
 
 const notifColors = {
     finding: 'text-red-600 bg-red-50',
-    scan:    'text-brand-600 bg-brand-50',
-    report:  'text-emerald-600 bg-emerald-50',
-    user:    'text-slate-600 bg-slate-100',
+    scan: 'text-brand-600 bg-brand-50',
+    report: 'text-emerald-600 bg-emerald-50',
+    user: 'text-slate-600 bg-slate-100',
 };
 
 /* ── NotificationPanel ───────────────────────────────────── */
 function NotificationPanel({ onClose }) {
     const ref = useRef(null);
-    const unreadCount = mockNotifications.filter(n => n.unread).length;
+    const unreadCount = notifications.filter(n => n.unread).length;
     useClickOutside(ref, onClose);
 
     return (
@@ -67,8 +68,8 @@ function NotificationPanel({ onClose }) {
 
             {/* List */}
             <div className="divide-y divide-slate-50 max-h-80 overflow-y-auto">
-                {mockNotifications.map((n) => {
-                    const Icon  = notifIcons[n.type] || Bell;
+                {notifications.map((n) => {
+                    const Icon = notifIcons[n.type] || Bell;
                     const color = notifColors[n.type] || notifColors.user;
 
                     return (
@@ -110,7 +111,7 @@ function ProfileMenu({ onClose, user, onLogout }) {
     useClickOutside(ref, onClose);
 
     const menuItems = [
-        { icon: User,     label: 'My Profile'  },
+        { icon: User, label: 'My Profile' },
         { icon: Settings, label: 'Preferences' },
     ];
 
@@ -163,11 +164,11 @@ function ProfileMenu({ onClose, user, onLogout }) {
 export default function Header({ darkMode, onToggleDark, pageTitle }) {
     const { user, logout } = useAuth();
     const [showNotifications, setShowNotifications] = useState(false);
-    const [showProfile,       setShowProfile]       = useState(false);
-    const [searchValue,       setSearchValue]       = useState('');
-    const [searchFocus,       setSearchFocus]       = useState(false);
+    const [showProfile, setShowProfile] = useState(false);
+    const [searchValue, setSearchValue] = useState('');
+    const [searchFocus, setSearchFocus] = useState(false);
 
-    const unreadCount = mockNotifications.filter(n => n.unread).length;
+    const unreadCount = notifications.filter(n => n.unread).length;
 
     const closeAll = useCallback(() => {
         setShowNotifications(false);

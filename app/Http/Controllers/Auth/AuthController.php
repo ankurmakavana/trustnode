@@ -50,7 +50,7 @@ final class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         /** @var User|null $user */
-        $user = $request->user();
+        $user = auth('sanctum')->user() ?? $request->user();
 
         if (! $user) {
             return response()->json(['authenticated' => false]);

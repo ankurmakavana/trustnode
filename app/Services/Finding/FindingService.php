@@ -15,7 +15,7 @@ class FindingService
 {
     public function list(array $filters = []): LengthAwarePaginator
     {
-        $query = Finding::query()->with(['asset', 'target', 'scan', 'analyst', 'creator']);
+        $query = Finding::query()->with(['asset', 'target', 'scan', 'analyst', 'creator', 'updater']);
 
         if (! empty($filters['search'])) {
             $search = $filters['search'];

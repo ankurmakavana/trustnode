@@ -21,10 +21,12 @@ class FindingResource extends JsonResource
             'category' => $this->category,
             'cwe' => $this->cwe,
             'description' => $this->description,
-            'technical_details' => $this->technical_details,
+            'technical_details' => $this->maskSecrets($this->technical_details, $this->category, $this->title),
             'business_impact' => $this->business_impact,
             'remediation' => $this->remediation,
-            'evidence' => $this->evidence,
+            'evidence' => $this->maskSecrets($this->evidence, $this->category, $this->title),
+            'url' => $this->url,
+            'scanner' => $this->scanner,
 
             // Relationships
             'asset' => $this->asset_id ? [
@@ -62,5 +64,19 @@ class FindingResource extends JsonResource
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+    private function maskSecrets(?string $content, ?string $category, ?string $title): ?string
+    {
+        if (empty($content)) {
+            return $content;
+        }
+
+        if (stripos($category ?? '', 'secret') !== false || stripos($title ?? '', 'secret') !== false || stripos($title ?? '', 'token') !== false) {
+            return '******** [REDACTED IN API RESPONSE] ********';
+        }
+
+        $pattern = '/((?:api_key|apikey|token|secret|password|passwd|key|auth)(?:\s*[:=]\s*[\'"]?))([^\'"\s]+)([\'"]?)/i';
+        return preg_replace($pattern, '$1********$3', $content);
     }
 }

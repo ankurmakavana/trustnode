@@ -34,6 +34,8 @@ class Repository extends Model
     {
         parent::boot();
 
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
+
         static::creating(function (Repository $repository) {
             if (empty($repository->uuid)) {
                 $repository->uuid = (string) Str::uuid();
@@ -54,5 +56,10 @@ class Repository extends Model
     public function scans(): HasMany
     {
         return $this->hasMany(Scan::class);
+    }
+
+    public function latestScan()
+    {
+        return $this->hasOne(Scan::class)->latestOfMany();
     }
 }

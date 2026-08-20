@@ -2,6 +2,7 @@
 
 namespace App\Services\Repository;
 
+use App\Models\Integration;
 use App\Models\IntegrationCredential;
 use App\Models\Repository;
 use Illuminate\Support\Facades\Crypt;
@@ -28,8 +29,8 @@ class RepositoryService
 
         // 1. Validate repository access first
         $isValid = $this->githubProvider->validateAccess($url, $token);
-        if (!$isValid) {
-            throw new \RuntimeException("Unable to access repository. Please check URL or credentials.");
+        if (! $isValid) {
+            throw new \RuntimeException('Unable to access repository. Please check URL or credentials.');
         }
 
         // 2. Fetch metadata
@@ -41,7 +42,7 @@ class RepositoryService
             // Find existing or create new credential record
             // First we need a dummy integration or save it directly.
             // Since integration table requires integration_id, let's find the github integration.
-            $integration = \App\Models\Integration::firstOrCreate(
+            $integration = Integration::firstOrCreate(
                 ['code' => 'github'],
                 [
                     'name' => 'GitHub Provider',
@@ -82,6 +83,7 @@ class RepositoryService
         // Keep temporary directory inside framework storage/app structure to avoid path traversals
         $path = storage_path("app/tmp_scans/{$uuid}");
         File::ensureDirectoryExists($path);
+
         return $path;
     }
 

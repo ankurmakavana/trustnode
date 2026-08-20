@@ -35,6 +35,7 @@ return Application::configure(basePath: dirname(__DIR__))
             EncryptCookies::class,
             AddQueuedCookiesToResponse::class,
             StartSession::class,
+            \App\Http\Middleware\CheckTokenAbilities::class,
         ]);
 
         $middleware->redirectGuestsTo(function (Request $request) {

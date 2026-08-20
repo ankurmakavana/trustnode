@@ -22,22 +22,62 @@ export default function RepositoriesPage() {
     // Active Scans Status Tracking (for UI updates)
     const [scans, setScans] = useState({});
 
-    const fetchRepositories = async () => {
-        setLoading(true);
-        setError(null);
+    const fetchRepositories = async (silent = false) => {
+        if (!silent) setLoading(true);
+        if (!silent) setError(null);
         try {
             const response = await axios.get('/api/repositories');
-            setRepositories(response.data);
+            const data = response.data;
+            setRepositories(data);
+
+            setScans(prev => {
+                const newScans = { ...prev };
+                data.forEach(repo => {
+                    const scan = repo.latest_scan || repo.latestScan;
+                    if (scan) {
+                        newScans[repo.id] = {
+                            status: scan.status,
+                            progress: scan.progress,
+                            scanId: scan.id,
+                            started_at: scan.started_at,
+                            completed_at: scan.completed_at,
+                            findings_count: scan.findings_count
+                        };
+                    } else {
+                        delete newScans[repo.id];
+                    }
+                });
+                return newScans;
+            });
         } catch (err) {
-            setError('Failed to load connected repositories.');
+            if (!silent) setError('Failed to load connected repositories.');
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
     useEffect(() => {
         fetchRepositories();
     }, []);
+
+    useEffect(() => {
+        let isPolling = false;
+        const pollInterval = setInterval(async () => {
+            const activeRepos = repositories.filter(repo => {
+                const s = scans[repo.id];
+                return s && (s.status === 'queued' || s.status === 'running');
+            });
+            if (activeRepos.length === 0) return;
+            if (isPolling) return;
+            isPolling = true;
+            try {
+                await fetchRepositories(true);
+            } finally {
+                isPolling = false;
+            }
+        }, 3000);
+        return () => clearInterval(pollInterval);
+    }, [repositories, scans]);
 
     const handleValidateAccess = async () => {
         if (!repoUrl) return;
@@ -103,26 +143,7 @@ export default function RepositoriesPage() {
                 }
             }));
             
-            // Poll progress
-            const interval = setInterval(async () => {
-                try {
-                    const scanRes = await axios.get(`/api/scans/${scan.id}`);
-                    const updatedScan = scanRes.data.data;
-                    setScans(prev => ({
-                        ...prev,
-                        [repo.id]: {
-                            status: updatedScan.status,
-                            progress: updatedScan.progress,
-                            scanId: updatedScan.id
-                        }
-                    }));
-                    if (updatedScan.status === 'completed' || updatedScan.status === 'failed') {
-                        clearInterval(interval);
-                    }
-                } catch (err) {
-                    clearInterval(interval);
-                }
-            }, 3000);
+            // We no longer need local polling interval here because the central effect handles it
 
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to trigger scan.');
@@ -226,24 +247,50 @@ export default function RepositoriesPage() {
                                         </td>
                                         <td className="px-5 py-4">
                                             {activeScan ? (
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex flex-col gap-0.5">
                                                     {activeScan.status === 'completed' ? (
-                                                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
-                                                            <CheckCircle2 size={13} /> Completed
-                                                        </span>
+                                                        <>
+                                                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                                                                <CheckCircle2 size={13} /> Completed
+                                                            </span>
+                                                            {activeScan.completed_at && (
+                                                                <span className="text-[10px] text-slate-400">
+                                                                    Last scan: {new Date(activeScan.completed_at).toLocaleString()}
+                                                                </span>
+                                                            )}
+                                                            {activeScan.findings_count !== undefined && activeScan.findings_count > 0 && (
+                                                                <span className="text-[10px] text-brand-600 font-medium">
+                                                                    Findings: {activeScan.findings_count}
+                                                                </span>
+                                                            )}
+                                                        </>
                                                     ) : activeScan.status === 'failed' ? (
-                                                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600">
-                                                            <AlertTriangle size={13} /> Failed
-                                                        </span>
+                                                        <>
+                                                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600">
+                                                                <AlertTriangle size={13} /> Failed
+                                                            </span>
+                                                            {activeScan.completed_at && (
+                                                                <span className="text-[10px] text-slate-400">
+                                                                    Failed on: {new Date(activeScan.completed_at).toLocaleString()}
+                                                                </span>
+                                                            )}
+                                                        </>
                                                     ) : (
-                                                        <span className="inline-flex items-center gap-1.5 text-xs text-brand-600 font-medium">
-                                                            <Loader2 size={13} className="animate-spin" />
-                                                            {activeScan.status === 'queued' ? 'Queued' : `Scanning (${activeScan.progress}%)`}
-                                                        </span>
+                                                        <>
+                                                            <span className="inline-flex items-center gap-1.5 text-xs text-brand-600 font-medium">
+                                                                <Loader2 size={13} className="animate-spin" />
+                                                                {activeScan.status === 'queued' ? 'Queued' : 'Running'}
+                                                            </span>
+                                                            {activeScan.started_at && (
+                                                                <span className="text-[10px] text-slate-400">
+                                                                    Started: {new Date(activeScan.started_at).toLocaleTimeString()}
+                                                                </span>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </div>
                                             ) : (
-                                                <span className="text-xs text-slate-400">Idle</span>
+                                                <span className="text-xs text-slate-400 font-medium">Never scanned</span>
                                             )}
                                         </td>
                                         <td className="px-5 py-4 text-right">

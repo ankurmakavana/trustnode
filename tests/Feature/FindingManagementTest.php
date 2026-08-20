@@ -182,4 +182,50 @@ class FindingManagementTest extends TestCase
 
         $response->assertStatus(403);
     }
+    public function test_can_get_finding_detail()
+    {
+        $finding = Finding::factory()->create([
+            'title' => 'SSO Token Leakage',
+            'severity' => FindingSeverity::MEDIUM,
+            'status' => FindingStatus::OPEN,
+            'category' => 'web_application',
+            'asset_id' => $this->asset->id,
+            'created_by' => $this->admin->id,
+        ]);
+
+        $response = $this->actingAs($this->admin)->getJson("/api/findings/{$finding->id}");
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.title', 'SSO Token Leakage');
+    }
+
+    public function test_getting_nonexistent_finding_returns_404()
+    {
+        $response = $this->actingAs($this->admin)->getJson('/api/findings/999999');
+
+        $response->assertStatus(404);
+    }
+
+    public function test_evidence_and_technical_details_mask_secrets()
+    {
+        $finding = Finding::factory()->create([
+            'title' => 'Secret exposed',
+            'category' => 'secret_leak',
+            'evidence' => 'Here is the password: mysecretpassword123!',
+            'technical_details' => 'Found token="supersecrettoken"',
+            'asset_id' => $this->asset->id,
+            'created_by' => $this->admin->id,
+        ]);
+
+        $response = $this->actingAs($this->admin)->getJson("/api/findings/{$finding->id}");
+
+        $response->assertStatus(200);
+        $evidence = $response->json('data.evidence');
+        $tech = $response->json('data.technical_details');
+
+        $this->assertStringNotContainsString('mysecretpassword123', $evidence);
+        $this->assertStringNotContainsString('supersecrettoken', $tech);
+        $this->assertStringContainsString('REDACTED IN API RESPONSE', $evidence);
+        $this->assertStringContainsString('REDACTED IN API RESPONSE', $tech);
+    }
 }

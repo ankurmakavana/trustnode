@@ -8,7 +8,9 @@ use App\Models\Finding;
 class DuplicateDetectionService
 {
     protected $findingsMap = [];
+
     protected $assetsMap = [];
+
     protected $preloaded = false;
 
     /**
@@ -16,15 +18,15 @@ class DuplicateDetectionService
      */
     public function preload(array $assetIds, array $assetValues = []): void
     {
-        if (!empty($assetIds)) {
+        if (! empty($assetIds)) {
             $findings = Finding::whereIn('asset_id', $assetIds)->get();
             foreach ($findings as $f) {
-                $key = $f->asset_id . '_' . strtolower($f->title);
+                $key = $f->asset_id.'_'.strtolower($f->title);
                 $this->findingsMap[$key] = $f;
             }
         }
 
-        if (!empty($assetValues)) {
+        if (! empty($assetValues)) {
             $assets = Asset::whereIn('value', $assetValues)->get();
             foreach ($assets as $a) {
                 $this->assetsMap[strtolower($a->value)] = $a;
@@ -52,7 +54,7 @@ class DuplicateDetectionService
      */
     public function findDuplicateFinding(string $title, int $assetId): ?Finding
     {
-        $key = $assetId . '_' . strtolower($title);
+        $key = $assetId.'_'.strtolower($title);
         if ($this->preloaded && isset($this->findingsMap[$key])) {
             return $this->findingsMap[$key];
         }

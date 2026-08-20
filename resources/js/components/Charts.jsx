@@ -3,7 +3,6 @@ import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, CartesianGrid,
 } from 'recharts';
-import { mockSeverityData, mockScanActivity } from '../data/mockData';
 import { Card, CardHeader } from './ui/primitives';
 
 /* ── Shared custom tooltip ───────────────────────────────── */
@@ -26,8 +25,8 @@ function ChartTooltip({ active, payload, label }) {
 }
 
 /* ── Severity Donut ──────────────────────────────────────── */
-export function SeverityChart() {
-    const total = mockSeverityData.reduce((s, d) => s + d.count, 0);
+export function SeverityChart({ data = [] }) {
+    const total = data.reduce((s, d) => s + d.count, 0);
 
     return (
         <Card padding={false} className="p-5 flex flex-col gap-4">
@@ -42,7 +41,7 @@ export function SeverityChart() {
                     <ResponsiveContainer width={148} height={148}>
                         <PieChart>
                             <Pie
-                                data={mockSeverityData}
+                                data={data}
                                 cx="50%" cy="50%"
                                 innerRadius={46} outerRadius={68}
                                 dataKey="count"
@@ -50,7 +49,7 @@ export function SeverityChart() {
                                 stroke="#ffffff"
                                 paddingAngle={2}
                             >
-                                {mockSeverityData.map((entry) => (
+                                {data.map((entry) => (
                                     <Cell key={entry.severity} fill={entry.fill} />
                                 ))}
                             </Pie>
@@ -61,7 +60,7 @@ export function SeverityChart() {
 
                 {/* Legend */}
                 <div className="flex flex-col gap-2 flex-1 min-w-0">
-                    {mockSeverityData.map((d) => {
+                    {data.map((d) => {
                         const pct = Math.round((d.count / total) * 100);
                         return (
                             <div key={d.severity} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2">
@@ -80,7 +79,7 @@ export function SeverityChart() {
 
             {/* Total bar */}
             <div className="h-2 rounded-full overflow-hidden flex">
-                {mockSeverityData.map((d) => (
+                {data.map((d) => (
                     <div
                         key={d.severity}
                         title={`${d.severity}: ${Math.round((d.count / total) * 100)}%`}
@@ -97,9 +96,9 @@ export function SeverityChart() {
 }
 
 /* ── Scan Activity ───────────────────────────────────────── */
-export function ScanActivityChart() {
-    const totalScans = mockScanActivity.reduce((s, d) => s + d.completed + d.failed, 0);
-    const totalFailed = mockScanActivity.reduce((s, d) => s + d.failed, 0);
+export function ScanActivityChart({ data = [] }) {
+    const totalScans = data.reduce((s, d) => s + (d.completed || 0) + (d.failed || 0), 0);
+    const totalFailed = data.reduce((s, d) => s + (d.failed || 0), 0);
 
     return (
         <Card padding={false} className="p-5 flex flex-col gap-4">
@@ -120,7 +119,7 @@ export function ScanActivityChart() {
 
             <ResponsiveContainer width="100%" height={176}>
                 <BarChart
-                    data={mockScanActivity}
+                    data={data}
                     barGap={2}
                     barCategoryGap="40%"
                     margin={{ top: 0, right: 0, left: -20, bottom: 0 }}

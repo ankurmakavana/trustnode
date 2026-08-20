@@ -1,6 +1,5 @@
 import React from 'react';
 import { ScanLine, Server, FileText, ShieldAlert } from 'lucide-react';
-import { mockRecentActivity } from '../data/mockData';
 import { Card, CardHeader, ViewAllLink, MonoChip } from './ui/primitives';
 
 const typeConfig = {
@@ -41,7 +40,7 @@ function ActivityRow({ item }) {
     );
 }
 
-export default function ActivityTable() {
+export default function ActivityTable({ data = [] }) {
     return (
         <Card padding={false}>
             <div className="px-5 py-4 border-b border-slate-100">
@@ -56,8 +55,8 @@ export default function ActivityTable() {
                 role="list"
                 aria-label="Recent activity"
             >
-                {mockRecentActivity.map((item) => (
-                    <div key={item.id} role="listitem">
+                {data.map((item) => (
+                    <div key={item.id || Math.random()} role="listitem">
                         <ActivityRow item={item} />
                     </div>
                 ))}

@@ -3,18 +3,14 @@
 namespace App\Http\Controllers\Import;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\ValidateImportJob;
 use App\Models\ImportHistory;
 use App\Models\ImportJob;
 use App\Models\Integration;
-use App\Models\IntegrationJob;
 use App\Services\Import\ImportService;
 use App\Services\Import\PreviewService;
 use App\Services\Import\ValidationService;
 use Exception;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class ImportController extends Controller
 {
@@ -147,74 +143,10 @@ class ImportController extends Controller
      */
     public function triggerConnectionImport(Integration $integration, Request $request)
     {
-        $connection = $integration;
-
-        try {
-            // Mock fetching file from API/Scanner and create job
-            // For testing, write a dummy file structure simulating Nessus or Nmap response
-            $scanner = $connection->code; // e.g. nmap, nessus
-
-            // Create simulated content
-            $content = json_encode([
-                'assets' => [
-                    ['name' => 'API Host 1', 'type' => 'Host', 'value' => '10.0.5.10'],
-                    ['name' => 'API Host 2', 'type' => 'Host', 'value' => '10.0.5.11'],
-                ],
-                'findings' => [
-                    ['title' => 'API Vulnerability critical', 'severity' => 'critical', 'category' => 'Host', 'asset_value' => '10.0.5.10', 'description' => 'Discovered via API Integration'],
-                    ['title' => 'API Vulnerability high', 'severity' => 'high', 'category' => 'Host', 'asset_value' => '10.0.5.11', 'description' => 'Discovered via API Integration'],
-                ],
-            ]);
-
-            $filename = "api_sync_{$scanner}_".time().'.json';
-            $filepath = 'imports/'.(string) Str::uuid().'.json';
-            Storage::put($filepath, $content);
-
-            $job = ImportJob::create([
-                'integration_id' => $connection->id,
-                'status' => 'pending',
-                'progress' => 0,
-                'source_type' => 'scanner',
-                'created_by' => auth()->id() ?? 1,
-            ]);
-
-            // Legacy IntegrationJob for backward compatibility
-            $recordsCount = $request->input('records_count', 12);
-            IntegrationJob::create([
-                'integration_id' => $connection->id,
-                'status' => 'Completed',
-                'duration' => 10,
-                'imported_records' => $recordsCount,
-                'started_at' => now(),
-                'finished_at' => now(),
-            ]);
-
-            $job->file()->create([
-                'uuid' => (string) Str::uuid(),
-                'filename' => $filename,
-                'filepath' => $filepath,
-                'filesize' => strlen($content),
-                'mime_type' => 'application/json',
-            ]);
-
-            $job->logs()->create([
-                'level' => 'info',
-                'message' => "Triggered automated scanner import from connection: {$connection->name}.",
-            ]);
-
-            ValidateImportJob::dispatch($job, $scanner);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Scanner connection sync job started successfully.',
-                'data' => $job,
-            ], 200);
-        } catch (Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to trigger scanner import: '.$e->getMessage(),
-            ], 500);
-        }
+        return response()->json([
+            'success' => false,
+            'message' => 'Integration API sync is not yet implemented for real external scanners in this version. Please use file import.',
+        ], 501);
     }
 
     /**

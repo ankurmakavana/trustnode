@@ -105,7 +105,7 @@ class ScanManagementTest extends TestCase
     {
         $scan = Scan::create([
             'name' => 'Weekly Endpoint Check',
-            'type' => ScanType::API_VULNERABILITY,
+            'type' => ScanType::NETWORK_IP,
             'engine' => ScanEngine::NUCLEI,
             'target' => 'api.internal',
             'status' => ScanStatus::QUEUED,
@@ -115,7 +115,7 @@ class ScanManagementTest extends TestCase
 
         $payload = [
             'name' => 'Weekly Endpoint Check Updated',
-            'type' => 'api_vulnerability',
+            'type' => 'network_ip',
             'engine' => 'nuclei',
             'target' => 'api.internal',
             'status' => 'running',
@@ -141,7 +141,7 @@ class ScanManagementTest extends TestCase
     {
         $payload = [
             'name' => 'Denied Scanner Exec',
-            'type' => 'port_discovery',
+            'type' => 'network_ip',
             'engine' => 'nmap',
             'target' => '192.168.1.1',
         ];

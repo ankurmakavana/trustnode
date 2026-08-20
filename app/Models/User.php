@@ -12,9 +12,11 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 
+use Laravel\Sanctum\HasApiTokens;
+
 class User extends Authenticatable
 {
-    use HasFactory, HasPermissions, Notifiable, SoftDeletes;
+    use HasApiTokens, HasFactory, HasPermissions, Notifiable, SoftDeletes;
 
     protected $fillable = [
         'uuid',
@@ -28,6 +30,7 @@ class User extends Authenticatable
         'last_login_ip',
         'timezone',
         'locale',
+        'preferences',
     ];
 
     protected $hidden = [
@@ -52,7 +55,20 @@ class User extends Authenticatable
             'password_changed_at' => 'datetime',
             'last_login_at' => 'datetime',
             'status' => UserStatus::class,
+            'preferences' => 'array',
         ];
+    }
+
+    /**
+     * Get a specific preference value with fallback to default.
+     */
+    public function getPreference(string $key, $default = true)
+    {
+        if (!is_array($this->preferences)) {
+            return $default;
+        }
+
+        return $this->preferences[$key] ?? $default;
     }
 
     /**
@@ -69,5 +85,13 @@ class User extends Authenticatable
     public function sentInvitations(): HasMany
     {
         return $this->hasMany(UserInvitation::class, 'invited_by');
+    }
+
+    /**
+     * Get the entity's notifications.
+     */
+    public function notifications()
+    {
+        return $this->morphMany(\App\Models\Notification::class, 'notifiable')->latest();
     }
 }

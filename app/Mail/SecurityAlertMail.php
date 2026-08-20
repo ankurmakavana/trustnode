@@ -11,9 +11,13 @@ class SecurityAlertMail extends Mailable
     use Queueable, SerializesModels;
 
     public string $repoName;
+
     public string $branch;
+
     public array $counts;
+
     public string $reportUuid;
+
     public string $scanUuid;
 
     public function __construct(string $repoName, string $branch, array $counts, string $reportUuid, string $scanUuid)
@@ -28,6 +32,6 @@ class SecurityAlertMail extends Mailable
     public function build()
     {
         return $this->subject("TrustNode Security Alert — Vulnerabilities Found in {$this->repoName}")
-                    ->view('emails.security_alert');
+            ->view('emails.security_alert');
     }
 }

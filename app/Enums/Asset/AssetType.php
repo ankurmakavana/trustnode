@@ -12,6 +12,7 @@ enum AssetType: string
     case URL = 'url';
     case API_ENDPOINT = 'api_endpoint';
     case HOSTNAME = 'hostname';
+    case CODE_REPOSITORY = 'code_repository';
 
     /**
      * Get all values.

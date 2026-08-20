@@ -1,23 +1,19 @@
 import React from 'react';
 
+export const SEVERITY_COLORS = {
+    critical: { bg: 'bg-rose-600', text: 'text-rose-600', fill: '#e11d48' },
+    high:     { bg: 'bg-orange-500', text: 'text-orange-500', fill: '#f97316' },
+    medium:   { bg: 'bg-amber-400', text: 'text-amber-500', fill: '#fbbf24' },
+    low:      { bg: 'bg-blue-400', text: 'text-blue-500', fill: '#60a5fa' },
+    info:     { bg: 'bg-slate-300', text: 'text-slate-400', fill: '#cbd5e1' }
+};
+
 export function SeverityBadge({ severity }) {
     const s = (severity || '').toLowerCase();
-    let classes = 'bg-slate-50 text-slate-700 border-slate-200';
+    const colors = SEVERITY_COLORS[s] || SEVERITY_COLORS.info;
     
-    if (s === 'critical') {
-        classes = 'bg-rose-50 text-rose-800 border-rose-200 font-bold';
-    } else if (s === 'high') {
-        classes = 'bg-orange-50 text-orange-850 border-orange-200 font-semibold';
-    } else if (s === 'medium') {
-        classes = 'bg-amber-55 text-amber-850 border-amber-200';
-    } else if (s === 'low') {
-        classes = 'bg-sky-50 text-sky-850 border-sky-200';
-    } else if (s === 'info') {
-        classes = 'bg-blue-50 text-blue-750 border-blue-200';
-    }
-
     return (
-        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase font-mono tracking-wider border ${classes}`}>
+        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${colors.bg} text-white`}>
             {s}
         </span>
     );

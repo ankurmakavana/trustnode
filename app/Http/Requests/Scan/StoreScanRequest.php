@@ -26,7 +26,11 @@ class StoreScanRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'type' => ['required', new Enum(ScanType::class)],
+            'type' => ['required', new Enum(ScanType::class), function ($attribute, $value, $fail) {
+                if (!in_array($value, [ScanType::REPOSITORY->value, ScanType::NETWORK_IP->value, ScanType::DATABASE->value])) {
+                    $fail('Only Repository, Network IP, and Database scanning are supported in this release.');
+                }
+            }],
             'engine' => ['required', new Enum(ScanEngine::class)],
             'target' => ['required', 'string', 'max:255'],
             'schedule' => ['nullable', 'string', 'max:255'],
@@ -35,6 +39,13 @@ class StoreScanRequest extends FormRequest
             'started_at' => ['nullable', 'date'],
             'completed_at' => ['nullable', 'date'],
             'duration' => ['nullable', 'integer', 'min:0'],
+            'credentials' => ['nullable', 'array'],
+            'credentials.driver' => ['required_with:credentials', 'string'],
+            'credentials.host' => ['required_with:credentials', 'string'],
+            'credentials.port' => ['nullable', 'integer'],
+            'credentials.database' => ['nullable', 'string'],
+            'credentials.username' => ['required_with:credentials', 'string'],
+            'credentials.password' => ['nullable', 'string'],
         ];
     }
 }

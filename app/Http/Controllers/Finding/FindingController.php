@@ -43,6 +43,8 @@ class FindingController extends Controller
     public function show(Finding $finding): FindingResource
     {
         $this->authorize('view', $finding);
+        
+        $finding->load(['asset', 'target', 'scan', 'analyst', 'creator', 'updater']);
 
         return new FindingResource($finding);
     }
