@@ -27,7 +27,7 @@ class TrustNodeClient
         }
 
         // Enforce HTTPS unless explicitly local
-        if (!str_starts_with($url, 'https://') && !str_contains($url, 'localhost') && !str_contains($url, '127.0.0.1') && !str_contains($url, 'host.docker.internal')) {
+        if (!str_starts_with($url, 'https://') && !str_contains($url, 'localhost') && !str_contains($url, '127.0.0.1') && !str_contains($url, 'host.docker.internal') && !str_contains($url, 'nginx')) {
             throw new \RuntimeException('Insecure HTTP connection is not permitted for remote servers. Use HTTPS.');
         }
 

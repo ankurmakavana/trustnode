@@ -23,6 +23,16 @@ use Illuminate\Support\Facades\Route;
 // Public auth-status check — always 200, never 401
 Route::get('/auth/me', [AuthController::class, 'me']);
 
+Route::get('/system/status', function () {
+    return response()->json([
+        'version' => config('app.version', '1.0.0'),
+        'application' => 'Healthy',
+        'database' => \Illuminate\Support\Facades\DB::connection()->getPdo() ? 'Connected' : 'Error',
+        'queue' => 'Available',
+        'license' => \App\Facades\LicenseGate::status()['status'] ?? 'Community'
+    ]);
+});
+
 Route::middleware('guest')->group(function (): void {
     Route::post('/login', [AuthController::class, 'login'])
         ->middleware('throttle:5,1');

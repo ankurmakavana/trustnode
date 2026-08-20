@@ -6,15 +6,18 @@ require __DIR__ . '/../vendor/autoload.php';
 use Symfony\Component\Console\Application;
 use TrustNode\Cli\Config\ConfigManager;
 use TrustNode\Cli\Http\TrustNodeClient;
+use TrustNode\Cli\Commands\ScanCommand;
+use TrustNode\Cli\Commands\StatusCommand;
+use TrustNode\Cli\Commands\RepositoriesCommand;
+use TrustNode\Cli\Commands\FindingsCommand;
+use TrustNode\Cli\Commands\ReportCommand;
+use TrustNode\Cli\Commands\ComplianceCommand;
+use TrustNode\Cli\Commands\FixCommand;
+use TrustNode\Cli\Commands\ActivateCommand;
+// Keep existing auth commands just in case
 use TrustNode\Cli\Commands\LoginCommand;
 use TrustNode\Cli\Commands\LogoutCommand;
 use TrustNode\Cli\Commands\WhoamiCommand;
-use TrustNode\Cli\Commands\ScanListCommand;
-use TrustNode\Cli\Commands\ScanStartCommand;
-use TrustNode\Cli\Commands\ScanStatusCommand;
-use TrustNode\Cli\Commands\FindingsListCommand;
-use TrustNode\Cli\Commands\ReportStatusCommand;
-use TrustNode\Cli\Commands\ReportDownloadCommand;
 
 $application = new Application('TrustNode CLI', '1.0.0');
 
@@ -22,14 +25,18 @@ $configManager = new ConfigManager();
 $client = new TrustNodeClient($configManager);
 
 // Register commands
+$application->add(new ScanCommand($client));
+$application->add(new StatusCommand($client));
+$application->add(new RepositoriesCommand($client));
+$application->add(new FindingsCommand($client));
+$application->add(new ReportCommand($client));
+$application->add(new ComplianceCommand());
+$application->add(new FixCommand($client));
+$application->add(new ActivateCommand($client));
+
+// Auth commands
 $application->add(new LoginCommand($client, $configManager));
 $application->add(new LogoutCommand($client, $configManager));
 $application->add(new WhoamiCommand($client));
-$application->add(new ScanListCommand($client));
-$application->add(new ScanStartCommand($client));
-$application->add(new ScanStatusCommand($client));
-$application->add(new FindingsListCommand($client));
-$application->add(new ReportStatusCommand($client));
-$application->add(new ReportDownloadCommand($client));
 
 $application->run();
