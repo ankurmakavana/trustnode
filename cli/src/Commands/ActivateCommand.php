@@ -26,7 +26,7 @@ class ActivateCommand extends Command
         $key = $input->getArgument('license_key');
         
         try {
-            $data = $this->client->post('api/licenses/activate', [
+            $data = $this->client->post('api/license/activate', [
                 'license_key' => $key
             ]);
             

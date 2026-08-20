@@ -129,4 +129,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // User Preferences
     Route::get('/users/preferences', [UserPreferenceController::class, 'index']);
     Route::put('/users/preferences', [UserPreferenceController::class, 'update']);
+
+    // License Activation
+    Route::post('/license/activate', function (\Illuminate\Http\Request $request) {
+        $validated = $request->validate(['license_key' => 'required|string']);
+        $result = \App\Facades\LicenseGate::activate($validated['license_key']);
+        
+        if ($result['success']) {
+            return response()->json($result);
+        }
+        return response()->json($result, 400);
+    });
 });

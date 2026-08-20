@@ -8,7 +8,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use TrustNode\Cli\Http\TrustNodeClient;
 
-#[\Symfony\Component\Console\Attribute\AsCommand(name: 'fix', description: 'Remediate a finding')]
+#[\Symfony\Component\Console\Attribute\AsCommand(name: 'fix', description: '(Not Available Yet) Remediate a finding')]
 class FixCommand extends Command
 {
     public function __construct(private TrustNodeClient $client)
@@ -27,6 +27,6 @@ class FixCommand extends Command
         $output->writeln("Inspecting finding ID: $findingId...");
         
         $output->writeln("<comment>Automated remediation is not yet available.</comment>");
-        return Command::SUCCESS;
+        return Command::FAILURE;
     }
 }

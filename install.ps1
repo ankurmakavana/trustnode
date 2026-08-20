@@ -71,7 +71,10 @@ Start-Sleep -Seconds 15
 # 6 & 9 & 10. Generate secrets, initialize database, run migrations
 Write-Host "`n[*] Initializing application..."
 docker compose -f compose.dev.yaml exec -T php composer install --no-interaction --prefer-dist
-docker compose -f compose.dev.yaml exec -T php php artisan key:generate --force
+$envContent = Get-Content ".env" -Raw
+if ($envContent -notmatch "APP_KEY=base64:") {
+    docker compose -f compose.dev.yaml exec -T php php artisan key:generate --force
+}
 docker compose -f compose.dev.yaml exec -T php php artisan migrate --force
 
 Write-Host "`n[*] Configuring CLI authentication..."
@@ -82,24 +85,26 @@ require __DIR__ . '/vendor/autoload.php';
 `$kernel = `$app->make(Illuminate\Contracts\Console\Kernel::class);
 `$kernel->bootstrap();
 `$user = \App\Models\User::firstOrCreate(['email'=>'cli@trustnode.local'], ['name'=>'CLI System', 'password'=>bcrypt('secret'), 'role_id'=>1]);
+`$user->tokens()->where('name', 'CLI Token')->delete();
 echo `$user->createToken('CLI Token')->plainTextToken;
 "@
 Set-Content -Path "cli-token.php" -Value $cliTokenContent
 $cliTokenRaw = docker compose -f compose.dev.yaml exec -T php php cli-token.php
+if ([string]::IsNullOrWhiteSpace($cliTokenRaw)) {
+    Write-Host "ERROR: Failed to generate CLI token. Is the PHP container running?" -ForegroundColor Red
+    exit 1
+}
 $cliToken = $cliTokenRaw.Trim()
 Remove-Item "cli-token.php" -Force -ErrorAction SilentlyContinue
 
-$trustnodeConfigDir = "$env:USERPROFILE\.trustnode"
-if (-not (Test-Path $trustnodeConfigDir)) {
-    New-Item -ItemType Directory -Force -Path $trustnodeConfigDir | Out-Null
+# Save token to .env securely
+$envContent = Get-Content ".env" -Raw
+if ($envContent -notmatch "TRUSTNODE_API_TOKEN") {
+    Add-Content -Path ".env" -Value "`nTRUSTNODE_API_TOKEN=$cliToken"
+} else {
+    $envContent = $envContent -replace 'TRUSTNODE_API_TOKEN=.*', "TRUSTNODE_API_TOKEN=$cliToken"
+    Set-Content -Path ".env" -Value $envContent
 }
-$configJson = @"
-{
-    "server": "http://nginx",
-    "token": "$cliToken"
-}
-"@
-Set-Content -Path "$trustnodeConfigDir\config" -Value $configJson
 
 # 11. Build frontend assets
 Write-Host "`n[*] Building frontend assets..."
@@ -110,7 +115,7 @@ docker compose -f compose.dev.yaml exec -T node npm run build
 Write-Host "`n[*] Installing TrustNode CLI..."
 # We will create a wrapper script for the CLI in a folder added to PATH, or just the installDir
 $cliWrapperPath = "$installDir\trustnode.cmd"
-$cliWrapperContent = "@echo off`r`ndocker compose -f ""$installDir\compose.dev.yaml"" exec -e TRUSTNODE_API_URL=http://nginx -e TRUSTNODE_API_TOKEN=""$cliToken"" php php cli/bin/trustnode %*"
+$cliWrapperContent = "@echo off`r`ndocker compose -f ""$installDir\compose.dev.yaml"" exec -e TRUSTNODE_API_URL=http://nginx php php cli/bin/trustnode %*"
 Set-Content -Path $cliWrapperPath -Value $cliWrapperContent
 
 $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
@@ -123,7 +128,7 @@ if ($userPath -notlike "*$installDir*") {
 
 # 13. Verify installation
 Write-Host "`n[*] Verifying installation..."
-$statusCheck = docker compose -f compose.dev.yaml exec -T -e TRUSTNODE_API_URL=http://nginx -e TRUSTNODE_API_TOKEN="$cliToken" php php cli/bin/trustnode status 2>&1
+$statusCheck = docker compose -f compose.dev.yaml exec -T -e TRUSTNODE_API_URL=http://nginx php php cli/bin/trustnode status 2>&1
 Write-Host $statusCheck
 
 # 14. Final success

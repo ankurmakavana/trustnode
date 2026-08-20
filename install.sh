@@ -63,7 +63,9 @@ sleep 15
 # 6 & 9 & 10. Initialize database and migrations
 echo -e "\n[*] Initializing application..."
 docker compose -f compose.dev.yaml exec -T php composer install --no-interaction --prefer-dist
-docker compose -f compose.dev.yaml exec -T php php artisan key:generate --force
+if ! grep -q "APP_KEY=base64:" .env; then
+    docker compose -f compose.dev.yaml exec -T php php artisan key:generate --force
+fi
 docker compose -f compose.dev.yaml exec -T php php artisan migrate --force
 
 echo -e "\n[*] Configuring CLI authentication..."
@@ -74,18 +76,24 @@ $app = require_once __DIR__ . '/bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 $user = \App\Models\User::firstOrCreate(['email'=>'cli@trustnode.local'], ['name'=>'CLI System', 'password'=>bcrypt('secret'), 'role_id'=>1]);
+$user->tokens()->where('name', 'CLI Token')->delete();
 echo $user->createToken('CLI Token')->plainTextToken;
 EOF
 CLI_TOKEN=$(docker compose -f compose.dev.yaml exec -T php php cli-token.php | tr -d '\r\n')
 rm cli-token.php
 
-mkdir -p "$HOME/.trustnode"
-cat > "$HOME/.trustnode/config" << EOF
-{
-    "server": "http://nginx",
-    "token": "$CLI_TOKEN"
-}
-EOF
+if [ -z "$CLI_TOKEN" ]; then
+    echo "ERROR: Failed to generate CLI token. Is the PHP container running?" >&2
+    exit 1
+fi
+
+# Save token to .env securely
+if grep -q "TRUSTNODE_API_TOKEN" .env; then
+    sed -i.bak "s/^TRUSTNODE_API_TOKEN=.*/TRUSTNODE_API_TOKEN=$CLI_TOKEN/" .env
+    rm -f .env.bak
+else
+    echo -e "\nTRUSTNODE_API_TOKEN=$CLI_TOKEN" >> .env
+fi
 
 # 11. Build frontend assets
 echo -e "\n[*] Building frontend assets..."
@@ -99,7 +107,7 @@ CLI_WRAPPER="$HOME/.local/bin/trustnode"
 
 cat > "$CLI_WRAPPER" << EOF
 #!/bin/bash
-exec docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec -T -e TRUSTNODE_API_URL=http://nginx -e TRUSTNODE_API_TOKEN="$CLI_TOKEN" php php cli/bin/trustnode "\$@"
+exec docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec -T -e TRUSTNODE_API_URL=http://nginx php php cli/bin/trustnode "\$@"
 EOF
 chmod +x "$CLI_WRAPPER"
 
