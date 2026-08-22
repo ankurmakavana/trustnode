@@ -5,6 +5,13 @@ Write-Host "==============================================="
 Write-Host " TrustNode One-Command Installer (Windows) "
 Write-Host "==============================================="
 
+$LICENSE_KEY = Read-Host -Prompt "Enter your TrustNode License Key"
+
+if ([string]::IsNullOrWhiteSpace($LICENSE_KEY)) {
+    Write-Host "ERROR: License Key is required for installation." -ForegroundColor Red
+    exit 1
+}
+
 # 1. Detect OS & Permissions
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "WARNING: You are not running as Administrator. Some actions (like modifying PATH) might fail." -ForegroundColor Yellow
@@ -32,32 +39,74 @@ try {
 # 3 & 4. Installation Directory
 $installDir = "$env:USERPROFILE\trustnode-app"
 Write-Host "`n[*] Setting up installation directory at $installDir"
-if (Test-Path $installDir) {
-    Write-Host "Directory already exists. Updating existing installation..." -ForegroundColor Yellow
-    Set-Location $installDir
-    if (Test-Path ".git") {
-        # For testing, we just use the current branch if it's already a git repo
-        # In production, we would git pull or download a release zip
-        git pull --quiet
-    }
-} else {
-    # In production: Download release artifact
-    $repoUrl = "https://github.com/ankurmakavana/trustnode.git"
-    # Note: If it's a private repo, public installer needs to download a public release zip.
-    # The prompt says: "If the official public installer URL does not exist yet... identify the one configuration value that must be replaced for public release."
-    # We will use git clone for this implementation, noting it should be changed.
-    Write-Host "Downloading TrustNode from $repoUrl ..."
-    git clone --quiet $repoUrl $installDir
-    Set-Location $installDir
+if (-not (Test-Path $installDir)) {
+    New-Item -ItemType Directory -Path $installDir | Out-Null
 }
+Set-Location $installDir
+
+Write-Host "`n[*] Authenticating installation..."
+$machineId = (New-Guid).ToString()
+$hostname = [System.Net.Dns]::GetHostName()
+
+$activationData = @{
+    license_key = $LICENSE_KEY
+    installation_id = $machineId
+    installation_fingerprint = $machineId
+    installation_name = "Windows Installation"
+    hostname = $hostname
+}
+
+$PLATFORM_URL = "https://trustnode.in"
+
+try {
+    $activationResponse = Invoke-RestMethod -Uri "$PLATFORM_URL/api/v1/licenses/activate" -Method Post -Body ($activationData | ConvertTo-Json) -ContentType "application/json"
+} catch {
+    Write-Host "ERROR: Failed to activate license. Check your license key or contact support." -ForegroundColor Red
+    Write-Host $_.Exception.Message -ForegroundColor Red
+    exit 1
+}
+
+$token = $activationResponse.data.installation_token
+
+Write-Host "`n[*] Fetching latest release..."
+try {
+    $releaseResponse = Invoke-RestMethod -Uri "$PLATFORM_URL/api/v1/releases/latest" -Method Get -Headers @{ "Authorization" = "Bearer $token" }
+} catch {
+    Write-Host "ERROR: Failed to fetch latest release metadata." -ForegroundColor Red
+    Write-Host $_.Exception.Message -ForegroundColor Red
+    exit 1
+}
+
+$downloadUrl = $releaseResponse.download_url
+$tempZip = "$env:TEMP\trustnode-release.zip"
+
+Write-Host "`n[*] Downloading TrustNode release artifact..."
+Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip
+
+Write-Host "`n[*] Extracting artifact..."
+Expand-Archive -Path $tempZip -DestinationPath $installDir -Force
+Remove-Item -Path $tempZip -Force
 
 # 5. Environment configuration
 Write-Host "`n[*] Configuring environment..."
 if (-not (Test-Path ".env")) {
-    Copy-Item ".env.example" ".env"
+    if (Test-Path ".env.example") {
+        Copy-Item ".env.example" ".env"
+    } else {
+        New-Item -ItemType File -Path ".env" | Out-Null
+    }
     Write-Host "Created .env file."
 } else {
     Write-Host "Using existing .env file."
+}
+
+# Save token to .env securely
+$envContent = Get-Content ".env" -Raw
+if ($envContent -notmatch "TRUSTNODE_INSTALLATION_TOKEN") {
+    Add-Content -Path ".env" -Value "`nTRUSTNODE_INSTALLATION_TOKEN=$token"
+} else {
+    $envContent = $envContent -replace 'TRUSTNODE_INSTALLATION_TOKEN=.*', "TRUSTNODE_INSTALLATION_TOKEN=$token"
+    Set-Content -Path ".env" -Value $envContent
 }
 
 # 7. Start Docker services
@@ -97,7 +146,7 @@ if ([string]::IsNullOrWhiteSpace($cliTokenRaw)) {
 $cliToken = $cliTokenRaw.Trim()
 Remove-Item "cli-token.php" -Force -ErrorAction SilentlyContinue
 
-# Save token to .env securely
+# Save CLI token to .env securely
 $envContent = Get-Content ".env" -Raw
 if ($envContent -notmatch "TRUSTNODE_API_TOKEN") {
     Add-Content -Path ".env" -Value "`nTRUSTNODE_API_TOKEN=$cliToken"

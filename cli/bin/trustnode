@@ -14,6 +14,7 @@ use TrustNode\Cli\Commands\ReportCommand;
 use TrustNode\Cli\Commands\ComplianceCommand;
 use TrustNode\Cli\Commands\FixCommand;
 use TrustNode\Cli\Commands\ActivateCommand;
+use TrustNode\Cli\Commands\UpdateCommand;
 // Keep existing auth commands just in case
 use TrustNode\Cli\Commands\LoginCommand;
 use TrustNode\Cli\Commands\LogoutCommand;
@@ -33,6 +34,7 @@ $application->add(new ReportCommand($client));
 $application->add(new ComplianceCommand());
 $application->add(new FixCommand($client));
 $application->add(new ActivateCommand($client));
+$application->add(new UpdateCommand());
 
 // Auth commands
 $application->add(new LoginCommand($client, $configManager));

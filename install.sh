@@ -5,6 +5,12 @@ echo "==============================================="
 echo " TrustNode One-Command Installer (macOS/Linux) "
 echo "==============================================="
 
+read -p "Enter your TrustNode License Key: " LICENSE_KEY
+if [ -z "$LICENSE_KEY" ]; then
+    echo "ERROR: License Key is required for installation." >&2
+    exit 1
+fi
+
 # 1. Detect OS
 OS="$(uname -s)"
 echo -e "\n[*] Detected OS: $OS"
@@ -24,32 +30,94 @@ if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/
     exit 1
 fi
 
+if ! command -v jq &> /dev/null; then
+    echo "ERROR: jq is required to parse API responses. Please install jq and run again." >&2
+    exit 1
+fi
+
+if ! command -v unzip &> /dev/null; then
+    echo "ERROR: unzip is required to extract artifacts. Please install unzip and run again." >&2
+    exit 1
+fi
+
 # 3 & 4. Installation Directory
 INSTALL_DIR="$HOME/.trustnode"
 echo -e "\n[*] Setting up installation directory at $INSTALL_DIR"
 
-if [ -d "$INSTALL_DIR" ]; then
-    echo "Directory already exists. Updating existing installation..."
-    cd "$INSTALL_DIR"
-    if [ -d ".git" ]; then
-        git pull --quiet
-    fi
-else
-    # In production: Download release artifact
-    # For testing: clone repo. Must change for public release.
-    REPO_URL="https://github.com/ankurmakavana/trustnode.git"
-    echo "Downloading TrustNode from $REPO_URL ..."
-    git clone --quiet "$REPO_URL" "$INSTALL_DIR"
-    cd "$INSTALL_DIR"
+if [ ! -d "$INSTALL_DIR" ]; then
+    mkdir -p "$INSTALL_DIR"
 fi
+cd "$INSTALL_DIR"
+
+echo -e "\n[*] Authenticating installation..."
+MACHINE_ID=$(uuidgen 2>/dev/null || echo $RANDOM-$RANDOM-$RANDOM)
+HOSTNAME=$(hostname)
+PLATFORM_URL="https://trustnode.in"
+
+ACTIVATION_PAYLOAD=$(cat <<EOF
+{
+  "license_key": "$LICENSE_KEY",
+  "installation_id": "$MACHINE_ID",
+  "installation_fingerprint": "$MACHINE_ID",
+  "installation_name": "Linux/macOS Installation",
+  "hostname": "$HOSTNAME"
+}
+EOF
+)
+
+ACTIVATION_RESPONSE=$(curl -s -X POST "$PLATFORM_URL/api/v1/licenses/activate" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d "$ACTIVATION_PAYLOAD")
+
+if ! echo "$ACTIVATION_RESPONSE" | jq -e '.success' > /dev/null; then
+    echo "ERROR: Failed to activate license." >&2
+    echo "$ACTIVATION_RESPONSE" | jq -r '.error.message' >&2
+    exit 1
+fi
+
+INSTALLATION_TOKEN=$(echo "$ACTIVATION_RESPONSE" | jq -r '.data.installation_token')
+
+echo -e "\n[*] Fetching latest release..."
+RELEASE_RESPONSE=$(curl -s -X GET "$PLATFORM_URL/api/v1/releases/latest" \
+  -H "Authorization: Bearer $INSTALLATION_TOKEN" \
+  -H "Accept: application/json")
+
+if ! echo "$RELEASE_RESPONSE" | jq -e '.download_url' > /dev/null; then
+    echo "ERROR: Failed to fetch latest release metadata." >&2
+    echo "$RELEASE_RESPONSE" | jq -r '.error.message // empty' >&2
+    exit 1
+fi
+
+DOWNLOAD_URL=$(echo "$RELEASE_RESPONSE" | jq -r '.download_url')
+TEMP_ZIP=$(mktemp)
+
+echo -e "\n[*] Downloading TrustNode release artifact..."
+curl -sL -o "$TEMP_ZIP" "$DOWNLOAD_URL"
+
+echo -e "\n[*] Extracting artifact..."
+unzip -q -o "$TEMP_ZIP" -d "$INSTALL_DIR"
+rm -f "$TEMP_ZIP"
 
 # 5. Environment configuration
 echo -e "\n[*] Configuring environment..."
 if [ ! -f ".env" ]; then
-    cp .env.example .env
+    if [ -f ".env.example" ]; then
+        cp .env.example .env
+    else
+        touch .env
+    fi
     echo "Created .env file."
 else
     echo "Using existing .env file."
+fi
+
+# Save token to .env securely
+if grep -q "TRUSTNODE_INSTALLATION_TOKEN" .env; then
+    sed -i.bak "s/^TRUSTNODE_INSTALLATION_TOKEN=.*/TRUSTNODE_INSTALLATION_TOKEN=$INSTALLATION_TOKEN/" .env
+    rm -f .env.bak
+else
+    echo -e "\nTRUSTNODE_INSTALLATION_TOKEN=$INSTALLATION_TOKEN" >> .env
 fi
 
 # 7. Start Docker services
@@ -87,7 +155,7 @@ if [ -z "$CLI_TOKEN" ]; then
     exit 1
 fi
 
-# Save token to .env securely
+# Save CLI token to .env securely
 if grep -q "TRUSTNODE_API_TOKEN" .env; then
     sed -i.bak "s/^TRUSTNODE_API_TOKEN=.*/TRUSTNODE_API_TOKEN=$CLI_TOKEN/" .env
     rm -f .env.bak
@@ -114,8 +182,8 @@ chmod +x "$CLI_WRAPPER"
 # Add to PATH if not present
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
     echo "Adding $HOME/.local/bin to PATH in ~/.bashrc and ~/.zshrc"
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc 2>/dev/null || true
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc 2>/dev/null || true
     export PATH="$HOME/.local/bin:$PATH"
     echo "Note: You may need to restart your terminal or run 'source ~/.bashrc' for PATH changes to take effect."
 fi
