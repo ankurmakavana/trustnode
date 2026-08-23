@@ -234,7 +234,30 @@ echo `$user->createToken('CLI Token')->plainTextToken;
     $global:currentStep = "Installing TrustNode CLI"
     Write-Log "`n[*] Installing TrustNode CLI..."
     $cliWrapperPath = "$installDir\trustnode.cmd"
-    $cliWrapperContent = "@echo off`r`ndocker compose -f ""$installDir\compose.dev.yaml"" exec -e TRUSTNODE_API_URL=http://nginx php php cli/bin/trustnode %*"
+    $cliWrapperContent = @"
+@echo off
+setlocal
+docker info >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [TrustNode CLI] Error: Docker is not running or not accessible.
+    echo Please start Docker Desktop/Engine before using the CLI.
+    exit /b 1
+)
+set "TTY_ARGS= "
+for %%A in (scan repair) do (
+    if /I "%~1"=="%%A" set "TTY_ARGS=-it"
+)
+docker compose -f "$installDir\compose.dev.yaml" exec %TTY_ARGS% -e TRUSTNODE_API_URL=http://nginx php php cli/bin/trustnode %*
+set "EXIT_CODE=%ERRORLEVEL%"
+if %EXIT_CODE% NEQ 0 (
+    if %EXIT_CODE% EQU 1 (
+        echo.
+        echo [TrustNode CLI] If TrustNode containers are not running, please start them:
+        echo cd "$installDir" ^&^& docker compose up -d
+    )
+)
+exit /b %EXIT_CODE%
+"@
     Set-Content -Path $cliWrapperPath -Value $cliWrapperContent -Encoding UTF8
 
     $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")

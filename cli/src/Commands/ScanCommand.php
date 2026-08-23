@@ -70,10 +70,20 @@ class ScanCommand extends Command
             ]);
 
             if (empty($validation['valid'])) {
-                $output->writeln('<comment>Repository authentication is required.</comment>');
+                $output->writeln('<comment>Repository access requires authentication.</comment>');
+                $output->writeln('<comment>The repository may be private, unavailable, or GitHub rejected anonymous access.</comment>');
+                $output->writeln('');
+                $output->writeln('<comment>GitHub Personal Access Token is required.</comment>');
                 
                 $helper = $this->getHelper('question');
-                $question = new \Symfony\Component\Console\Question\Question('Enter GitHub Personal Access Token (or press enter to cancel): ');
+                $confirmQuestion = new \Symfony\Component\Console\Question\ConfirmationQuestion('Enter token now? [yes/no] ', false);
+                
+                if (!$helper->ask($input, $output, $confirmQuestion)) {
+                    $output->writeln('<error>Authentication cancelled.</error>');
+                    return Command::FAILURE;
+                }
+                
+                $question = new \Symfony\Component\Console\Question\Question('Token: ');
                 $question->setHidden(true);
                 $question->setHiddenFallback(false);
                 

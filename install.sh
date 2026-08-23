@@ -231,7 +231,27 @@ CLI_WRAPPER="$HOME/.local/bin/trustnode"
 
 cat > "$CLI_WRAPPER" << EOF
 #!/bin/bash
-exec docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec -T -e TRUSTNODE_API_URL=http://nginx php php cli/bin/trustnode "\$@"
+
+if ! docker info >/dev/null 2>&1; then
+    echo "[TrustNode CLI] Error: Docker is not running or not accessible."
+    echo "Please start Docker Engine before using the CLI."
+    exit 1
+fi
+
+TTY_ARGS=""
+if [ -t 0 ] && [ -t 1 ]; then
+    if [[ "\$1" == "scan" || "\$1" == "repair" ]]; then
+        TTY_ARGS="-it"
+    fi
+fi
+docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec \$TTY_ARGS -e TRUSTNODE_API_URL=http://nginx php php cli/bin/trustnode "\$@"
+EXIT_CODE=\$?
+if [ \$EXIT_CODE -eq 1 ]; then
+    echo ""
+    echo "[TrustNode CLI] If TrustNode containers are not running, please start them:"
+    echo "cd \"$INSTALL_DIR\" && docker compose up -d"
+fi
+exit \$EXIT_CODE
 EOF
 chmod +x "$CLI_WRAPPER"
 
