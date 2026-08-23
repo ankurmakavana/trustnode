@@ -35,7 +35,20 @@ class ConfigManager
         }
 
         $config = $this->loadConfig();
-        return $config['token'] ?? null;
+        if (!empty($config['token'])) {
+            return $config['token'];
+        }
+
+        // Fallback: Read from TrustNode .env file
+        $envPath = __DIR__ . '/../../../.env';
+        if (file_exists($envPath)) {
+            $envContent = file_get_contents($envPath);
+            if (preg_match('/^TRUSTNODE_API_TOKEN=(.*)$/m', $envContent, $matches)) {
+                return trim($matches[1]);
+            }
+        }
+
+        return null;
     }
 
     public function save(string $url, string $token): void
