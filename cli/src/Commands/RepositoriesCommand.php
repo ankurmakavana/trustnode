@@ -19,7 +19,10 @@ class RepositoriesCommand extends Command
     {
         try {
             $data = $this->client->get('api/repositories');
-            $repos = $data['data'] ?? [];
+            $repos = isset($data['data']) ? $data['data'] : $data;
+            if (!is_array($repos)) {
+                $repos = [];
+            }
             if (empty($repos)) {
                 $output->writeln("No repositories found.");
                 return Command::SUCCESS;

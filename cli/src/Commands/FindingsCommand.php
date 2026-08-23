@@ -36,7 +36,10 @@ class FindingsCommand extends Command
             $qs = empty($query) ? '' : '?' . http_build_query($query);
             $data = $this->client->get('api/findings' . $qs);
             
-            $findings = $data['data'] ?? [];
+            $findings = isset($data['data']) ? $data['data'] : $data;
+            if (!is_array($findings)) {
+                $findings = [];
+            }
             if (empty($findings)) {
                 $output->writeln("No findings found.");
                 return Command::SUCCESS;
