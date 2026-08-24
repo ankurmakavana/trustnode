@@ -142,6 +142,7 @@ class ScanCommand extends Command
                 $section = $output->section();
             }
             
+            $lastProgress = -1;
             while (in_array($status, ['queued', 'running', 'generating'])) {
                 try {
                     $data = $this->client->get('api/scans/' . $scanId);
@@ -150,28 +151,48 @@ class ScanCommand extends Command
                     $progress = $scanResource['progress'] ?? 0;
                     $filesScanned = $scanResource['files_scanned'] ?? 0;
                     
-                    $barLength = 20;
-                    $filled = (int) round(($progress / 100) * $barLength);
-                    $empty = $barLength - $filled;
-                    $bar = str_repeat('█', $filled) . str_repeat('░', $empty);
-                    
-                    $out = "[$bar] $progress%\n\n";
-                    $out .= "Repository     $target\n";
-                    if ($filesScanned > 0) {
-                        $out .= "Files scanned  $filesScanned\n";
+                    $repoName = $target;
+                    if (isset($scanResource['repository']['name'])) {
+                        $repoName = $scanResource['repository']['name'];
                     }
-                    
-                    if ($section) {
-                        $section->overwrite($out);
-                    } else {
-                        $output->writeln("Progress: $progress% | Status: $status");
+
+                    if ($progress !== $lastProgress || $progress == 100) {
+                        $stage = 'Queued';
+                        if ($progress >= 10) $stage = 'Preparing workspace';
+                        if ($progress >= 20) $stage = 'Cloning repository';
+                        if ($progress >= 50) $stage = 'Scanning repository';
+                        if ($progress >= 80) $stage = 'Processing findings';
+                        if ($progress >= 95) $stage = 'Generating report';
+                        if ($progress == 100) $stage = 'Completed';
+                        
+                        $barLength = 20;
+                        $filled = (int) round(($progress / 100) * $barLength);
+                        $empty = $barLength - $filled;
+                        $bar = str_repeat('█', $filled) . str_repeat('░', $empty);
+                        
+                        $out = "[$bar] $progress%\n$stage\n\n";
+                        $out .= "Repository     $repoName\n";
+                        if ($filesScanned > 0) {
+                            $out .= "Files scanned  " . number_format($filesScanned) . "\n";
+                        }
+                        
+                        if ($section) {
+                            $section->overwrite($out);
+                        } else {
+                            // Clear previous lines if standard output, or just print
+                            $output->writeln("[$bar] $progress% - $stage");
+                        }
+                        
+                        $lastProgress = $progress;
                     }
+
                     
                     if (in_array($status, ['completed', 'failed', 'cancelled'])) {
                         break;
                     }
                     
-                    sleep(2);
+                    usleep(500000); // 0.5s polling for faster response without hammering
+
                 } catch (\Exception $e) {
                     if ($section) {
                         $section->overwrite("<error>Failed to poll status: " . $e->getMessage() . "</error>");
@@ -187,34 +208,44 @@ class ScanCommand extends Command
                     $section->clear();
                 }
                 $output->writeln("✓ Scan completed.\n");
-                $output->writeln("Repository     $target");
+                $repoName = $target;
+                if (isset($scanResource['repository']['name'])) {
+                    $repoName = $scanResource['repository']['name'];
+                }
+
+                $output->writeln("Repository     $repoName");
                 if ($filesScanned > 0) {
-                    $output->writeln("Files scanned  $filesScanned");
+                    $output->writeln("Files scanned  " . number_format($filesScanned));
                 }
                 $output->writeln("");
                 
                 $findingsCount = $scanResource['findings_count'] ?? 0;
                 $severities = $scanResource['severity_counts'] ?? [];
                 
-                $output->writeln("Findings       $findingsCount");
-                if (!empty($severities['critical'])) {
-                    $output->writeln("Critical       {$severities['critical']}");
-                }
-                if (!empty($severities['high'])) {
-                    $output->writeln("High           {$severities['high']}");
-                }
-                if (!empty($severities['medium'])) {
-                    $output->writeln("Medium         {$severities['medium']}");
-                }
-                if (!empty($severities['low'])) {
-                    $output->writeln("Low            {$severities['low']}");
-                }
-                if (!empty($severities['info'])) {
-                    $output->writeln("Info           {$severities['info']}");
+                $output->writeln("Findings       " . number_format($findingsCount));
+                
+                if ($findingsCount > 0) {
+                    if (!empty($severities['critical'])) {
+                        $output->writeln("Critical       " . number_format($severities['critical']));
+                    }
+                    if (!empty($severities['high'])) {
+                        $output->writeln("High           " . number_format($severities['high']));
+                    }
+                    if (!empty($severities['medium'])) {
+                        $output->writeln("Medium         " . number_format($severities['medium']));
+                    }
+                    if (!empty($severities['low'])) {
+                        $output->writeln("Low            " . number_format($severities['low']));
+                    }
+                    if (!empty($severities['info'])) {
+                        $output->writeln("Info           " . number_format($severities['info']));
+                    }
                 }
                 $output->writeln("");
-                $output->writeln("Evidence stored securely in your TrustNode installation.");
-                $output->writeln("");
+                if ($findingsCount > 0) {
+                    $output->writeln("Evidence stored securely in your TrustNode installation.");
+                    $output->writeln("");
+                }
                 $output->writeln("Next:");
                 $output->writeln("  trustnode findings --scan=$scanId");
                 $output->writeln("  trustnode report $scanId");

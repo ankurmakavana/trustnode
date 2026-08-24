@@ -72,7 +72,7 @@ class ScanController extends Controller
     {
         $this->authorize('viewAny', Scan::class);
 
-        return new ScanResource($scan->load(['creator', 'updater']));
+        return new ScanResource($scan->load(['creator', 'updater', 'repository']));
     }
 
     /**

@@ -20,6 +20,7 @@ class FindingsCommand extends Command
     {
         $this->addOption('severity', null, InputOption::VALUE_REQUIRED, 'Filter by severity (e.g. critical, high)');
         $this->addOption('repository', null, InputOption::VALUE_REQUIRED, 'Filter by repository name');
+        $this->addOption('scan', null, InputOption::VALUE_REQUIRED, 'Filter by scan ID');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -31,6 +32,9 @@ class FindingsCommand extends Command
             }
             if ($repository = $input->getOption('repository')) {
                 $query['repository'] = $repository;
+            }
+            if ($scan = $input->getOption('scan')) {
+                $query['scan_id'] = $scan;
             }
             
             $qs = empty($query) ? '' : '?' . http_build_query($query);
