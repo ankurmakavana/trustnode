@@ -238,18 +238,103 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
+CMD="\$1"
+CMD_ARG2="\$2"
+
+if [ "\$CMD" = "start" ]; then
+    docker compose -f "$INSTALL_DIR/compose.dev.yaml" up -d
+    exit \$?
+elif [ "\$CMD" = "stop" ]; then
+    docker compose -f "$INSTALL_DIR/compose.dev.yaml" stop
+    exit \$?
+elif [ "\$CMD" = "restart" ]; then
+    docker compose -f "$INSTALL_DIR/compose.dev.yaml" restart
+    exit \$?
+elif [ "\$CMD" = "logs" ]; then
+    docker compose -f "$INSTALL_DIR/compose.dev.yaml" logs -f "\$CMD_ARG2"
+    exit \$?
+elif [ "\$CMD" = "update" ]; then
+    echo "[TrustNode CLI] Update architecture relies on authorized artifact downloads."
+    echo "Run the original installer script to securely pull and apply the latest update."
+    exit 0
+elif [ "\$CMD" = "doctor" ]; then
+    echo "Running TrustNode Diagnostics..."
+    echo ""
+    echo "Checking Docker..."
+    if docker info >/dev/null 2>&1; then echo "[OK] Docker is running"; else echo "[FAIL] Docker is not running"; fi
+    echo "Checking Environment..."
+    if [ -f "$INSTALL_DIR/.env" ]; then echo "[OK] .env configuration found"; else echo "[FAIL] .env is missing"; fi
+    echo "Checking Services..."
+    if docker compose -f "$INSTALL_DIR/compose.dev.yaml" ps | grep -q "php"; then echo "[OK] Services are running"; else echo "[FAIL] Services are stopped"; fi
+    echo ""
+    echo "Run 'trustnode repair' to attempt safe automated fixes."
+    exit 0
+elif [ "\$CMD" = "repair" ]; then
+    echo "Attempting safe repair operations..."
+    if [ ! -f "$INSTALL_DIR/.env" ]; then
+        echo "[TrustNode CLI] Error: .env file is missing. Please re-run the full installer."
+        exit 1
+    fi
+    docker compose -f "$INSTALL_DIR/compose.dev.yaml" up -d
+    echo "Repair completed. Run 'trustnode doctor' to verify."
+    exit 0
+elif [ "\$CMD" = "uninstall" ]; then
+    if [ "\$CMD_ARG2" = "--purge" ]; then
+        echo "TrustNode Uninstaller"
+        echo "====================="
+        echo ""
+        echo "WARNING: This will permanently delete ALL TrustNode data including:"
+        echo "- Database data"
+        echo "- Redis data"
+        echo "- Reports and caches"
+        echo ""
+        read -p "Type DELETE to permanently remove all TrustNode data: " CONFIRM
+        if [ "\$CONFIRM" != "DELETE" ]; then
+            echo "Uninstall cancelled."
+            exit 0
+        fi
+        docker compose -f "$INSTALL_DIR/compose.dev.yaml" down -v
+        exit \$?
+    else
+        echo "TrustNode Uninstaller"
+        echo "====================="
+        echo ""
+        echo "This will stop and remove TrustNode containers."
+        echo "Your configuration and persistent data will be preserved."
+        echo ""
+        echo "Installation directory: $INSTALL_DIR"
+        echo ""
+        read -p "Continue? [y/N]: " CONFIRM
+        if [ "\${CONFIRM,,}" != "y" ]; then
+            echo "Uninstall cancelled."
+            exit 0
+        fi
+        docker compose -f "$INSTALL_DIR/compose.dev.yaml" down
+        exit \$?
+    fi
+fi
+
+if [ -z "\$CMD" ]; then
+    docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec -e TRUSTNODE_API_URL=http://nginx -e TRUSTNODE_HOST_DIR="$INSTALL_DIR" php php cli/bin/trustnode list
+    exit \$?
+fi
+
 TTY_ARGS=""
 if [ -t 0 ] && [ -t 1 ]; then
-    if [[ "\$1" == "scan" || "\$1" == "repair" ]]; then
+    if [[ "\$CMD" == "scan" || "\$CMD" == "repair" ]]; then
         TTY_ARGS="-it"
     fi
 fi
-docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec \$TTY_ARGS -e TRUSTNODE_API_URL=http://nginx php php cli/bin/trustnode "\$@"
+
+docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec \$TTY_ARGS -e TRUSTNODE_API_URL=http://nginx -e TRUSTNODE_HOST_DIR="$INSTALL_DIR" php php cli/bin/trustnode "\$@"
 EXIT_CODE=\$?
-if [ \$EXIT_CODE -eq 1 ]; then
-    echo ""
-    echo "[TrustNode CLI] If TrustNode containers are not running, please start them:"
-    echo "cd \"$INSTALL_DIR\" && docker compose up -d"
+
+if [ \$EXIT_CODE -ne 0 ]; then
+    if ! docker compose -f "$INSTALL_DIR/compose.dev.yaml" ps -q php >/dev/null 2>&1; then
+        echo ""
+        echo "[TrustNode CLI] The required TrustNode container 'php' is not running."
+        echo "Please start the application: trustnode start"
+    fi
 fi
 exit \$EXIT_CODE
 EOF

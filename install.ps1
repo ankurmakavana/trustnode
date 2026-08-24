@@ -236,27 +236,126 @@ echo `$user->createToken('CLI Token')->plainTextToken;
     $cliWrapperPath = "$installDir\trustnode.cmd"
     $cliWrapperContent = @"
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
+
 docker info >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
+if !ERRORLEVEL! NEQ 0 (
     echo [TrustNode CLI] Error: Docker is not running or not accessible.
     echo Please start Docker Desktop/Engine before using the CLI.
     exit /b 1
 )
-set "TTY_ARGS= "
-for %%A in (scan repair) do (
-    if /I "%~1"=="%%A" set "TTY_ARGS=-it"
+
+set "CMD=%~1"
+set "CMD_ARG2=%~2"
+set "INSTALL_DIR=%~dp0"
+set "INSTALL_DIR=!INSTALL_DIR:~0,-1!"
+
+if /I "!CMD!"=="start" (
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d
+    exit /b !ERRORLEVEL!
 )
-docker compose -f "$installDir\compose.dev.yaml" exec %TTY_ARGS% -e TRUSTNODE_API_URL=http://nginx php php cli/bin/trustnode %*
-set "EXIT_CODE=%ERRORLEVEL%"
-if %EXIT_CODE% NEQ 0 (
-    if %EXIT_CODE% EQU 1 (
+if /I "!CMD!"=="stop" (
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" stop
+    exit /b !ERRORLEVEL!
+)
+if /I "!CMD!"=="restart" (
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" restart
+    exit /b !ERRORLEVEL!
+)
+if /I "!CMD!"=="logs" (
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" logs -f !CMD_ARG2!
+    exit /b !ERRORLEVEL!
+)
+if /I "!CMD!"=="update" (
+    echo [TrustNode CLI] Update architecture relies on authorized artifact downloads.
+    echo Run the original installer script to securely pull and apply the latest update.
+    exit /b 0
+)
+if /I "!CMD!"=="doctor" (
+    echo Running TrustNode Diagnostics...
+    echo.
+    echo Checking Docker...
+    docker info >nul 2>&1
+    if !ERRORLEVEL! EQU 0 ( echo [OK] Docker is running ) else ( echo [FAIL] Docker is not running )
+    
+    echo Checking Environment...
+    if exist "!INSTALL_DIR!\.env" ( echo [OK] .env configuration found ) else ( echo [FAIL] .env is missing )
+    
+    echo Checking Services...
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" ps | findstr "php" >nul
+    if !ERRORLEVEL! EQU 0 ( echo [OK] Services are running ) else ( echo [FAIL] Services are stopped )
+    echo.
+    echo Run 'trustnode repair' to attempt safe automated fixes.
+    exit /b 0
+)
+if /I "!CMD!"=="repair" (
+    echo Attempting safe repair operations...
+    if not exist "!INSTALL_DIR!\.env" (
+        echo [TrustNode CLI] Error: .env file is missing. Please re-run the full installer.
+        exit /b 1
+    )
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d
+    echo Repair completed. Run 'trustnode doctor' to verify.
+    exit /b 0
+)
+
+if /I "!CMD!"=="uninstall" (
+    if /I "!CMD_ARG2!"=="--purge" (
+        echo TrustNode Uninstaller
+        echo =====================
         echo.
-        echo [TrustNode CLI] If TrustNode containers are not running, please start them:
-        echo cd "$installDir" ^&^& docker compose up -d
+        echo WARNING: This will permanently delete ALL TrustNode data including:
+        echo - Database data
+        echo - Redis data
+        echo - Reports and caches
+        echo.
+        set /p CONFIRM="Type DELETE to permanently remove all TrustNode data: "
+        if NOT "!CONFIRM!"=="DELETE" (
+            echo Uninstall cancelled.
+            exit /b 0
+        )
+        docker compose -f "!INSTALL_DIR!\compose.dev.yaml" down -v
+        exit /b !ERRORLEVEL!
+    ) else (
+        echo TrustNode Uninstaller
+        echo =====================
+        echo.
+        echo This will stop and remove TrustNode containers.
+        echo Your configuration and persistent data will be preserved.
+        echo.
+        echo Installation directory: !INSTALL_DIR!
+        echo.
+        set /p CONFIRM="Continue? [y/N]: "
+        if /I NOT "!CONFIRM!"=="y" (
+            echo Uninstall cancelled.
+            exit /b 0
+        )
+        docker compose -f "!INSTALL_DIR!\compose.dev.yaml" down
+        exit /b !ERRORLEVEL!
     )
 )
-exit /b %EXIT_CODE%
+
+if /I "!CMD!"=="" (
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" exec -e TRUSTNODE_API_URL=http://nginx -e TRUSTNODE_HOST_DIR="!INSTALL_DIR!" php php cli/bin/trustnode list
+    exit /b !ERRORLEVEL!
+)
+
+set "TTY_ARGS= "
+if /I "!CMD!"=="scan" set "TTY_ARGS=-it"
+if /I "!CMD!"=="repair" set "TTY_ARGS=-it"
+
+docker compose -f "!INSTALL_DIR!\compose.dev.yaml" exec !TTY_ARGS! -e TRUSTNODE_API_URL=http://nginx -e TRUSTNODE_HOST_DIR="!INSTALL_DIR!" php php cli/bin/trustnode %*
+set "EXIT_CODE=!ERRORLEVEL!"
+
+if !EXIT_CODE! NEQ 0 (
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" ps -q php >nul 2>&1
+    if !ERRORLEVEL! NEQ 0 (
+        echo.
+        echo [TrustNode CLI] The required TrustNode container 'php' is not running.
+        echo Please start the application: trustnode start
+    )
+)
+exit /b !EXIT_CODE!
 "@
     Set-Content -Path $cliWrapperPath -Value $cliWrapperContent -Encoding UTF8
 
