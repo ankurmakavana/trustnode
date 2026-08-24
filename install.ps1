@@ -267,8 +267,32 @@ if /I "!CMD!"=="logs" (
     exit /b !ERRORLEVEL!
 )
 if /I "!CMD!"=="update" (
-    echo [TrustNode CLI] Update architecture relies on authorized artifact downloads.
-    echo Run the original installer script to securely pull and apply the latest update.
+    echo TrustNode Updater
+    echo =================
+    echo.
+    set "TOKEN="
+    if exist "!INSTALL_DIR!\.env" (
+        for /f "usebackq tokens=1,* delims==" %%A in ("!INSTALL_DIR!\.env") do (
+            if "%%A"=="TRUSTNODE_INSTALLATION_TOKEN" set "TOKEN=%%B"
+        )
+    )
+    if "!TOKEN!"=="" (
+        echo [ERROR] Missing TRUSTNODE_INSTALLATION_TOKEN in environment.
+        echo Please repair or reactivate your installation.
+        exit /b 1
+    )
+    echo [*] Fetching latest release metadata...
+    set "PS_CMD=`$ErrorActionPreference='Stop'; `$resp=Invoke-RestMethod -Uri 'https://trustnode.in/api/v1/releases/latest' -Headers @{ Authorization = 'Bearer !TOKEN!' }; if (-not `$resp.download_url) { throw 'No download URL' }; Invoke-WebRequest -Uri `$resp.download_url -OutFile '!INSTALL_DIR!\update.zip'; if (`$resp.sha256) { `$hash = (Get-FileHash '!INSTALL_DIR!\update.zip' -Algorithm SHA256).Hash; if (`$hash -ne `$resp.sha256) { throw 'SHA256 mismatch' } }; Expand-Archive -Path '!INSTALL_DIR!\update.zip' -DestinationPath '!INSTALL_DIR!' -Force; Remove-Item '!INSTALL_DIR!\update.zip' -Force"
+    powershell -NoProfile -Command "!PS_CMD!"
+    if !ERRORLEVEL! NEQ 0 (
+        echo [ERROR] Failed to update.
+        exit /b 1
+    )
+    echo [*] Applying migrations and restarting services...
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d --build
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" exec php php artisan migrate --force
+    echo.
+    echo [OK] TrustNode updated successfully.
     exit /b 0
 )
 if /I "!CMD!"=="doctor" (
@@ -335,9 +359,36 @@ if /I "!CMD!"=="uninstall" (
     )
 )
 
-if /I "!CMD!"=="" (
-    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" exec -e TRUSTNODE_API_URL=http://nginx -e TRUSTNODE_HOST_DIR="!INSTALL_DIR!" php php cli/bin/trustnode list
-    exit /b !ERRORLEVEL!
+if /I "!CMD!"=="" set CMD=help
+if /I "!CMD!"=="--help" set CMD=help
+if /I "!CMD!"=="help" (
+    echo TrustNode CLI
+    echo.
+    echo Usage:
+    echo   trustnode ^^<command^^> [options]
+    echo.
+    echo Lifecycle:
+    echo   start
+    echo   stop
+    echo   restart
+    echo   logs [service]
+    echo   update
+    echo   uninstall [--purge]
+    echo   doctor
+    echo   repair
+    echo.
+    echo Security:
+    echo   scan ^^<repository^^>
+    echo   scan status ^^<id^^>
+    echo   repositories
+    echo   findings
+    echo   report ^^<scan-id^^>
+    echo   report status ^^<scan-id^^>
+    echo   report download ^^<scan-id^^>
+    echo   status
+    echo   activate ^^<license-key^^>
+    echo   license
+    exit /b 0
 )
 
 set "TTY_ARGS= "
@@ -357,7 +408,7 @@ if !EXIT_CODE! NEQ 0 (
 )
 exit /b !EXIT_CODE!
 "@
-    Set-Content -Path $cliWrapperPath -Value $cliWrapperContent -Encoding UTF8
+    Set-Content -Path $cliWrapperPath -Value $cliWrapperContent -Encoding Ascii
 
     $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
     if ($userPath -notlike "*$installDir*") {

@@ -254,8 +254,55 @@ elif [ "\$CMD" = "logs" ]; then
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" logs -f "\$CMD_ARG2"
     exit \$?
 elif [ "\$CMD" = "update" ]; then
-    echo "[TrustNode CLI] Update architecture relies on authorized artifact downloads."
-    echo "Run the original installer script to securely pull and apply the latest update."
+    echo "TrustNode Updater"
+    echo "================="
+    echo ""
+    TOKEN=""
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        TOKEN=\$(grep "^TRUSTNODE_INSTALLATION_TOKEN=" "$INSTALL_DIR/.env" | cut -d'=' -f2)
+    fi
+    if [ -z "\$TOKEN" ]; then
+        echo "[ERROR] Missing TRUSTNODE_INSTALLATION_TOKEN in environment."
+        echo "Please repair or reactivate your installation."
+        exit 1
+    fi
+    echo "[*] Fetching latest release metadata..."
+    RELEASE_META=\$(curl -s -X GET "https://trustnode.in/api/v1/releases/latest" -H "Authorization: Bearer \$TOKEN" -H "Accept: application/json")
+    if ! echo "\$RELEASE_META" | jq -e '.download_url' > /dev/null 2>&1; then
+        echo "[ERROR] Failed to fetch latest release metadata."
+        exit 1
+    fi
+    DOWNLOAD_URL=\$(echo "\$RELEASE_META" | jq -r '.download_url')
+    EXPECTED_SHA=\$(echo "\$RELEASE_META" | jq -r '.sha256 // empty')
+    
+    echo "[*] Downloading update..."
+    curl -sL -o "$INSTALL_DIR/update.zip" "\$DOWNLOAD_URL"
+    
+    if [ -n "\$EXPECTED_SHA" ]; then
+        if command -v sha256sum >/dev/null; then
+            ACTUAL_SHA=\$(sha256sum "$INSTALL_DIR/update.zip" | awk '{print \$1}')
+        elif command -v shasum >/dev/null; then
+            ACTUAL_SHA=\$(shasum -a 256 "$INSTALL_DIR/update.zip" | awk '{print \$1}')
+        else
+            ACTUAL_SHA=""
+        fi
+        
+        if [ -n "\$ACTUAL_SHA" ] && [ "\$ACTUAL_SHA" != "\$EXPECTED_SHA" ]; then
+            echo "[ERROR] SHA-256 verification failed!"
+            rm -f "$INSTALL_DIR/update.zip"
+            exit 1
+        fi
+    fi
+    
+    echo "[*] Extracting update..."
+    unzip -q -o "$INSTALL_DIR/update.zip" -d "$INSTALL_DIR"
+    rm -f "$INSTALL_DIR/update.zip"
+    
+    echo "[*] Applying migrations and restarting services..."
+    docker compose -f "$INSTALL_DIR/compose.dev.yaml" up -d --build
+    docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec -T php php artisan migrate --force
+    echo ""
+    echo "[OK] TrustNode updated successfully."
     exit 0
 elif [ "\$CMD" = "doctor" ]; then
     echo "Running TrustNode Diagnostics..."
@@ -314,9 +361,34 @@ elif [ "\$CMD" = "uninstall" ]; then
     fi
 fi
 
-if [ -z "\$CMD" ]; then
-    docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec -e TRUSTNODE_API_URL=http://nginx -e TRUSTNODE_HOST_DIR="$INSTALL_DIR" php php cli/bin/trustnode list
-    exit \$?
+if [ -z "\$CMD" ] || [ "\$CMD" = "--help" ] || [ "\$CMD" = "help" ]; then
+    echo "TrustNode CLI"
+    echo ""
+    echo "Usage:"
+    echo "  trustnode <command> [options]"
+    echo ""
+    echo "Lifecycle:"
+    echo "  start"
+    echo "  stop"
+    echo "  restart"
+    echo "  logs [service]"
+    echo "  update"
+    echo "  uninstall [--purge]"
+    echo "  doctor"
+    echo "  repair"
+    echo ""
+    echo "Security:"
+    echo "  scan <repository>"
+    echo "  scan status <id>"
+    echo "  repositories"
+    echo "  findings"
+    echo "  report <scan-id>"
+    echo "  report status <scan-id>"
+    echo "  report download <scan-id>"
+    echo "  status"
+    echo "  activate <license-key>"
+    echo "  license"
+    exit 0
 fi
 
 TTY_ARGS=""
