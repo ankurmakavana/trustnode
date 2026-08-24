@@ -34,16 +34,18 @@ Route::get('/system/status', function () {
 });
 
 Route::middleware('auth:sanctum')->get('/system/update/metadata', function () {
+    $currentVersion = config('app.version', '1.0.0');
+    
     $installation = \App\Models\LicenseInstallation::latest('id')->first();
     if (!$installation || !$installation->installation_token) {
-        return response()->json(['available' => false, 'error' => 'No active license installation found.'], 403);
+        return response()->json(['available' => false, 'error' => 'No active license installation found.', 'current_version' => $currentVersion, 'version' => 'unknown'], 403);
     }
 
     $client = app(\App\Services\License\LicenseApiClient::class);
     $response = $client->getLatestRelease($installation->installation_token);
     
     if (!$response['success']) {
-        return response()->json(['available' => false, 'error' => 'License platform unreachable or unauthorized.'], $response['status'] ?: 500);
+        return response()->json(['available' => false, 'error' => 'License platform unreachable or unauthorized.', 'current_version' => $currentVersion, 'version' => 'unknown'], $response['status'] ?: 500);
     }
     
     $data = $response['data'];

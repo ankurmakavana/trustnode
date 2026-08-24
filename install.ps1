@@ -277,25 +277,33 @@ if /I "!CMD!"=="update" (
         )
     )
     if "!TOKEN!"=="" (
-        echo Unable to authenticate with the local TrustNode installation.
+        echo [ERROR] Unable to authenticate with the local TrustNode installation.
         echo.
         echo Run:
         echo.
         echo     trustnode doctor
         exit /b 1
     )
-    set "PS_CMD=`$ErrorActionPreference='Stop'; `$metaRaw = docker compose -f '!INSTALL_DIR!\compose.dev.yaml' exec -T php curl -s -X GET 'http://nginx/api/system/update/metadata' -H 'Authorization: Bearer !TOKEN!' -H 'Accept: application/json'; if (-not `$metaRaw) { throw 'Unable to reach the TrustNode License Platform.' }; `$meta = `$metaRaw | ConvertFrom-Json; Write-Host ('Current version: ' + `$meta.current_version); Write-Host ('Latest version:  ' + `$meta.version); Write-Host ''; if (`$meta.available -ne `$true) { if (`$meta.error) { Write-Host 'Update unavailable.'; Write-Host ''; Write-Host 'Your TrustNode license is not authorized for this release.' } else { Write-Host 'TrustNode is already up to date.' }; exit 0 }; Write-Host 'Update available.'; Write-Host ''; Write-Host 'Downloading release...'; Invoke-WebRequest -Uri `$meta.download_url -OutFile '!INSTALL_DIR!\update.zip'; Write-Host '[####################] 100%'; Write-Host ''; Write-Host 'Verifying SHA-256...'; if (`$meta.sha256) { `$hash = (Get-FileHash '!INSTALL_DIR!\update.zip' -Algorithm SHA256).Hash; if (`$hash.ToLower() -ne `$meta.sha256.ToLower()) { throw 'SHA-256 verification failed.' } }; Write-Host '✓ Checksum verified.'; Write-Host ''; Write-Host 'Updating TrustNode...'; Expand-Archive -Path '!INSTALL_DIR!\update.zip' -DestinationPath '!INSTALL_DIR!' -Force; Remove-Item '!INSTALL_DIR!\update.zip' -Force; Write-Host '✓ Files updated.'"
+    set "PS_CMD=$ErrorActionPreference='Stop'; $metaRaw = docker compose -f '!INSTALL_DIR!\compose.dev.yaml' exec -T php curl -s -X GET 'http://nginx/api/system/update/metadata' -H 'Authorization: Bearer !TOKEN!' -H 'Accept: application/json'; if (-not $metaRaw) { throw 'Unable to reach the TrustNode License Platform.' }; $meta = $metaRaw | ConvertFrom-Json; Write-Host ('Current version: ' + $meta.current_version); Write-Host ('Latest version:  ' + $meta.version); Write-Host ''; if ($meta.available -ne $true) { if ($meta.error) { Write-Host '[ERROR] Update unavailable.'; Write-Host ''; Write-Host 'Your TrustNode license is not authorized for this release.'; exit 1 } else { Write-Host '[OK] TrustNode is already up to date.'; exit 0 } }; Write-Host 'Update available: ' $meta.version; Write-Host ''; Write-Host 'Downloading update...'; Invoke-WebRequest -Uri $meta.download_url -OutFile '!INSTALL_DIR!\update.zip'; Write-Host 'Verifying package...'; if ($meta.sha256) { $hash = (Get-FileHash '!INSTALL_DIR!\update.zip' -Algorithm SHA256).Hash; if ($hash.ToLower() -ne $meta.sha256.ToLower()) { throw 'SHA-256 verification failed.' } }; Write-Host 'Installing update...'; Expand-Archive -Path '!INSTALL_DIR!\update.zip' -DestinationPath '!INSTALL_DIR!' -Force; Remove-Item '!INSTALL_DIR!\update.zip' -Force; Set-Content -Path '!INSTALL_DIR!\.update_version' -Value $meta.version"
     powershell -NoProfile -Command "!PS_CMD!"
     if !ERRORLEVEL! NEQ 0 (
-        exit /b 1
+        exit /b !ERRORLEVEL!
     )
+    
+    echo Running database migrations...
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d --build >nul 2>&1
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" exec -T php php artisan migrate --force >nul 2>&1
-    echo ✓ Database migrated.
+    
+    echo Restarting services...
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" restart >nul 2>&1
-    echo ✓ Services restarted.
+    
     echo.
-    echo TrustNode updated successfully.
+    echo [OK] TrustNode updated successfully.
+    if exist "!INSTALL_DIR!\.update_version" (
+        set /p NEW_VER=<"!INSTALL_DIR!\.update_version"
+        echo Version: !NEW_VER!
+        del "!INSTALL_DIR!\.update_version"
+    )
     exit /b 0
 )
 if /I "!CMD!"=="doctor" (
@@ -368,7 +376,7 @@ if /I "!CMD!"=="help" (
     echo TrustNode CLI
     echo.
     echo Usage:
-    echo   trustnode ^^<command^^> [options]
+    echo   trustnode ^<command^> [options]
     echo.
     echo Lifecycle:
     echo   start
@@ -381,15 +389,15 @@ if /I "!CMD!"=="help" (
     echo   repair
     echo.
     echo Security:
-    echo   scan ^^<repository^^>
-    echo   scan status ^^<id^^>
+    echo   scan ^<repository^>
+    echo   scan status ^<id^>
     echo   repositories
     echo   findings
-    echo   report ^^<scan-id^^>
-    echo   report status ^^<scan-id^^>
-    echo   report download ^^<scan-id^^>
+    echo   report ^<scan-id^>
+    echo   report status ^<scan-id^>
+    echo   report download ^<scan-id^>
     echo   status
-    echo   activate ^^<license-key^^>
+    echo   activate ^<license-key^>
     echo   license
     exit /b 0
 )

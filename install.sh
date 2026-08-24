@@ -275,8 +275,8 @@ elif [ "\$CMD" = "update" ]; then
     RELEASE_META=\$(docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec -T php curl -s -X GET "http://localhost/api/system/update/metadata" -H "Authorization: Bearer \$TOKEN" -H "Accept: application/json")
     
     if [ \$? -ne 0 ] || [ -z "\$RELEASE_META" ]; then
-        echo "Unable to reach the TrustNode License Platform."
-        echo "Retry later."
+        echo "[ERROR] Unable to check for updates."
+        echo "Unable to reach the TrustNode License Platform. Retry later."
         exit 1
     fi
     
@@ -291,13 +291,14 @@ elif [ "\$CMD" = "update" ]; then
     if [ "\$AVAILABLE" != "true" ]; then
         ERROR_MSG=\$(echo "\$RELEASE_META" | jq -r '.error // empty')
         if [ -n "\$ERROR_MSG" ]; then
-            echo "Update unavailable."
+            echo "[ERROR] Update unavailable."
             echo ""
             echo "Your TrustNode license is not authorized for this release."
+            exit 1
         else
-            echo "TrustNode is already up to date."
+            echo "[OK] TrustNode is already up to date."
+            exit 0
         fi
-        exit 0
     fi
     
     echo "Update available."
@@ -336,19 +337,20 @@ elif [ "\$CMD" = "update" ]; then
     fi
     echo ""
     
-    echo "Updating TrustNode..."
+    echo "Installing update..."
     unzip -q -o "$INSTALL_DIR/update.zip" -d "$INSTALL_DIR"
     rm -f "$INSTALL_DIR/update.zip"
-    echo "✓ Files updated."
     
+    echo "Running database migrations..."
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" up -d --build >/dev/null 2>&1
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec -T php php artisan migrate --force >/dev/null 2>&1
-    echo "✓ Database migrated."
     
+    echo "Restarting services..."
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" restart >/dev/null 2>&1
-    echo "✓ Services restarted."
+    
     echo ""
-    echo "TrustNode updated successfully."
+    echo "[OK] TrustNode updated successfully."
+    echo "Version: \$LATEST_VERSION"
     exit 0
 elif [ "\$CMD" = "doctor" ]; then
     echo "Running TrustNode Diagnostics..."
