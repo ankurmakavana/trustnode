@@ -32,6 +32,7 @@ class ScanResource extends JsonResource
             'schedule' => $this->schedule,
             'status' => $this->status->value,
             'progress' => (int) $this->progress,
+            'files_scanned' => $this->files_scanned,
             'started_at' => $this->started_at?->toIso8601String(),
             'completed_at' => $this->completed_at?->toIso8601String(),
             'duration' => $this->duration,

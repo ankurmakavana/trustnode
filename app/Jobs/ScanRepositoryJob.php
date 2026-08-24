@@ -53,6 +53,7 @@ class ScanRepositoryJob implements ShouldQueue
         $workspacePath = $repositoryService->createTemporaryWorkspace($this->scan->uuid);
 
         try {
+            $this->scan->update(['progress' => 10]);
 
             // 1. Checkout repository
             $checkedOut = $repositoryService->checkout($this->repository, $workspacePath);
@@ -60,8 +61,27 @@ class ScanRepositoryJob implements ShouldQueue
                 throw new \RuntimeException('Git clone command failed.');
             }
 
+            $this->scan->update(['progress' => 20]);
+
+            // Count files scanned
+            $filesScanned = 0;
+            if (is_dir($workspacePath)) {
+                $directoryIterator = new \RecursiveDirectoryIterator($workspacePath, \FilesystemIterator::SKIP_DOTS);
+                $iterator = new \RecursiveIteratorIterator($directoryIterator);
+                foreach ($iterator as $file) {
+                    if ($file->isFile() && !str_contains($file->getPathname(), DIRECTORY_SEPARATOR . '.git' . DIRECTORY_SEPARATOR)) {
+                        $filesScanned++;
+                    }
+                }
+            }
+            $this->scan->update(['files_scanned' => $filesScanned]);
+
+            $this->scan->update(['progress' => 50]);
+
             // 2. Perform static analysis scan
             $findings = $scanner->scan($workspacePath, $this->repository->repository_url);
+
+            $this->scan->update(['progress' => 80]);
 
             // 3. Obtain or create Asset representation
             $asset = Asset::firstOrCreate(
@@ -124,6 +144,8 @@ class ScanRepositoryJob implements ShouldQueue
 
                 $savedFindings[] = $findingModel;
             }
+
+            $this->scan->update(['progress' => 90]);
 
             // 5. Generate Professional vulnerability HTML report
             $reportTitle = 'Repository Vulnerability Assessment - '.$this->repository->name;

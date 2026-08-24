@@ -130,11 +130,104 @@ class ScanCommand extends Command
             $scanId = $scanData['id'] ?? 'unknown';
             
             $output->writeln("<info>Scan started.</info>\n");
-            $output->writeln("Repository: $target");
-            $output->writeln("Scan ID: $scanId");
-            $output->writeln("Status: queued\n");
-            $output->writeln("Check progress:\n");
-            $output->writeln("trustnode scan status $scanId");
+            $output->writeln("Scanning repository...\n");
+            
+            $status = 'queued';
+            $progress = 0;
+            $filesScanned = 0;
+            $scanResource = [];
+            
+            $section = null;
+            if (method_exists($output, 'section')) {
+                $section = $output->section();
+            }
+            
+            while (in_array($status, ['queued', 'running', 'generating'])) {
+                try {
+                    $data = $this->client->get('api/scans/' . $scanId);
+                    $scanResource = $data['data'] ?? $data;
+                    $status = $scanResource['status'] ?? 'unknown';
+                    $progress = $scanResource['progress'] ?? 0;
+                    $filesScanned = $scanResource['files_scanned'] ?? 0;
+                    
+                    $barLength = 20;
+                    $filled = (int) round(($progress / 100) * $barLength);
+                    $empty = $barLength - $filled;
+                    $bar = str_repeat('█', $filled) . str_repeat('░', $empty);
+                    
+                    $out = "[$bar] $progress%\n\n";
+                    $out .= "Repository     $target\n";
+                    if ($filesScanned > 0) {
+                        $out .= "Files scanned  $filesScanned\n";
+                    }
+                    
+                    if ($section) {
+                        $section->overwrite($out);
+                    } else {
+                        $output->writeln("Progress: $progress% | Status: $status");
+                    }
+                    
+                    if (in_array($status, ['completed', 'failed', 'cancelled'])) {
+                        break;
+                    }
+                    
+                    sleep(2);
+                } catch (\Exception $e) {
+                    if ($section) {
+                        $section->overwrite("<error>Failed to poll status: " . $e->getMessage() . "</error>");
+                    } else {
+                        $output->writeln("<error>Failed to poll status: " . $e->getMessage() . "</error>");
+                    }
+                    sleep(5);
+                }
+            }
+            
+            if ($status === 'completed') {
+                if ($section) {
+                    $section->clear();
+                }
+                $output->writeln("✓ Scan completed.\n");
+                $output->writeln("Repository     $target");
+                if ($filesScanned > 0) {
+                    $output->writeln("Files scanned  $filesScanned");
+                }
+                $output->writeln("");
+                
+                $findingsCount = $scanResource['findings_count'] ?? 0;
+                $severities = $scanResource['severity_counts'] ?? [];
+                
+                $output->writeln("Findings       $findingsCount");
+                if (!empty($severities['critical'])) {
+                    $output->writeln("Critical       {$severities['critical']}");
+                }
+                if (!empty($severities['high'])) {
+                    $output->writeln("High           {$severities['high']}");
+                }
+                if (!empty($severities['medium'])) {
+                    $output->writeln("Medium         {$severities['medium']}");
+                }
+                if (!empty($severities['low'])) {
+                    $output->writeln("Low            {$severities['low']}");
+                }
+                if (!empty($severities['info'])) {
+                    $output->writeln("Info           {$severities['info']}");
+                }
+                $output->writeln("");
+                $output->writeln("Evidence stored securely in your TrustNode installation.");
+                $output->writeln("");
+                $output->writeln("Next:");
+                $output->writeln("  trustnode findings --scan=$scanId");
+                $output->writeln("  trustnode report $scanId");
+            } elseif ($status === 'failed') {
+                if ($section) {
+                    $section->clear();
+                }
+                $output->writeln("✗ Scan failed\n");
+                $output->writeln("Scan ID: $scanId\n");
+                $output->writeln("Reason:\nScan failed during execution.");
+                return Command::FAILURE;
+            }
+
             return Command::SUCCESS;
             
         } catch (\Exception $e) {

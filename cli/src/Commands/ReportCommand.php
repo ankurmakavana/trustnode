@@ -73,9 +73,18 @@ class ReportCommand extends Command
                     return Command::FAILURE;
                 }
 
+                $reportsDir = '/var/www/html/reports';
+                if (!is_dir($reportsDir)) {
+                    mkdir($reportsDir, 0755, true);
+                }
+
                 $outputPath = $input->getOption('output');
+                $isCustomOutput = !empty($outputPath);
                 if (!$outputPath) {
-                    $outputPath = getcwd() . DIRECTORY_SEPARATOR . "trustnode-report-$scanId.pdf";
+                    $outputPath = $reportsDir . DIRECTORY_SEPARATOR . "trustnode-report-$scanId.pdf";
+                } elseif (!str_starts_with($outputPath, '/')) {
+                    // if it's relative, force it inside reports dir so it's accessible
+                    $outputPath = $reportsDir . DIRECTORY_SEPARATOR . $outputPath;
                 }
 
                 if (file_exists($outputPath)) {
@@ -96,8 +105,17 @@ class ReportCommand extends Command
                     $this->client->download("api/scans/$scanId/report/download", $outputPath);
                     $output->writeln("Report downloaded successfully.");
                     $output->writeln("");
+                    
+                    $displayPath = $outputPath;
+                    $hostDir = getenv('TRUSTNODE_HOST_DIR');
+                    if ($hostDir && str_starts_with($outputPath, '/var/www/html/')) {
+                        $relative = substr($outputPath, strlen('/var/www/html/'));
+                        $sep = str_contains($hostDir, '\\') ? '\\' : '/';
+                        $displayPath = rtrim($hostDir, '/\\') . $sep . str_replace('/', $sep, $relative);
+                    }
+
                     $output->writeln("File:");
-                    $output->writeln($outputPath);
+                    $output->writeln($displayPath);
                     return Command::SUCCESS;
                 } catch (\Exception $e) {
                     if (str_contains($e->getMessage(), 'Resource not found') || str_contains($e->getMessage(), 'not available')) {
