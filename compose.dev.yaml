@@ -103,7 +103,7 @@ services:
     build:
       context: .
       dockerfile: ./docker/php/Dockerfile
-    command: php artisan queue:work --queue=default,scans,notifications --timeout=1800 --tries=1
+    command: php artisan queue:work --queue=default,scans,notifications --sleep=1 --timeout=1800 --tries=1 --max-time=3600 --max-jobs=1000
     restart: unless-stopped
     volumes:
       - .:/var/www/html

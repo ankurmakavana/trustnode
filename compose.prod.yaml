@@ -69,7 +69,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
-    command: php artisan queue:work --queue=default,scans,notifications
+    command: php artisan queue:work --queue=default,scans,notifications --sleep=1 --timeout=1800 --tries=1 --max-time=3600 --max-jobs=1000
     environment:
       DB_HOST: mysql
       REDIS_HOST: redis
