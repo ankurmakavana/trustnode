@@ -63,6 +63,30 @@ class LicenseApiClient
         }
     }
 
+    public function getLatestRelease(string $token): array
+    {
+        try {
+            // Note: the remote platform endpoint is /api/v1/releases/latest
+            $response = $this->getClient($token)->get("{$this->baseUrl}/api/v1/releases/latest");
+            
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'status' => $response->status(),
+                    'data' => $response->json(), // Returns the entire JSON body instead of just 'data' key, depending on API structure
+                ];
+            }
+            
+            return [
+                'success' => false,
+                'status' => $response->status(),
+                'error' => $response->json('error') ?? ['code' => 'UNKNOWN_ERROR', 'message' => 'An unknown error occurred.'],
+            ];
+        } catch (Exception $e) {
+            return $this->handleException($e, 'latest_release');
+        }
+    }
+
     public function deactivate(string $token): array
     {
         try {

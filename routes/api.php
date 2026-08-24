@@ -33,6 +33,40 @@ Route::get('/system/status', function () {
     ]);
 });
 
+Route::middleware('auth:sanctum')->get('/system/update/metadata', function () {
+    $installation = \App\Models\LicenseInstallation::latest('id')->first();
+    if (!$installation || !$installation->installation_token) {
+        return response()->json(['available' => false, 'error' => 'No active license installation found.'], 403);
+    }
+
+    $client = app(\App\Services\License\LicenseApiClient::class);
+    $response = $client->getLatestRelease($installation->installation_token);
+    
+    if (!$response['success']) {
+        return response()->json(['available' => false, 'error' => 'License platform unreachable or unauthorized.'], $response['status'] ?: 500);
+    }
+    
+    $data = $response['data'];
+    $currentVersion = config('app.version', '1.0.0');
+    $latestVersion = $data['version'] ?? 'unknown';
+    
+    // Compare versions; if no valid format, assume update available if download URL exists
+    $isAvailable = false;
+    if ($latestVersion !== 'unknown' && version_compare($latestVersion, $currentVersion, '>')) {
+        $isAvailable = true;
+    } elseif ($latestVersion === 'unknown' && !empty($data['download_url'])) {
+        $isAvailable = true; // Fallback for testing/different version strings
+    }
+    
+    return response()->json([
+        'available' => $isAvailable,
+        'current_version' => $currentVersion,
+        'version' => $latestVersion,
+        'download_url' => $isAvailable ? ($data['download_url'] ?? null) : null,
+        'sha256' => $isAvailable ? ($data['sha256'] ?? null) : null,
+    ]);
+});
+
 Route::middleware('guest')->group(function (): void {
     Route::post('/login', [AuthController::class, 'login'])
         ->middleware('throttle:5,1');

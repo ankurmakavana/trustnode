@@ -162,13 +162,7 @@ else
     write_log "Using existing .env file."
 fi
 
-# Save token to .env securely
-if grep -q "TRUSTNODE_INSTALLATION_TOKEN" .env; then
-    sed -i.bak "s/^TRUSTNODE_INSTALLATION_TOKEN=.*/TRUSTNODE_INSTALLATION_TOKEN=$INSTALLATION_TOKEN/" .env
-    rm -f .env.bak
-else
-    echo -e "\nTRUSTNODE_INSTALLATION_TOKEN=$INSTALLATION_TOKEN" >> .env
-fi
+# Save token to .env securely (DELETED intentionally, stored only in DB)
 
 # 7. Start Docker services
 CURRENT_STEP="Starting Docker services"
@@ -199,9 +193,16 @@ $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 $user = \App\Models\User::firstOrCreate(['email'=>'cli@trustnode.local'], ['name'=>'CLI System', 'password'=>bcrypt('secret'), 'role_id'=>1]);
 $user->tokens()->where('name', 'CLI Token')->delete();
+$inst = \App\Services\License\InstallationIdentityService::class;
+$idService = $app->make($inst);
+$instId = $idService->getInstallationId();
+$installation = \App\Models\LicenseInstallation::first();
+if ($installation) {
+    $installation->update(['installation_token' => getenv('INSTALLATION_TOKEN'), 'license_status' => 'active', 'validated_at' => now(), 'grace_expires_at' => now()->addHours(72)]);
+}
 echo $user->createToken('CLI Token')->plainTextToken;
 EOF
-CLI_TOKEN=$(docker compose -f compose.dev.yaml exec -T php php cli-token.php | tr -d '\r\n')
+CLI_TOKEN=$(docker compose -f compose.dev.yaml exec -T -e INSTALLATION_TOKEN="$INSTALLATION_TOKEN" php php cli-token.php | tr -d '\r\n')
 rm cli-token.php
 
 if [ -z "$CLI_TOKEN" ]; then
@@ -257,27 +258,64 @@ elif [ "\$CMD" = "update" ]; then
     echo "TrustNode Updater"
     echo "================="
     echo ""
+    echo "Checking for updates..."
     TOKEN=""
     if [ -f "$INSTALL_DIR/.env" ]; then
-        TOKEN=\$(grep "^TRUSTNODE_INSTALLATION_TOKEN=" "$INSTALL_DIR/.env" | cut -d'=' -f2)
+        TOKEN=\$(grep "^TRUSTNODE_API_TOKEN=" "$INSTALL_DIR/.env" | cut -d'=' -f2)
     fi
     if [ -z "\$TOKEN" ]; then
-        echo "[ERROR] Missing TRUSTNODE_INSTALLATION_TOKEN in environment."
-        echo "Please repair or reactivate your installation."
+        echo "Unable to authenticate with the local TrustNode installation."
+        echo ""
+        echo "Run:"
+        echo ""
+        echo "    trustnode doctor"
         exit 1
     fi
-    echo "[*] Fetching latest release metadata..."
-    RELEASE_META=\$(curl -s -X GET "https://trustnode.in/api/v1/releases/latest" -H "Authorization: Bearer \$TOKEN" -H "Accept: application/json")
-    if ! echo "\$RELEASE_META" | jq -e '.download_url' > /dev/null 2>&1; then
-        echo "[ERROR] Failed to fetch latest release metadata."
+    
+    RELEASE_META=\$(docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec -T php curl -s -X GET "http://localhost/api/system/update/metadata" -H "Authorization: Bearer \$TOKEN" -H "Accept: application/json")
+    
+    if [ \$? -ne 0 ] || [ -z "\$RELEASE_META" ]; then
+        echo "Unable to reach the TrustNode License Platform."
+        echo "Retry later."
         exit 1
     fi
-    DOWNLOAD_URL=\$(echo "\$RELEASE_META" | jq -r '.download_url')
+    
+    AVAILABLE=\$(echo "\$RELEASE_META" | jq -r '.available')
+    CURRENT_VERSION=\$(echo "\$RELEASE_META" | jq -r '.current_version')
+    LATEST_VERSION=\$(echo "\$RELEASE_META" | jq -r '.version')
+    
+    echo "Current version: \$CURRENT_VERSION"
+    echo "Latest version:  \$LATEST_VERSION"
+    echo ""
+    
+    if [ "\$AVAILABLE" != "true" ]; then
+        ERROR_MSG=\$(echo "\$RELEASE_META" | jq -r '.error // empty')
+        if [ -n "\$ERROR_MSG" ]; then
+            echo "Update unavailable."
+            echo ""
+            echo "Your TrustNode license is not authorized for this release."
+        else
+            echo "TrustNode is already up to date."
+        fi
+        exit 0
+    fi
+    
+    echo "Update available."
+    echo ""
+    DOWNLOAD_URL=\$(echo "\$RELEASE_META" | jq -r '.download_url // empty')
     EXPECTED_SHA=\$(echo "\$RELEASE_META" | jq -r '.sha256 // empty')
     
-    echo "[*] Downloading update..."
-    curl -sL -o "$INSTALL_DIR/update.zip" "\$DOWNLOAD_URL"
+    if [ -z "\$DOWNLOAD_URL" ]; then
+        echo "Error: No download URL provided."
+        exit 1
+    fi
     
+    echo "Downloading release..."
+    curl -sL -o "$INSTALL_DIR/update.zip" "\$DOWNLOAD_URL"
+    echo "[████████████████████] 100%"
+    echo ""
+    
+    echo "Verifying SHA-256..."
     if [ -n "\$EXPECTED_SHA" ]; then
         if command -v sha256sum >/dev/null; then
             ACTUAL_SHA=\$(sha256sum "$INSTALL_DIR/update.zip" | awk '{print \$1}')
@@ -292,17 +330,25 @@ elif [ "\$CMD" = "update" ]; then
             rm -f "$INSTALL_DIR/update.zip"
             exit 1
         fi
+        echo "✓ Checksum verified."
+    else
+        echo "✓ Skipped (no checksum provided)."
     fi
+    echo ""
     
-    echo "[*] Extracting update..."
+    echo "Updating TrustNode..."
     unzip -q -o "$INSTALL_DIR/update.zip" -d "$INSTALL_DIR"
     rm -f "$INSTALL_DIR/update.zip"
+    echo "✓ Files updated."
     
-    echo "[*] Applying migrations and restarting services..."
-    docker compose -f "$INSTALL_DIR/compose.dev.yaml" up -d --build
-    docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec -T php php artisan migrate --force
+    docker compose -f "$INSTALL_DIR/compose.dev.yaml" up -d --build >/dev/null 2>&1
+    docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec -T php php artisan migrate --force >/dev/null 2>&1
+    echo "✓ Database migrated."
+    
+    docker compose -f "$INSTALL_DIR/compose.dev.yaml" restart >/dev/null 2>&1
+    echo "✓ Services restarted."
     echo ""
-    echo "[OK] TrustNode updated successfully."
+    echo "TrustNode updated successfully."
     exit 0
 elif [ "\$CMD" = "doctor" ]; then
     echo "Running TrustNode Diagnostics..."

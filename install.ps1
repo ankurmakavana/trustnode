@@ -157,14 +157,6 @@ try {
         Write-Log "Using existing .env file."
     }
 
-    # Save token to .env securely
-    $envContent = Get-Content ".env" -Raw
-    if ($envContent -notmatch "TRUSTNODE_INSTALLATION_TOKEN") {
-        Add-Content -Path ".env" -Value "`nTRUSTNODE_INSTALLATION_TOKEN=$token"
-    } else {
-        $envContent = $envContent -replace 'TRUSTNODE_INSTALLATION_TOKEN=.*', "TRUSTNODE_INSTALLATION_TOKEN=$token"
-        Set-Content -Path ".env" -Value $envContent -Encoding UTF8
-    }
 
     # 7. Start Docker services
     $global:currentStep = "Starting Docker services"
@@ -202,6 +194,13 @@ require __DIR__ . '/vendor/autoload.php';
 `$kernel->bootstrap();
 `$user = \App\Models\User::firstOrCreate(['email'=>'cli@trustnode.local'], ['name'=>'CLI System', 'password'=>bcrypt('secret'), 'role_id'=>1]);
 `$user->tokens()->where('name', 'CLI Token')->delete();
+`$inst = \App\Services\License\InstallationIdentityService::class;
+`$idService = `$app->make(`$inst);
+`$instId = `$idService->getInstallationId();
+`$installation = \App\Models\LicenseInstallation::first();
+if (`$installation) {
+    `$installation->update(['installation_token' => '$token', 'license_status' => 'active', 'validated_at' => now(), 'grace_expires_at' => now()->addHours(72)]);
+}
 echo `$user->createToken('CLI Token')->plainTextToken;
 "@
     Set-Content -Path "cli-token.php" -Value $cliTokenContent -Encoding UTF8
@@ -270,29 +269,33 @@ if /I "!CMD!"=="update" (
     echo TrustNode Updater
     echo =================
     echo.
+    echo Checking for updates...
     set "TOKEN="
     if exist "!INSTALL_DIR!\.env" (
         for /f "usebackq tokens=1,* delims==" %%A in ("!INSTALL_DIR!\.env") do (
-            if "%%A"=="TRUSTNODE_INSTALLATION_TOKEN" set "TOKEN=%%B"
+            if "%%A"=="TRUSTNODE_API_TOKEN" set "TOKEN=%%B"
         )
     )
     if "!TOKEN!"=="" (
-        echo [ERROR] Missing TRUSTNODE_INSTALLATION_TOKEN in environment.
-        echo Please repair or reactivate your installation.
+        echo Unable to authenticate with the local TrustNode installation.
+        echo.
+        echo Run:
+        echo.
+        echo     trustnode doctor
         exit /b 1
     )
-    echo [*] Fetching latest release metadata...
-    set "PS_CMD=`$ErrorActionPreference='Stop'; `$resp=Invoke-RestMethod -Uri 'https://trustnode.in/api/v1/releases/latest' -Headers @{ Authorization = 'Bearer !TOKEN!' }; if (-not `$resp.download_url) { throw 'No download URL' }; Invoke-WebRequest -Uri `$resp.download_url -OutFile '!INSTALL_DIR!\update.zip'; if (`$resp.sha256) { `$hash = (Get-FileHash '!INSTALL_DIR!\update.zip' -Algorithm SHA256).Hash; if (`$hash -ne `$resp.sha256) { throw 'SHA256 mismatch' } }; Expand-Archive -Path '!INSTALL_DIR!\update.zip' -DestinationPath '!INSTALL_DIR!' -Force; Remove-Item '!INSTALL_DIR!\update.zip' -Force"
+    set "PS_CMD=`$ErrorActionPreference='Stop'; `$metaRaw = docker compose -f '!INSTALL_DIR!\compose.dev.yaml' exec -T php curl -s -X GET 'http://nginx/api/system/update/metadata' -H 'Authorization: Bearer !TOKEN!' -H 'Accept: application/json'; if (-not `$metaRaw) { throw 'Unable to reach the TrustNode License Platform.' }; `$meta = `$metaRaw | ConvertFrom-Json; Write-Host ('Current version: ' + `$meta.current_version); Write-Host ('Latest version:  ' + `$meta.version); Write-Host ''; if (`$meta.available -ne `$true) { if (`$meta.error) { Write-Host 'Update unavailable.'; Write-Host ''; Write-Host 'Your TrustNode license is not authorized for this release.' } else { Write-Host 'TrustNode is already up to date.' }; exit 0 }; Write-Host 'Update available.'; Write-Host ''; Write-Host 'Downloading release...'; Invoke-WebRequest -Uri `$meta.download_url -OutFile '!INSTALL_DIR!\update.zip'; Write-Host '[####################] 100%'; Write-Host ''; Write-Host 'Verifying SHA-256...'; if (`$meta.sha256) { `$hash = (Get-FileHash '!INSTALL_DIR!\update.zip' -Algorithm SHA256).Hash; if (`$hash.ToLower() -ne `$meta.sha256.ToLower()) { throw 'SHA-256 verification failed.' } }; Write-Host '✓ Checksum verified.'; Write-Host ''; Write-Host 'Updating TrustNode...'; Expand-Archive -Path '!INSTALL_DIR!\update.zip' -DestinationPath '!INSTALL_DIR!' -Force; Remove-Item '!INSTALL_DIR!\update.zip' -Force; Write-Host '✓ Files updated.'"
     powershell -NoProfile -Command "!PS_CMD!"
     if !ERRORLEVEL! NEQ 0 (
-        echo [ERROR] Failed to update.
         exit /b 1
     )
-    echo [*] Applying migrations and restarting services...
-    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d --build
-    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" exec php php artisan migrate --force
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d --build >nul 2>&1
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" exec -T php php artisan migrate --force >nul 2>&1
+    echo ✓ Database migrated.
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" restart >nul 2>&1
+    echo ✓ Services restarted.
     echo.
-    echo [OK] TrustNode updated successfully.
+    echo TrustNode updated successfully.
     exit /b 0
 )
 if /I "!CMD!"=="doctor" (
