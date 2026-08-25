@@ -13,12 +13,6 @@ class UpdateCommand extends Command
 {
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $token = getenv('TRUSTNODE_INSTALLATION_TOKEN');
-        if (!$token) {
-            $output->writeln('<error>Missing TRUSTNODE_INSTALLATION_TOKEN in environment.</error>');
-            return Command::FAILURE;
-        }
-
         $platformUrl = 'https://trustnode.in';
         $client = new Client(['base_uri' => $platformUrl]);
 
@@ -27,7 +21,6 @@ class UpdateCommand extends Command
         try {
             $response = $client->get('/api/v1/releases/latest', [
                 'headers' => [
-                    'Authorization' => 'Bearer ' . $token,
                     'Accept' => 'application/json'
                 ]
             ]);
@@ -72,7 +65,8 @@ class UpdateCommand extends Command
             return Command::SUCCESS;
 
         } catch (\Exception $e) {
-            $output->writeln('<error>Update failed: ' . $e->getMessage() . '</error>');
+            $output->writeln('<error>[ERROR] Unable to check for updates.</error>');
+            $output->writeln('<error>Please try again later.</error>');
             return Command::FAILURE;
         }
     }
