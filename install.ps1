@@ -1,3 +1,7 @@
+param(
+    [string]$Mode = "install"
+)
+
 $ErrorActionPreference = "Stop"
 $VerbosePreference = "Continue"
 
@@ -60,11 +64,15 @@ try {
     Write-Log " TrustNode One-Command Installer (Windows) "
     Write-Log "==============================================="
 
-    $global:currentStep = "Prompting for License Key"
-    $LICENSE_KEY = Read-Host -Prompt "Enter your TrustNode License Key"
+    if ($Mode -eq "install") {
+        $global:currentStep = "Prompting for License Key"
+        $LICENSE_KEY = Read-Host -Prompt "Enter your TrustNode License Key"
 
-    if ([string]::IsNullOrWhiteSpace($LICENSE_KEY)) {
-        throw "License Key is required for installation."
+        if ([string]::IsNullOrWhiteSpace($LICENSE_KEY)) {
+            throw "License Key is required for installation."
+        }
+    } else {
+        Write-Log "Running TrustNode in UPDATE mode" "INFO"
     }
 
     # 1. Detect OS & Permissions
@@ -95,53 +103,73 @@ try {
     $global:currentStep = "Setting up installation directory"
     $installDir = "$env:USERPROFILE\trustnode-app"
     Write-Log "`n[*] Setting up installation directory at $installDir"
+    if ($Mode -eq "update" -and -not (Test-Path $installDir)) {
+        throw "Existing TrustNode installation not found at $installDir. Cannot update."
+    }
     if (-not (Test-Path $installDir)) {
         New-Item -ItemType Directory -Path $installDir -Force | Out-Null
     }
     Set-Location $installDir
 
-    $global:currentStep = "Authenticating installation"
-    Write-Log "`n[*] Authenticating installation..."
-    $machineId = (New-Guid).ToString()
-    $hostname = [System.Net.Dns]::GetHostName()
+    if ($Mode -eq "install") {
+        Write-Log "`n[*] Authenticating installation..."
+        $machineId = (New-Guid).ToString()
+        $hostname = [System.Net.Dns]::GetHostName()
 
-    $activationData = @{
-        license_key = $LICENSE_KEY
-        installation_id = $machineId
-        installation_fingerprint = $machineId
-        installation_name = "Windows Installation"
-        hostname = $hostname
+        $activationData = @{
+            license_key = $LICENSE_KEY
+            installation_id = $machineId
+            installation_fingerprint = $machineId
+            installation_name = "Windows Installation"
+            hostname = $hostname
+        }
+
+        $PLATFORM_URL = "https://trustnode.in"
+
+        try {
+            $activationResponse = Invoke-RestMethod -Uri "$PLATFORM_URL/api/v1/licenses/activate" -Method Post -Body ($activationData | ConvertTo-Json) -ContentType "application/json"
+        } catch {
+            throw "Failed to activate license. Check your license key or contact support. Details: $_"
+        }
+        $token = $activationResponse.data.installation_token
     }
-
-    $PLATFORM_URL = "https://trustnode.in"
-
-    try {
-        $activationResponse = Invoke-RestMethod -Uri "$PLATFORM_URL/api/v1/licenses/activate" -Method Post -Body ($activationData | ConvertTo-Json) -ContentType "application/json"
-    } catch {
-        throw "Failed to activate license. Check your license key or contact support. Details: $_"
-    }
-
-    $token = $activationResponse.data.installation_token
 
     $global:currentStep = "Fetching latest release"
     Write-Log "`n[*] Fetching latest release..."
     try {
-        $releaseResponse = Invoke-RestMethod -Uri "$PLATFORM_URL/api/v1/releases/latest" -Method Get -Headers @{ "Authorization" = "Bearer $token" }
+        $releaseResponse = Invoke-RestMethod -Uri "https://trustnode.in/api/v1/releases/core/latest" -Method Get
     } catch {
-        throw "Failed to fetch latest release metadata. Details: $_"
+        throw "Failed to fetch latest release metadata from core/latest API. Details: $_"
     }
 
-    $downloadUrl = $releaseResponse.download_url
-    $tempZip = "$env:TEMP\trustnode-release.zip"
+    $artifactUrl = $releaseResponse.download_url
+    if ([string]::IsNullOrWhiteSpace($artifactUrl)) {
+        throw "Release API did not return a valid download_url."
+    }
 
-    $global:currentStep = "Downloading release artifact"
+    $global:currentStep = "Downloading TrustNode Release"
     Write-Log "`n[*] Downloading TrustNode release artifact..."
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip -ErrorAction Stop
+    $artifactPath = "$installDir\trustnode.zip"
 
-    $global:currentStep = "Extracting artifact"
-    Write-Log "`n[*] Extracting artifact..."
-    Expand-Archive -Path $tempZip -DestinationPath $installDir -Force -ErrorAction Stop
-    Remove-Item -Path $tempZip -Force -ErrorAction SilentlyContinue
+    # Temporary directory for extracting the update
+    $tempExtractDir = "$installDir\temp_update_extract"
+    
+    Invoke-WebRequest -Uri $artifactUrl -OutFile $artifactPath
+
+    Write-Log "[*] Extracting release artifact..."
+    if (Test-Path $tempExtractDir) {
+        Remove-Item -Path $tempExtractDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $tempExtractDir -Force | Out-Null
+    Expand-Archive -Path $artifactPath -DestinationPath $tempExtractDir -Force
+    Remove-Item $artifactPath
+
+    Write-Log "[*] Applying update files..."
+    
+    # We copy the new files over the existing ones, preserving existing data.
+    Copy-Item -Path "$tempExtractDir\*" -Destination $installDir -Recurse -Force
+    
+    Remove-Item -Path $tempExtractDir -Recurse -Force -ErrorAction SilentlyContinue
 
     # 5. Environment configuration
     $global:currentStep = "Configuring environment"
@@ -175,6 +203,24 @@ try {
     $composerInstall = docker compose -f compose.dev.yaml exec -T php composer install --no-interaction --prefer-dist 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Composer install failed: $composerInstall" }
 
+    if ($Mode -eq "install") {
+        $envFile = "$installDir\.env"
+        # Update environment variables
+        Write-Log "[*] Configuring environment..."
+        
+        $env:TRUSTNODE_API_URL = "https://trustnode.in"
+        $env:TRUSTNODE_INSTALLATION_TOKEN = $token
+
+        $envContent = Get-Content $envFile -Raw
+        $envContent = $envContent -replace '(?m)^TRUSTNODE_API_URL=.*$', "TRUSTNODE_API_URL=$env:TRUSTNODE_API_URL"
+        $envContent = $envContent -replace '(?m)^TRUSTNODE_INSTALLATION_TOKEN=.*$', "TRUSTNODE_INSTALLATION_TOKEN=$env:TRUSTNODE_INSTALLATION_TOKEN"
+        
+        if (-not ($envContent -match "^TRUSTNODE_API_URL=")) { $envContent += "`nTRUSTNODE_API_URL=$env:TRUSTNODE_API_URL" }
+        if (-not ($envContent -match "^TRUSTNODE_INSTALLATION_TOKEN=")) { $envContent += "`nTRUSTNODE_INSTALLATION_TOKEN=$env:TRUSTNODE_INSTALLATION_TOKEN" }
+
+        Set-Content -Path $envFile -Value $envContent
+    }
+
     $envContent = Get-Content ".env" -Raw
     if ($envContent -notmatch "APP_KEY=base64:") {
         $keyGen = docker compose -f compose.dev.yaml exec -T php php artisan key:generate --force 2>&1
@@ -184,44 +230,11 @@ try {
     $migrate = docker compose -f compose.dev.yaml exec -T php php artisan migrate --force 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Migration failed: $migrate" }
 
-    $global:currentStep = "Configuring CLI authentication"
-    Write-Log "`n[*] Configuring CLI authentication..."
-    $cliTokenContent = @"
-<?php
-require __DIR__ . '/vendor/autoload.php';
-`$app = require_once __DIR__ . '/bootstrap/app.php';
-`$kernel = `$app->make(Illuminate\Contracts\Console\Kernel::class);
-`$kernel->bootstrap();
-`$user = \App\Models\User::firstOrCreate(['email'=>'cli@trustnode.local'], ['name'=>'CLI System', 'password'=>bcrypt('secret'), 'role_id'=>1]);
-`$user->tokens()->where('name', 'CLI Token')->delete();
-`$inst = \App\Services\License\InstallationIdentityService::class;
-`$idService = `$app->make(`$inst);
-`$instId = `$idService->getInstallationId();
-`$installation = \App\Models\LicenseInstallation::first();
-if (`$installation) {
-    `$installation->update(['installation_token' => '$token', 'license_status' => 'active', 'validated_at' => now(), 'grace_expires_at' => now()->addHours(72)]);
-}
-echo `$user->createToken('CLI Token')->plainTextToken;
-"@
-    Set-Content -Path "cli-token.php" -Value $cliTokenContent -Encoding UTF8
-    $cliTokenRaw = docker compose -f compose.dev.yaml exec -T php php cli-token.php
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($cliTokenRaw)) {
-        throw "Failed to generate CLI token. Is the PHP container running? Output: $cliTokenRaw"
-    }
-    $cliToken = $cliTokenRaw.Trim()
-    Remove-Item "cli-token.php" -Force -ErrorAction SilentlyContinue
-
-    # Save CLI token to .env securely
-    $envContent = Get-Content ".env" -Raw
-    if ($envContent -notmatch "TRUSTNODE_API_TOKEN") {
-        Add-Content -Path ".env" -Value "`nTRUSTNODE_API_TOKEN=$cliToken"
-    } else {
-        $envContent = $envContent -replace 'TRUSTNODE_API_TOKEN=.*', "TRUSTNODE_API_TOKEN=$cliToken"
-        Set-Content -Path ".env" -Value $envContent -Encoding UTF8
-    }
-
     # 11. Build frontend assets
     $global:currentStep = "Building frontend assets"
+    if ($Mode -eq "install") {
+        docker compose -f "$installDir\compose.dev.yaml" down -v --remove-orphans >$null 2>&1
+    }
     Write-Log "`n[*] Building frontend assets..."
     $npmInstall = docker compose -f compose.dev.yaml exec -T node npm install 2>&1
     if ($LASTEXITCODE -ne 0) { throw "npm install failed: $npmInstall" }
@@ -230,45 +243,35 @@ echo `$user->createToken('CLI Token')->plainTextToken;
     if ($LASTEXITCODE -ne 0) { throw "npm build failed: $npmBuild" }
 
     # 12. CLI Installation
-    $global:currentStep = "Installing TrustNode CLI"
-    Write-Log "`n[*] Installing TrustNode CLI..."
+    $global:currentStep = "Generating CLI Wrapper"
     $cliWrapperPath = "$installDir\trustnode.cmd"
+    Write-Log "`n[*] Generating CLI wrapper at $cliWrapperPath..."
+
     $cliWrapperContent = @"
 @echo off
 setlocal EnableDelayedExpansion
 
-docker info >nul 2>&1
-if !ERRORLEVEL! NEQ 0 (
-    echo [TrustNode CLI] Error: Docker is not running or not accessible.
-    echo Please start Docker Desktop/Engine before using the CLI.
-    exit /b 1
-)
-
+set "INSTALL_DIR=$installDir"
 set "CMD=%~1"
 set "CMD_ARG2=%~2"
-set "INSTALL_DIR=%~dp0"
-set "INSTALL_DIR=!INSTALL_DIR:~0,-1!"
+
+if /I "!CMD!"=="update" (
+    echo TrustNode Updater
+    echo =================
+    powershell -NoProfile -Command "`$script = irm https://trustnode.in/install.ps1; & ([scriptblock]::Create(`$script)) -Mode update"
+    exit /b !ERRORLEVEL!
+)
 
 if /I "!CMD!"=="start" (
-    echo Starting TrustNode...
-    echo.
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d
-    if !ERRORLEVEL! NEQ 0 (
-        echo.
-        echo [ERROR] Unable to start TrustNode services.
-        exit /b 1
-    )
-    echo.
-    echo [OK] Services started
-    echo [OK] TrustNode is running
-    exit /b 0
+    exit /b !ERRORLEVEL!
 )
 if /I "!CMD!"=="stop" (
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" stop
     exit /b !ERRORLEVEL!
 )
-if /I "!CMD!"=="restart" (
-    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" restart
+if /I "!CMD!"=="down" (
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" down
     exit /b !ERRORLEVEL!
 )
 if /I "!CMD!"=="status" (
@@ -277,12 +280,6 @@ if /I "!CMD!"=="status" (
 )
 if /I "!CMD!"=="logs" (
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" logs -f !CMD_ARG2!
-    exit /b !ERRORLEVEL!
-)
-if /I "!CMD!"=="update" (
-    echo TrustNode Updater
-    echo =================
-    powershell -NoProfile -Command "$script = irm https://trustnode.in/install.ps1; & ([scriptblock]::Create($script)) -Mode update"
     exit /b !ERRORLEVEL!
 )
 if /I "!CMD!"=="doctor" (
@@ -298,14 +295,6 @@ if /I "!CMD!"=="doctor" (
     echo Checking Services...
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" ps | findstr "php" >nul
     if !ERRORLEVEL! EQU 0 ( echo [OK] Services are running ) else ( echo [FAIL] Services are stopped )
-    echo.
-    echo Run 'trustnode repair' to attempt safe automated fixes.
-    exit /b 0
-)
-if /I "!CMD!"=="repair" (
-    echo Attempting safe repair operations...
-    if not exist "!INSTALL_DIR!\.env" (
-        echo [TrustNode CLI] Error: .env file is missing. Please re-run the full installer.
         exit /b 1
     )
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d
