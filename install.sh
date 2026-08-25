@@ -317,9 +317,9 @@ elif [ "\$CMD" = "update" ]; then
     if [ "\$AVAILABLE" != "true" ]; then
         ERROR_MSG=\$(echo "\$RELEASE_META" | jq -r '.error // empty')
         if [ -n "\$ERROR_MSG" ]; then
-            echo "[ERROR] Update unavailable."
+            echo "[ERROR] \$ERROR_MSG"
             echo ""
-            echo "Your TrustNode license is not authorized for this release."
+            echo "Please try again later."
             exit 1
         else
             echo "[OK] TrustNode is already up to date."

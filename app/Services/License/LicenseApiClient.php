@@ -63,7 +63,7 @@ class LicenseApiClient
         }
     }
 
-    public function getLatestRelease(string $token): array
+    public function getLatestRelease(?string $token = null): array
     {
         try {
             // Note: the remote platform endpoint is /api/v1/releases/latest
