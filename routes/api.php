@@ -29,65 +29,21 @@ Route::get('/system/status', function () {
         'application' => 'Healthy',
         'database' => \Illuminate\Support\Facades\DB::connection()->getPdo() ? 'Connected' : 'Error',
         'queue' => 'Available',
-        'license' => \App\Facades\LicenseGate::status()['status'] ?? 'Community'
+        'license' => 'Developer'
     ]);
 });
 
 Route::middleware('auth:sanctum')->get('/system/update/metadata', function () {
     $currentVersion = config('app.version', '1.0.0');
     
-    $installation = \App\Models\LicenseInstallation::latest('id')->first();
-    $token = $installation ? $installation->installation_token : null;
-
-    $client = app(\App\Services\License\LicenseApiClient::class);
-    $response = $client->getLatestRelease($token);
-    
-    if (!$response['success']) {
-        $errorCode = $response['error']['code'] ?? 'UNKNOWN_ERROR';
-        $status = $response['status'] ?? 500;
-        
-        $mappedCode = 'invalid_update_response';
-        if ($errorCode === 'NETWORK_ERROR') {
-            $mappedCode = 'update_service_unavailable';
-        } elseif ($status === 401 || $status === 403 || $errorCode === 'UNAUTHORIZED') {
-            $mappedCode = $token ? 'release_not_authorized' : 'update_service_unavailable';
-        }
-
-        return response()->json([
-            'available' => false, 
-            'error_code' => $mappedCode,
-            'current_version' => $currentVersion, 
-            'version' => 'unknown'
-        ], $status ?: 500);
-    }
-    
-    $data = $response['data'] ?? [];
-    $latestVersion = $data['version'] ?? 'unknown';
-    
-    // Compare versions; if no valid format, assume update available if download URL exists
-    $isAvailable = false;
-    if ($latestVersion !== 'unknown' && version_compare($latestVersion, $currentVersion, '>')) {
-        $isAvailable = true;
-    } elseif ($latestVersion === 'unknown' && !empty($data['download_url'])) {
-        $isAvailable = true; // Fallback for testing/different version strings
-    }
-    
-    if (!$isAvailable) {
-        return response()->json([
-            'available' => false,
-            'up_to_date' => true,
-            'current_version' => $currentVersion,
-            'latest_version' => $latestVersion !== 'unknown' ? $latestVersion : $currentVersion,
-        ]);
-    }
-    
+    // For the Free Developer version, the update metadata service is not actively deployed
+    // Return service unavailable unconditionally to avoid contacting any license platform
     return response()->json([
-        'available' => true,
-        'current_version' => $currentVersion,
-        'version' => $latestVersion,
-        'download_url' => $data['download_url'] ?? null,
-        'sha256' => $data['sha256'] ?? null,
-    ]);
+        'available' => false, 
+        'error_code' => 'update_service_unavailable',
+        'current_version' => $currentVersion, 
+        'version' => 'unknown'
+    ], 500);
 });
 
 Route::middleware('guest')->group(function (): void {
