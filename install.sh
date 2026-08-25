@@ -243,13 +243,26 @@ CMD="\$1"
 CMD_ARG2="\$2"
 
 if [ "\$CMD" = "start" ]; then
+    echo "Starting TrustNode..."
+    echo ""
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" up -d
-    exit \$?
+    if [ \$? -ne 0 ]; then
+        echo ""
+        echo "[ERROR] Unable to start TrustNode services."
+        exit 1
+    fi
+    echo ""
+    echo "[OK] Services started"
+    echo "[OK] TrustNode is running"
+    exit 0
 elif [ "\$CMD" = "stop" ]; then
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" stop
     exit \$?
 elif [ "\$CMD" = "restart" ]; then
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" restart
+    exit \$?
+elif [ "\$CMD" = "status" ]; then
+    docker compose -f "$INSTALL_DIR/compose.dev.yaml" ps
     exit \$?
 elif [ "\$CMD" = "logs" ]; then
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" logs -f "\$CMD_ARG2"
@@ -258,6 +271,19 @@ elif [ "\$CMD" = "update" ]; then
     echo "TrustNode Updater"
     echo "================="
     echo ""
+    
+    if ! docker compose -f "$INSTALL_DIR/compose.dev.yaml" ps | grep -q "php"; then
+        echo "Starting required TrustNode services..."
+        docker compose -f "$INSTALL_DIR/compose.dev.yaml" up -d
+        if [ \$? -ne 0 ]; then
+            echo ""
+            echo "[ERROR] Unable to start TrustNode services."
+            exit 1
+        fi
+        echo "Waiting for services to initialize..."
+        sleep 5
+    fi
+    
     echo "Checking for updates..."
     TOKEN=""
     if [ -f "$INSTALL_DIR/.env" ]; then
@@ -446,16 +472,20 @@ if [ -t 0 ] && [ -t 1 ]; then
     fi
 fi
 
+docker compose -f "$INSTALL_DIR/compose.dev.yaml" ps | grep -q "php"
+if [ \$? -ne 0 ]; then
+    echo ""
+    echo "[ERROR] TrustNode is not running."
+    echo ""
+    echo "Start it with:"
+    echo ""
+    echo "  trustnode start"
+    exit 1
+fi
+
 docker compose -f "$INSTALL_DIR/compose.dev.yaml" exec \$TTY_ARGS -e TRUSTNODE_API_URL=http://nginx -e TRUSTNODE_HOST_DIR="$INSTALL_DIR" php php cli/bin/trustnode "\$@"
 EXIT_CODE=\$?
 
-if [ \$EXIT_CODE -ne 0 ]; then
-    if ! docker compose -f "$INSTALL_DIR/compose.dev.yaml" ps -q php >/dev/null 2>&1; then
-        echo ""
-        echo "[TrustNode CLI] The required TrustNode container 'php' is not running."
-        echo "Please start the application: trustnode start"
-    fi
-fi
 exit \$EXIT_CODE
 EOF
 chmod +x "$CLI_WRAPPER"

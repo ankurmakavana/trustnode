@@ -250,8 +250,18 @@ set "INSTALL_DIR=%~dp0"
 set "INSTALL_DIR=!INSTALL_DIR:~0,-1!"
 
 if /I "!CMD!"=="start" (
+    echo Starting TrustNode...
+    echo.
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d
-    exit /b !ERRORLEVEL!
+    if !ERRORLEVEL! NEQ 0 (
+        echo.
+        echo [ERROR] Unable to start TrustNode services.
+        exit /b 1
+    )
+    echo.
+    echo [OK] Services started
+    echo [OK] TrustNode is running
+    exit /b 0
 )
 if /I "!CMD!"=="stop" (
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" stop
@@ -259,6 +269,10 @@ if /I "!CMD!"=="stop" (
 )
 if /I "!CMD!"=="restart" (
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" restart
+    exit /b !ERRORLEVEL!
+)
+if /I "!CMD!"=="status" (
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" ps
     exit /b !ERRORLEVEL!
 )
 if /I "!CMD!"=="logs" (
@@ -269,6 +283,20 @@ if /I "!CMD!"=="update" (
     echo TrustNode Updater
     echo =================
     echo.
+    
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" ps | findstr "php" >nul
+    if !ERRORLEVEL! NEQ 0 (
+        echo Starting required TrustNode services...
+        docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d
+        if !ERRORLEVEL! NEQ 0 (
+            echo.
+            echo [ERROR] Unable to start TrustNode services.
+            exit /b 1
+        )
+        echo Waiting for services to initialize...
+        ping 127.0.0.1 -n 6 >nul
+    )
+    
     echo Checking for updates...
     set "TOKEN="
     if exist "!INSTALL_DIR!\.env" (
@@ -287,7 +315,7 @@ if /I "!CMD!"=="update" (
     set "PS_CMD=$ErrorActionPreference='Stop'; $metaRaw = docker compose -f '!INSTALL_DIR!\compose.dev.yaml' exec -T php curl -s -X GET 'http://nginx/api/system/update/metadata' -H 'Authorization: Bearer !TOKEN!' -H 'Accept: application/json'; if (-not $metaRaw) { throw 'Unable to reach the TrustNode License Platform.' }; $meta = $metaRaw | ConvertFrom-Json; Write-Host ('Current version: ' + $meta.current_version); Write-Host ('Latest version:  ' + $meta.version); Write-Host ''; if ($meta.available -ne $true) { if ($meta.error) { Write-Host '[ERROR] Update unavailable.'; Write-Host ''; Write-Host 'Your TrustNode license is not authorized for this release.'; exit 1 } else { Write-Host '[OK] TrustNode is already up to date.'; exit 0 } }; Write-Host 'Update available: ' $meta.version; Write-Host ''; Write-Host 'Downloading update...'; Invoke-WebRequest -Uri $meta.download_url -OutFile '!INSTALL_DIR!\update.zip'; Write-Host 'Verifying package...'; if ($meta.sha256) { $hash = (Get-FileHash '!INSTALL_DIR!\update.zip' -Algorithm SHA256).Hash; if ($hash.ToLower() -ne $meta.sha256.ToLower()) { throw 'SHA-256 verification failed.' } }; Write-Host 'Installing update...'; Expand-Archive -Path '!INSTALL_DIR!\update.zip' -DestinationPath '!INSTALL_DIR!' -Force; Remove-Item '!INSTALL_DIR!\update.zip' -Force; Set-Content -Path '!INSTALL_DIR!\.update_version' -Value $meta.version"
     powershell -NoProfile -Command "!PS_CMD!"
     if !ERRORLEVEL! NEQ 0 (
-        exit /b !ERRORLEVEL!
+        exit /b 1
     )
     
     echo Running database migrations...
@@ -402,6 +430,17 @@ if /I "!CMD!"=="help" (
     exit /b 0
 )
 
+docker compose -f "!INSTALL_DIR!\compose.dev.yaml" ps | findstr "php" >nul
+if !ERRORLEVEL! NEQ 0 (
+    echo.
+    echo [ERROR] TrustNode is not running.
+    echo.
+    echo Start it with:
+    echo.
+    echo   trustnode start
+    exit /b 1
+)
+
 set "TTY_ARGS= "
 if /I "!CMD!"=="scan" set "TTY_ARGS=-it"
 if /I "!CMD!"=="repair" set "TTY_ARGS=-it"
@@ -409,14 +448,6 @@ if /I "!CMD!"=="repair" set "TTY_ARGS=-it"
 docker compose -f "!INSTALL_DIR!\compose.dev.yaml" exec !TTY_ARGS! -e TRUSTNODE_API_URL=http://nginx -e TRUSTNODE_HOST_DIR="!INSTALL_DIR!" php php cli/bin/trustnode %*
 set "EXIT_CODE=!ERRORLEVEL!"
 
-if !EXIT_CODE! NEQ 0 (
-    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" ps -q php >nul 2>&1
-    if !ERRORLEVEL! NEQ 0 (
-        echo.
-        echo [TrustNode CLI] The required TrustNode container 'php' is not running.
-        echo Please start the application: trustnode start
-    )
-)
 exit /b !EXIT_CODE!
 "@
     Set-Content -Path $cliWrapperPath -Value $cliWrapperContent -Encoding Ascii
