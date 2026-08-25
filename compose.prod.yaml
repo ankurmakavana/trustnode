@@ -1,3 +1,4 @@
+name: trustnode
 services:
   # Nginx Web Server Proxy (Serves pre-compiled production assets)
   nginx:

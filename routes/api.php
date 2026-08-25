@@ -43,15 +43,25 @@ Route::middleware('auth:sanctum')->get('/system/update/metadata', function () {
     $response = $client->getLatestRelease($token);
     
     if (!$response['success']) {
+        $errorCode = $response['error']['code'] ?? 'UNKNOWN_ERROR';
+        $status = $response['status'] ?? 500;
+        
+        $mappedCode = 'invalid_update_response';
+        if ($errorCode === 'NETWORK_ERROR') {
+            $mappedCode = 'update_service_unavailable';
+        } elseif ($status === 401 || $status === 403 || $errorCode === 'UNAUTHORIZED') {
+            $mappedCode = $token ? 'release_not_authorized' : 'update_service_unavailable';
+        }
+
         return response()->json([
             'available' => false, 
-            'error' => 'Unable to check for updates.', 
+            'error_code' => $mappedCode,
             'current_version' => $currentVersion, 
             'version' => 'unknown'
-        ], $response['status'] ?: 500);
+        ], $status ?: 500);
     }
     
-    $data = $response['data'];
+    $data = $response['data'] ?? [];
     $latestVersion = $data['version'] ?? 'unknown';
     
     // Compare versions; if no valid format, assume update available if download URL exists
@@ -62,12 +72,21 @@ Route::middleware('auth:sanctum')->get('/system/update/metadata', function () {
         $isAvailable = true; // Fallback for testing/different version strings
     }
     
+    if (!$isAvailable) {
+        return response()->json([
+            'available' => false,
+            'up_to_date' => true,
+            'current_version' => $currentVersion,
+            'latest_version' => $latestVersion !== 'unknown' ? $latestVersion : $currentVersion,
+        ]);
+    }
+    
     return response()->json([
-        'available' => $isAvailable,
+        'available' => true,
         'current_version' => $currentVersion,
         'version' => $latestVersion,
-        'download_url' => $isAvailable ? ($data['download_url'] ?? null) : null,
-        'sha256' => $isAvailable ? ($data['sha256'] ?? null) : null,
+        'download_url' => $data['download_url'] ?? null,
+        'sha256' => $data['sha256'] ?? null,
     ]);
 });
 

@@ -302,33 +302,43 @@ elif [ "\$CMD" = "update" ]; then
     
     if [ \$? -ne 0 ] || [ -z "\$RELEASE_META" ]; then
         echo "[ERROR] Unable to check for updates."
-        echo "Unable to reach the TrustNode License Platform. Retry later."
+        echo "Please try again later."
         exit 1
     fi
     
-    AVAILABLE=\$(echo "\$RELEASE_META" | jq -r '.available')
-    CURRENT_VERSION=\$(echo "\$RELEASE_META" | jq -r '.current_version')
-    LATEST_VERSION=\$(echo "\$RELEASE_META" | jq -r '.version')
+    AVAILABLE=\$(echo "\$RELEASE_META" | jq -r '.available // empty')
+    UP_TO_DATE=\$(echo "\$RELEASE_META" | jq -r '.up_to_date // empty')
+    CURRENT_VERSION=\$(echo "\$RELEASE_META" | jq -r '.current_version // empty')
+    LATEST_VERSION=\$(echo "\$RELEASE_META" | jq -r '.latest_version // .version // empty')
+    ERROR_CODE=\$(echo "\$RELEASE_META" | jq -r '.error_code // empty')
+    
+    if [ "\$AVAILABLE" != "true" ]; then
+        if [ "\$UP_TO_DATE" == "true" ]; then
+            echo "[OK] TrustNode is already up to date."
+            echo "Version: \$LATEST_VERSION"
+            exit 0
+        fi
+        
+        if [ "\$ERROR_CODE" == "update_service_unavailable" ]; then
+            echo "[ERROR] Unable to check for updates."
+            echo "Please try again later."
+            exit 1
+        elif [ "\$ERROR_CODE" == "release_not_authorized" ]; then
+            echo "[ERROR] This release requires an authorized TrustNode license."
+            exit 1
+        else
+            echo "[ERROR] Unable to verify update information."
+            echo "Please try again later."
+            exit 1
+        fi
+    fi
     
     echo "Current version: \$CURRENT_VERSION"
     echo "Latest version:  \$LATEST_VERSION"
     echo ""
+    echo "Update available: \$LATEST_VERSION"
     
-    if [ "\$AVAILABLE" != "true" ]; then
-        ERROR_MSG=\$(echo "\$RELEASE_META" | jq -r '.error // empty')
-        if [ -n "\$ERROR_MSG" ]; then
-            echo "[ERROR] \$ERROR_MSG"
-            echo ""
-            echo "Please try again later."
-            exit 1
-        else
-            echo "[OK] TrustNode is already up to date."
-            exit 0
-        fi
-    fi
-    
-    echo "Update available."
-    echo ""
+    echo "Downloading release..."
     DOWNLOAD_URL=\$(echo "\$RELEASE_META" | jq -r '.download_url // empty')
     EXPECTED_SHA=\$(echo "\$RELEASE_META" | jq -r '.sha256 // empty')
     
