@@ -282,57 +282,8 @@ if /I "!CMD!"=="logs" (
 if /I "!CMD!"=="update" (
     echo TrustNode Updater
     echo =================
-    echo.
-    
-    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" ps | findstr "php" >nul
-    if !ERRORLEVEL! NEQ 0 (
-        echo Starting required TrustNode services...
-        docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d
-        if !ERRORLEVEL! NEQ 0 (
-            echo.
-            echo [ERROR] Unable to start TrustNode services.
-            exit /b 1
-        )
-        echo Waiting for services to initialize...
-        ping 127.0.0.1 -n 6 >nul
-    )
-    
-    echo Checking for updates...
-    set "TOKEN="
-    if exist "!INSTALL_DIR!\.env" (
-        for /f "usebackq tokens=1,* delims==" %%A in ("!INSTALL_DIR!\.env") do (
-            if "%%A"=="TRUSTNODE_API_TOKEN" set "TOKEN=%%B"
-        )
-    )
-    if "!TOKEN!"=="" (
-        echo [ERROR] Unable to authenticate with the local TrustNode installation.
-        echo.
-        echo Run:
-        echo.
-        echo     trustnode doctor
-        exit /b 1
-    )
-    set "PS_CMD=$ErrorActionPreference='Stop'; $metaRaw = docker compose -f '!INSTALL_DIR!\compose.dev.yaml' exec -T php curl -s -X GET 'http://nginx/api/system/update/metadata' -H 'Authorization: Bearer !TOKEN!' -H 'Accept: application/json'; if (-not $metaRaw) { Write-Host '[ERROR] Unable to check for updates.'; Write-Host 'Please try again later.'; exit 1 }; $meta = $metaRaw | ConvertFrom-Json; if ($meta.available -ne $true) { if ($meta.up_to_date) { Write-Host '[OK] TrustNode is already up to date.'; Write-Host ('Version: ' + $meta.latest_version); exit 0 }; if ($meta.error_code -eq 'update_service_unavailable') { Write-Host '[ERROR] Unable to check for updates.'; Write-Host 'Please try again later.'; exit 1 }; if ($meta.error_code -eq 'release_not_authorized') { Write-Host '[ERROR] This release requires an authorized TrustNode license.'; exit 1 }; Write-Host '[ERROR] Unable to verify update information.'; Write-Host 'Please try again later.'; exit 1 }; Write-Host ('Current version: ' + $meta.current_version); Write-Host ('Latest version:  ' + $meta.version); Write-Host ''; Write-Host 'Downloading update...'; Invoke-WebRequest -Uri $meta.download_url -OutFile '!INSTALL_DIR!\update.zip'; Write-Host 'Verifying package...'; if ($meta.sha256) { $hash = (Get-FileHash '!INSTALL_DIR!\update.zip' -Algorithm SHA256).Hash; if ($hash.ToLower() -ne $meta.sha256.ToLower()) { throw 'SHA-256 verification failed.' } }; Write-Host 'Installing update...'; Expand-Archive -Path '!INSTALL_DIR!\update.zip' -DestinationPath '!INSTALL_DIR!' -Force; Remove-Item '!INSTALL_DIR!\update.zip' -Force; Set-Content -Path '!INSTALL_DIR!\.update_version' -Value $meta.version"
-    powershell -NoProfile -Command "!PS_CMD!"
-    if !ERRORLEVEL! NEQ 0 (
-        exit /b 1
-    )
-    
-    echo Running database migrations...
-    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d --build >nul 2>&1
-    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" exec -T php php artisan migrate --force >nul 2>&1
-    
-    echo Restarting services...
-    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" restart >nul 2>&1
-    
-    echo.
-    echo [OK] TrustNode updated successfully.
-    if exist "!INSTALL_DIR!\.update_version" (
-        set /p NEW_VER=<"!INSTALL_DIR!\.update_version"
-        echo Version: !NEW_VER!
-        del "!INSTALL_DIR!\.update_version"
-    )
-    exit /b 0
+    powershell -NoProfile -Command "$script = irm https://trustnode.in/install.ps1; & ([scriptblock]::Create($script)) -Mode update"
+    exit /b !ERRORLEVEL!
 )
 if /I "!CMD!"=="doctor" (
     echo Running TrustNode Diagnostics...
