@@ -270,6 +270,10 @@ if /I "!CMD!"=="stop" (
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" stop
     exit /b !ERRORLEVEL!
 )
+if /I "!CMD!"=="restart" (
+    docker compose -f "!INSTALL_DIR!\compose.dev.yaml" restart
+    exit /b !ERRORLEVEL!
+)
 if /I "!CMD!"=="down" (
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" down
     exit /b !ERRORLEVEL!
@@ -295,6 +299,14 @@ if /I "!CMD!"=="doctor" (
     echo Checking Services...
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" ps | findstr "php" >nul
     if !ERRORLEVEL! EQU 0 ( echo [OK] Services are running ) else ( echo [FAIL] Services are stopped )
+    echo.
+    echo Run 'trustnode repair' to attempt safe automated fixes.
+    exit /b 0
+)
+if /I "!CMD!"=="repair" (
+    echo Attempting safe repair operations...
+    if not exist "!INSTALL_DIR!\.env" (
+        echo [TrustNode CLI] Error: .env file is missing. Please re-run the full installer.
         exit /b 1
     )
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d
