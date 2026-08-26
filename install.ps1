@@ -258,7 +258,7 @@ set "CMD_ARG2=%~2"
 if /I "!CMD!"=="update" (
     echo TrustNode Updater
     echo =================
-    powershell -NoProfile -Command "`$script = irm https://trustnode.in/install.ps1; & ([scriptblock]::Create(`$script)) -Mode update"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "!INSTALL_DIR!\install.ps1" -Mode update
     exit /b !ERRORLEVEL!
 )
 
