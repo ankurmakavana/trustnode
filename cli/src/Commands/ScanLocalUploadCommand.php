@@ -72,9 +72,22 @@ class ScanLocalUploadCommand extends \Symfony\Component\Console\Command\Command
             $output->writeln("Check status:\ntrustnode scan status " . $body['id']);
             return 0;
 
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            if ($e->getResponse()->getStatusCode() === 413) {
+                $output->writeln("\n<error>Error: Local scan archive exceeds the maximum allowed size.</error>");
+                $output->writeln("Maximum allowed: 100 MB");
+                $output->writeln("\nTry scanning a smaller directory or exclude unnecessary files.");
+            } else {
+                $output->writeln('<error>Error uploading archive: ' . $e->getMessage() . '</error>');
+            }
+            return 1;
         } catch (\Exception $e) {
             $output->writeln('<error>Error uploading archive: ' . $e->getMessage() . '</error>');
             return 1;
+        } finally {
+            if (file_exists($archivePath)) {
+                @unlink($archivePath);
+            }
         }
     }
 }

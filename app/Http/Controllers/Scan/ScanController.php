@@ -183,7 +183,7 @@ class ScanController extends Controller
         $this->authorize('execute', Scan::class);
 
         $request->validate([
-            'archive' => 'required|file|mimes:zip|max:204800', // max 200MB
+            'archive' => 'required|file|mimes:zip|max:102400', // max 100MB
             'target' => 'required|string',
         ]);
 

@@ -98,6 +98,21 @@ foreach ($file in $files) {
 Compress-Archive -Path "$tempDir\*" -DestinationPath $tempZip -Force
 Remove-Item -Path $tempDir -Recurse -Force
 
+$maxArchiveSizeMB = 100
+$zipFileInfo = Get-Item $tempZip
+$zipSizeMB = [math]::Round($zipFileInfo.Length / 1MB, 2)
+
+if ($zipSizeMB -gt $maxArchiveSizeMB) {
+    Write-Host "Error: Local scan archive exceeds the maximum allowed size." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Archive size: $zipSizeMB MB"
+    Write-Host "Maximum allowed: $maxArchiveSizeMB MB"
+    Write-Host ""
+    Write-Host "Try scanning a smaller directory or exclude unnecessary files."
+    Remove-Item $tempZip -Force
+    exit 1
+}
+
 # 5. Upload archive to TrustNode API
 Write-Host "Uploading source..."
 
