@@ -12,4 +12,5 @@ enum ScanType: string
     case CLOUD_INFRASTRUCTURE = 'cloud_infrastructure';
     case REPOSITORY = 'repository';
     case DATABASE = 'database';
+    case LOCAL = 'local';
 }

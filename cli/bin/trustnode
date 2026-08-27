@@ -18,6 +18,8 @@ use TrustNode\Cli\Commands\UpdateCommand;
 use TrustNode\Cli\Commands\DoctorCommand;
 use TrustNode\Cli\Commands\RepairCommand;
 // Keep existing auth commands just in case
+require_once __DIR__ . '/../src/Commands/ScanLocalUploadCommand.php';
+use TrustNode\Cli\Commands\ScanLocalUploadCommand;
 use TrustNode\Cli\Commands\LoginCommand;
 use TrustNode\Cli\Commands\LogoutCommand;
 use TrustNode\Cli\Commands\WhoamiCommand;
@@ -29,6 +31,7 @@ $client = new TrustNodeClient($configManager);
 
 // Register commands
 $application->add(new ScanCommand($client));
+$application->add(new ScanLocalUploadCommand($client, $configManager));
 $application->add(new StatusCommand($client));
 $application->add(new RepositoriesCommand($client));
 $application->add(new FindingsCommand($client));

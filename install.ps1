@@ -247,6 +247,10 @@ try {
     $cliWrapperPath = "$installDir\trustnode.cmd"
     Write-Log "`n[*] Generating CLI wrapper at $cliWrapperPath..."
 
+    if (Test-Path "local_scan.ps1") {
+        Copy-Item -Path "local_scan.ps1" -Destination "$installDir\local_scan.ps1" -Force
+    }
+
     $cliWrapperContent = @"
 @echo off
 setlocal EnableDelayedExpansion
@@ -394,7 +398,23 @@ if !ERRORLEVEL! NEQ 0 (
 )
 
 set "TTY_ARGS= "
-if /I "!CMD!"=="scan" set "TTY_ARGS=-it"
+if /I "!CMD!"=="scan" (
+    set "TTY_ARGS=-it"
+    if /I NOT "!CMD_ARG2!"=="" (
+        if /I NOT "!CMD_ARG2!"=="list" (
+            if /I NOT "!CMD_ARG2!"=="status" (
+                echo !CMD_ARG2! | findstr /I "^http://" >nul
+                if !ERRORLEVEL! NEQ 0 (
+                    echo !CMD_ARG2! | findstr /I "^https://" >nul
+                    if !ERRORLEVEL! NEQ 0 (
+                        powershell -NoProfile -ExecutionPolicy Bypass -File "!INSTALL_DIR!\local_scan.ps1" -Target "!CMD_ARG2!" -InstallDir "!INSTALL_DIR!"
+                        exit /b !ERRORLEVEL!
+                    )
+                )
+            )
+        )
+    )
+)
 if /I "!CMD!"=="repair" set "TTY_ARGS=-it"
 
 docker compose -f "!INSTALL_DIR!\compose.dev.yaml" exec !TTY_ARGS! -e TRUSTNODE_API_URL=http://nginx -e TRUSTNODE_HOST_DIR="!INSTALL_DIR!" php php cli/bin/trustnode %*

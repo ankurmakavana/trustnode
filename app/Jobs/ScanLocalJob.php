@@ -1,0 +1,228 @@
+<?php
+
+namespace App\Jobs;
+
+use App\Enums\Finding\FindingSeverity;
+use App\Enums\Finding\FindingStatus;
+use App\Models\Finding;
+use App\Models\Report;
+use App\Models\Scan;
+use App\Services\Import\FingerprintService;
+use App\Services\Scan\RepositoryScanner;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use App\Notifications\ScanCompletedNotification;
+use App\Notifications\ScanFailedNotification;
+
+class ScanLocalJob implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    protected Scan $scan;
+    protected string $archivePath;
+
+    public function __construct(Scan $scan, string $archivePath)
+    {
+        $this->scan = $scan;
+        $this->archivePath = $archivePath;
+    }
+
+    public function handle(
+        RepositoryScanner $scanner,
+        FingerprintService $fingerprintService
+    ) {
+        Log::info('ScanLocalJob starting for scan '.$this->scan->id);
+
+        $this->scan->update([
+            'status' => 'running',
+            'started_at' => now(),
+        ]);
+
+        $workspacePath = storage_path('app/temp-scan-workspace/'.$this->scan->uuid);
+
+        try {
+            $this->scan->update(['progress' => 10]);
+
+            // 1. Extract archive
+            if (!file_exists($workspacePath)) {
+                mkdir($workspacePath, 0755, true);
+            }
+            
+            $zipPath = Storage::disk('local')->path($this->archivePath);
+            $zip = new \ZipArchive;
+            $res = $zip->open($zipPath);
+            if ($res === TRUE) {
+                $zip->extractTo($workspacePath);
+                $zip->close();
+            } else {
+                throw new \RuntimeException('Failed to extract local scan archive. Error code: ' . $res . ' Path: ' . $zipPath . ' exists: ' . (file_exists($zipPath) ? 'yes' : 'no') . ' size: ' . (file_exists($zipPath) ? filesize($zipPath) : '0'));
+            }
+
+            $this->scan->update(['progress' => 20]);
+
+            // Count files scanned
+            $filesScanned = 0;
+            if (is_dir($workspacePath)) {
+                $directoryIterator = new \RecursiveDirectoryIterator($workspacePath, \FilesystemIterator::SKIP_DOTS);
+                $iterator = new \RecursiveIteratorIterator($directoryIterator);
+                foreach ($iterator as $file) {
+                    if ($file->isFile()) {
+                        $filesScanned++;
+                    }
+                }
+            }
+            $this->scan->update(['files_scanned' => $filesScanned]);
+
+            $this->scan->update(['progress' => 50]);
+
+            // 2. Perform static analysis scan
+            $findings = $scanner->scan($workspacePath, $this->scan->target);
+
+            $this->scan->update(['progress' => 80]);
+
+            // 4. Save and deduplicate findings
+            $savedFindings = [];
+            $severityCounts = ['critical' => 0, 'high' => 0, 'medium' => 0, 'low' => 0, 'info' => 0];
+
+            foreach ($findings as $dto) {
+                $fingerprint = $fingerprintService->generate($dto, null);
+                $dto->fingerprint = $fingerprint;
+
+                $severityVal = strtolower($dto->severity ?? 'low');
+                if (isset($severityCounts[$severityVal])) {
+                    $severityCounts[$severityVal]++;
+                }
+
+                $severity = FindingSeverity::LOW;
+                foreach (FindingSeverity::cases() as $case) {
+                    if (strtolower($case->value) === $severityVal) {
+                        $severity = $case;
+                        break;
+                    }
+                }
+
+                $findingModel = Finding::updateOrCreate(
+                    [
+                        'fingerprint' => $fingerprint,
+                        'scan_id' => $this->scan->id,
+                    ],
+                    [
+                        'title' => $dto->title,
+                        'asset_id' => null,
+                        'severity' => $severity,
+                        'status' => FindingStatus::OPEN,
+                        'category' => $dto->category ?? 'SAST',
+                        'cwe' => $dto->cwe ?? null,
+                        'description' => $dto->description ?? '',
+                        'remediation' => $dto->remediation ?? '',
+                        'technical_details' => $dto->technicalDetails ?? '',
+                        'evidence' => $dto->evidence ?? '',
+                        'url' => $dto->url ?? '',
+                        'scanner' => 'RepositoryScanner',
+                        'created_by' => $this->scan->created_by,
+                    ]
+                );
+
+                $savedFindings[] = $findingModel;
+            }
+
+            $this->scan->update(['progress' => 90]);
+
+            // 5. Generate HTML report
+            $reportTitle = 'Local Directory Vulnerability Assessment - '.$this->scan->target;
+            $viewName = view()->exists('reports.local_scan') ? 'reports.local_scan' : 'reports.repository_scan';
+            $htmlContent = view($viewName, [
+                'target' => $this->scan->target,
+                'scan' => $this->scan,
+                'repository' => null,
+                'findings' => $savedFindings,
+                'severityCounts' => $severityCounts,
+            ])->render();
+
+            $report = Report::create([
+                'uuid' => (string) Str::uuid(),
+                'title' => $reportTitle,
+                'type' => 'sast',
+                'status' => 'Ready',
+                'options' => [
+                    'scan_id' => $this->scan->id,
+                    'severity_counts' => $severityCounts,
+                    'html_report' => $htmlContent,
+                ],
+                'created_by' => $this->scan->created_by,
+            ]);
+
+            // 6. Complete scan
+            $duration = now()->diffInSeconds($this->scan->started_at);
+            $this->scan->update([
+                'status' => 'completed',
+                'progress' => 100,
+                'completed_at' => now(),
+                'duration' => $duration,
+            ]);
+
+            \App\Services\Notification\NotificationRouter::dispatch(
+                \App\Enums\Notification\NotificationType::SCAN_COMPLETED,
+                new \App\Services\Notification\NotificationContext(scan: $this->scan),
+                new ScanCompletedNotification($this->scan, array_sum($severityCounts))
+            );
+
+        } catch (\Throwable $e) {
+            Log::error('ScanLocalJob failed: '.$e->getMessage(), ['exception' => $e]);
+            $this->scan->update([
+                'status' => 'failed',
+                'completed_at' => now(),
+            ]);
+
+            \App\Services\Notification\NotificationRouter::dispatch(
+                \App\Enums\Notification\NotificationType::SCAN_FAILED,
+                new \App\Services\Notification\NotificationContext(scan: $this->scan),
+                new ScanFailedNotification($this->scan, 'Scan failed during execution.')
+            );
+        } finally {
+            if (file_exists($workspacePath)) {
+                $this->removeDirectory($workspacePath);
+            }
+            if (file_exists($zipPath)) {
+                @unlink($zipPath);
+            }
+        }
+    }
+
+    private function removeDirectory(string $dir): void
+    {
+        if (!is_dir($dir)) return;
+        $objects = scandir($dir);
+        foreach ($objects as $object) {
+            if ($object != "." && $object != "..") {
+                if (is_dir($dir. DIRECTORY_SEPARATOR .$object) && !is_link($dir."/".$object))
+                    $this->removeDirectory($dir. DIRECTORY_SEPARATOR .$object);
+                else
+                    @unlink($dir. DIRECTORY_SEPARATOR .$object);
+            }
+        }
+        @rmdir($dir);
+    }
+
+    public function failed(\Throwable $exception): void
+    {
+        Log::error('ScanLocalJob failed fatally: '.$exception->getMessage(), ['exception' => $exception]);
+        
+        $this->scan->update([
+            'status' => 'failed',
+            'completed_at' => now(),
+        ]);
+
+        \App\Services\Notification\NotificationRouter::dispatch(
+            \App\Enums\Notification\NotificationType::SCAN_FAILED,
+            new \App\Services\Notification\NotificationContext(scan: $this->scan),
+            new ScanFailedNotification($this->scan, 'Scan failed fatally.')
+        );
+    }
+}

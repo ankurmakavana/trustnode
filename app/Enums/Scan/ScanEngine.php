@@ -12,4 +12,5 @@ enum ScanEngine: string
     case REPOSITORY_SCANNER = 'repositoryscanner';
     case BURP_SUITE = 'burpsuite';
     case DATABASE_SCANNER = 'databasescanner';
+    case LOCAL_SCANNER = 'localscanner';
 }

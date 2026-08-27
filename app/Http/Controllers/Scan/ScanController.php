@@ -178,4 +178,38 @@ class ScanController extends Controller
             'Content-Type' => 'application/pdf',
         ]);
     }
+    public function storeLocal(Request $request): JsonResponse
+    {
+        $this->authorize('execute', Scan::class);
+
+        $request->validate([
+            'archive' => 'required|file|mimes:zip|max:204800', // max 200MB
+            'target' => 'required|string',
+        ]);
+
+        $targetDir = $request->input('target');
+
+        // 1. Create a Scan record
+        // Re-using the Scan model. We will set type=local or just target=local path
+        $scan = Scan::create([
+            'repository_id' => null,
+            'name'          => 'Local Scan: ' . basename($targetDir),
+            'target'        => $targetDir,
+            'type'          => 'local',
+            'engine'        => 'localscanner',
+            'status'        => \App\Enums\Scan\ScanStatus::QUEUED,
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'created_by' => $request->user()->id,
+        ]);
+
+        // 2. Store the uploaded archive
+        $path = $request->file('archive')->storeAs('local-scans', "scan-{$scan->id}.zip", 'local');
+
+        // 3. Dispatch the job
+        // We will create a ScanLocalJob or reuse ScanRepositoryJob.
+        // Reusing ScanRepositoryJob requires a Repository model. Since this is local, we probably need a ScanLocalJob.
+        \App\Jobs\ScanLocalJob::dispatch($scan, $path);
+
+        return response()->json($scan, 201);
+    }
 }

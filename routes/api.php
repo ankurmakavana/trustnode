@@ -85,6 +85,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/scans/{scan}/report', [ScanController::class, 'generateReport']);
     Route::get('/scans/{scan}/report/status', [ScanController::class, 'reportStatus']);
     Route::get('/scans/{scan}/report/download', [ScanController::class, 'downloadReport'])->name('scans.report.download');
+    Route::post('/scans/local', [ScanController::class, 'storeLocal']);
     Route::apiResource('/scans', ScanController::class);
 
     // Finding Management Endpoints
