@@ -57,7 +57,37 @@ class ScanCommand extends Command
             }
         }
 
-        // Otherwise it's a repository target
+        // Otherwise it's a repository target or list
+        if ($actionOrTarget === 'list') {
+            try {
+                $data = $this->client->get('api/scans');
+                $scans = $data['data'] ?? [];
+
+                if (empty($scans)) {
+                    $output->writeln('No scans found.');
+                    return Command::SUCCESS;
+                }
+
+                $output->writeln("Scans\n");
+                foreach ($scans as $scan) {
+                    $started = isset($scan['created_at']) && $scan['created_at'] ? date('d M Y, h:i A', strtotime($scan['created_at'])) : '-';
+                    $completed = isset($scan['completed_at']) && $scan['completed_at'] ? date('d M Y, h:i A', strtotime($scan['completed_at'])) : '-';
+                    $repoName = $scan['repository']['name'] ?? $scan['target'] ?? '-';
+
+                    $output->writeln(sprintf("- Scan ID: %s", $scan['id'] ?? '-'));
+                    $output->writeln(sprintf("  Repository: %s", $repoName));
+                    $output->writeln(sprintf("  Status: %s", $scan['status'] ?? '-'));
+                    $output->writeln(sprintf("  Started: %s", $started));
+                    $output->writeln(sprintf("  Completed: %s\n", $completed));
+                }
+
+                return Command::SUCCESS;
+            } catch (\Exception $e) {
+                $output->writeln('<error>' . $e->getMessage() . '</error>');
+                return Command::FAILURE;
+            }
+        }
+
         $target = $actionOrTarget;
         $output->writeln("Checking repository access...");
 
