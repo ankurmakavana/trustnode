@@ -1,159 +1,305 @@
 # TrustNode
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![CI Status](https://github.com/trustnode-org/trustnode/actions/workflows/ci.yml/badge.svg)](https://github.com/trustnode-org/trustnode/actions)
-[![Security Status](https://img.shields.io/badge/Security-Vetted-success.svg)](SECURITY.md)
+TrustNode is a self-hosted application security scanning platform for source repositories and local project directories. It empowers developers to automate static vulnerability detection natively using Docker and a local CLI.
 
-## PROJECT OVERVIEW
+## Table of Contents
+- [What TrustNode Does](#what-trustnode-does)
+- [Current Capability Matrix](#current-capability-matrix)
+- [Architecture](#architecture)
+- [Scanner Architecture](#scanner-architecture)
+- [Supported Security Checks](#supported-security-checks)
+- [Secret Masking](#secret-masking)
+- [Scan Types](#scan-types)
+- [CLI Reference](#cli-reference)
+- [Installation / Development Setup](#installation--development-setup)
+- [Running TrustNode](#running-trustnode)
+- [Scan Lifecycle](#scan-lifecycle)
+- [Findings](#findings)
+- [Reports](#reports)
+- [Safety and Resource Limits](#safety-and-resource-limits)
+- [Compliance](#compliance)
+- [What TrustNode Does NOT Yet Do](#what-trustnode-does-not-yet-do)
+- [Roadmap](#roadmap)
+- [Project Structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+- [Development Status](#development-status)
 
-TrustNode is a self-hosted static code and security posture scanning platform. It empowers developers and security teams to automate vulnerability detection for their repositories and local projects securely and privately.
+## What TrustNode Does
+TrustNode currently implements the following capabilities:
+- **Repository Scanning:** Pulls and scans remote Git repositories natively.
+- **Local Directory Scanning:** Scans local project files by securely transferring them to the scanning container.
+- **SAST (Static Application Security Testing):** Detects injection, traversal, and unsafe execution vulnerabilities.
+- **Secret Detection:** Flags high-entropy exposed tokens and well-known provider keys securely.
+- **Finding Normalization & Deduplication:** Aggregates findings and generates fingerprints to deduplicate identical findings over multiple scans.
+- **Scan Status Tracking:** Asynchronously processes jobs with queue workers and tracks states.
+- **Report Generation:** Generates downloadable PDF reports.
+- **CLI Interaction:** Provides a native `trustnode` CLI to manage scans locally.
 
-## CURRENT SECURITY CAPABILITIES
+## Current Capability Matrix
+| Capability | Status | Current Scope |
+|---|---|---|
+| Repository Scan | Implemented | Scans remote Git repository URLs. |
+| Local Directory Scan | Implemented | Scans local host directory via packaged ZIP upload. |
+| SAST | Implemented | Regex-based detection for SQLi, Command Injection, Eval, Path Traversal. |
+| Secret Detection | Implemented | Detects AWS, GitHub, GitLab, Stripe, Slack, GCP, JWT, Private Keys, and generic high-entropy API tokens. |
+| Finding Deduplication | Implemented | Findings are fingerprinted to track recurring vulnerabilities. |
+| Reports | Implemented | Generates PDF status reports of scan findings. |
+| Compliance Mapping | Partial | Experimental, heuristic foundational mapping to external security frameworks. |
+| SCA | Not Implemented | N/A |
+| Container Security | Not Implemented | N/A |
+| IaC Security | Not Implemented | N/A |
+| CNAPP/CSPM | Not Implemented | N/A |
+| Runtime/CWPP | Not Implemented | N/A |
+| SOC/SIEM Integration | Not Implemented | N/A |
 
-Implemented capabilities include:
-- **SAST Detection**: Detects raw SQL injection, unsafe command execution, dynamic code evaluation, and potential path traversals via a modular scanning engine.
-- **Secret Detection**: Detects hardcoded credentials for AWS, GitHub, GitLab, Stripe, Slack, GCP, Private Keys, and generic high-entropy API tokens.
-- **Local Directory Scanning**: Scan local project directories securely by packaging them into a temporary archive (up to 100MB).
-- **Remote Repository Scanning**: Pull and scan Git repositories natively.
-- **Findings Management & Deduplication**: All findings are fingerprinted and tracked for status reporting.
-- **Report Generation**: Export findings to detailed PDF and HTML reports.
-- **Compliance Mapping**: Experimental foundational mapping to external security frameworks.
-
-## SCANNER ARCHITECTURE
-
-TrustNode implements a modular, extensible engine pipeline to execute static analysis efficiently without monolith anti-patterns:
-
+## Architecture
+```text
+CLI / API
+   |
+   v
+Scan Creation
+   |
+   +----------------------+
+   |                      |
+Repository Scan      Local Directory Scan
+   |                      |
+Clone Repository     Package + Upload Archive
+   |                      |
+   +----------+-----------+
+              |
+              v
+        Background Job
+              |
+              v
+      RepositoryScanner
+              |
+              +---------------------+
+              |                     |
+              v                     v
+         SastScanner          SecretScanner
+              |                     |
+              +----------+----------+
+                         |
+                         v
+                Normalized Findings
+                         |
+                         v
+              Fingerprint / Deduplication
+                         |
+                         v
+                    Findings DB
+                         |
+                         v
+                     Reports
 ```
-RepositoryScanner (Orchestrator)
-    |
-    +-- ScannerInterface
-    |
-    +-- AbstractRegexScanner (Evidence Truncation & Masking)
-            |
-            +-- SastScanner (SAST Rules)
-            |
-            +-- SecretScanner (Entropy & False-Positive Validation)
-```
 
-## CLI USAGE
+## Scanner Architecture
+TrustNode avoids monolith anti-patterns by utilizing a modular scanning engine framework.
+- `ScannerInterface`: The core contract standardizing how scanners iterate and report findings.
+- `AbstractRegexScanner`: An abstract base class providing common regular expression matching, masking, and evidence truncation logic.
+- `SastScanner`: Implements SAST-specific regex rules.
+- `SecretScanner`: Implements provider-specific token rules and Shannon entropy validation for generic secrets.
+- `RepositoryScanner`: The orchestrator that coordinates iterating local files, enforcing the **5MB per-file safety guard**, reading content, and delegating the data to the modular engines.
 
-TrustNode provides a global CLI wrapper for streamlined execution.
+Future scanner engines can seamlessly plug into this orchestrator architecture by implementing the `ScannerInterface`.
 
-**Scan a local project:**
-```bash
-trustnode scan .
-trustnode scan C:\path\to\project
-```
+## Supported Security Checks
 
-**Scan a remote repository:**
+### SAST Rules
+| Rule ID | Title | Category | Severity | Description |
+|---|---|---|---|---|
+| SEC-SAST-SQLI | Potential SQL Injection | SAST | High | A raw SQL query concatenates/interpolates variables directly. This makes the application vulnerable to SQL Injection. |
+| SEC-SAST-CMD | Unsafe Command Execution | SAST | Critical | The application executes system shell commands using interpolated variables. This can lead to Remote Command Execution (RCE). |
+| SEC-SAST-EVAL | Unsafe Dynamic Code Execution (eval) | SAST | Critical | The eval() function executes arbitrary strings as code. If user input is passed here, it allows arbitrary code execution. |
+| SEC-SAST-PATH | Potential Path Traversal | SAST | Medium | Unvalidated user input is concatenated into a file system read function, potentially allowing path traversal to read arbitrary system files. |
+
+### Secret Detection Rules
+| Rule ID | Provider | Severity | Description | False-Positive Protection |
+|---|---|---|---|---|
+| SEC-SECRET-AWS | AWS | Critical | AWS Access Key ID. | Strict prefix formatting. |
+| SEC-SECRET-GITHUB | GitHub | Critical | GitHub PAT/OAuth token. | Strict modern `ghp_` etc. prefix and length limits. |
+| SEC-SECRET-GITLAB | GitLab | Critical | GitLab PAT. | Strict `glpat-` prefix. |
+| SEC-SECRET-STRIPE | Stripe | Critical | Stripe live secret keys. | Excludes test tokens; requires `sk_live_`/`rk_live_`. |
+| SEC-SECRET-SLACK | Slack | High | Slack API token. | Requires `xox[baprs]-` prefix. |
+| SEC-SECRET-GCP | Google Cloud | High | GCP API key. | Requires `AIza` prefix and strict boundary. |
+| SEC-SECRET-PRIVATE-KEY | Cryptography | Critical | Standard PEM Private Key. | Validates strict PEM header structure. |
+| SEC-SECRET-JWT | Auth | High | JSON Web Token (JWT). | Requires `eyJ` base64-header and dot boundaries. |
+| SEC-SECRET-GENERIC | Generic | High | Exposed high-entropy API token. | Uses Shannon Entropy > 3.5, and string filters. |
+
+**Generic Secret Filters:**
+To prevent noisy detections, `SEC-SECRET-GENERIC` automatically filters out the following before flagging:
+- Placeholder values (`example`, `placeholder`, `changeme`, `test`, `null`, `YOUR_API_KEY`, `localhost`).
+- Known hash structures (MD5, SHA1, SHA256).
+- UUIDs.
+
+## Secret Masking
+Exposed secrets pose a risk in reporting tools. TrustNode masks secret values during processing before they are ever persisted to the database.
+
+- The secret value (`ghp_1234567890abcdef1234567890abcdef1234`) will be aggressively masked to `ghp_********************************1234` in the database.
+- The context *around* the matched line will be safely preserved up to a 2000-character boundary so developers can still understand where the leak occurred without exposing the actual token itself.
+
+## Scan Types
+
+### Repository Scan
+**Command:**
 ```bash
 trustnode scan https://github.com/example/repo.git
 ```
+**Flow:**
+- Dispatches `ScanRepositoryJob` which securely clones the remote Git repository.
+- Scans files using the modular scanner engines in the background.
+- Emits scan status and stores fingerprinted findings.
 
-**View and manage scans:**
+### Local Directory Scan
+**Command:**
 ```bash
-trustnode scan list
-trustnode scan status <SCAN_ID>
-trustnode findings --scan=<SCAN_ID>
-trustnode repositories
+trustnode scan C:\path\to\project
+trustnode scan .
 ```
+**Flow:**
+1. The Windows host PowerShell CLI validates the directory.
+2. The CLI iterates files and excludes known noise directories (`vendor`, `node_modules`, `.git`, etc.).
+3. A temporary `.zip` archive is created locally.
+4. An archive size restriction is enforced locally (max 50,000 files, max 200MB source).
+5. The archive is uploaded securely to the Docker API via POST (adhering to a 100MB compressed Nginx/PHP HTTP max upload limit).
+6. A local scan background job is queued in Docker.
+7. The worker extracts the workspace, scans it, and cleans up temporary archives both locally and inside the container immediately to ensure zero footprint.
 
-**Generate and retrieve reports:**
-```bash
-trustnode report <SCAN_ID>
-trustnode report status <SCAN_ID>
-trustnode report download <SCAN_ID>
-```
+## CLI Reference
+The `trustnode` global CLI provides native management of the TrustNode instance.
 
-## LOCAL SCAN DOCUMENTATION
+| Command | Description | Example |
+|---|---|---|
+| `trustnode scan` | Start a new remote or local scan. | `trustnode scan .` |
+| `trustnode scan list` | List all historical scans. | `trustnode scan list` |
+| `trustnode scan status` | Check the lifecycle status of a specific scan ID. | `trustnode scan status 102` |
+| `trustnode findings` | Retrieve real findings for a scan ID. | `trustnode findings --scan=102` |
+| `trustnode findings:list` | List all findings across scans. | `trustnode findings:list` |
+| `trustnode report` | Request a new PDF report to generate. | `trustnode report 102` |
+| `trustnode report status` | Check status of the PDF report generation. | `trustnode report status 102` |
+| `trustnode report download`| Download the generated PDF report. | `trustnode report download 102` |
+| `trustnode repositories` | List tracked repositories. | `trustnode repositories` |
+| `trustnode login` | Login using an API token. | `trustnode login` |
+| `trustnode logout` | Logout and revoke API token. | `trustnode logout` |
+| `trustnode update` | Update TrustNode instance. | `trustnode update` |
+| `trustnode status` | View system and service health. | `trustnode status` |
+| `trustnode whoami` | Get authenticated user info. | `trustnode whoami` |
+| `trustnode doctor` | Diagnose authentication and connectivity. | `trustnode doctor` |
+| `trustnode repair` | Repair local CLI authentication tokens. | `trustnode repair` |
+| `trustnode activate` | Activate Professional License. | `trustnode activate` |
 
-The `trustnode scan .` command packages the local directory, adhering to a 100MB maximum archive size limit to ensure reliable HTTP processing. The archive is safely and temporarily extracted within the scanner container, evaluated against all detection rules, and aggressively cleaned up immediately after execution to maintain zero-footprint security.
-
-## SECRET DETECTION
-
-TrustNode implements an advanced `SecretScanner` with protections against common false positives:
-- **Provider Rules**: AWS, GitHub, GitLab, Stripe, Slack, GCP, JWT, and Private Keys.
-- **Generic Token Validation**: Reduces noise by ignoring common hashes (MD5, SHA), UUIDs, and obvious placeholders (e.g. `example`, `changeme`).
-- **Shannon Entropy**: Automatically validates generic tokens against Shannon entropy thresholds (>3.5) to filter out standard strings.
-- **Context Preservation**: Hardcoded secrets are masked (`***`) in reports and findings, while safely preserving surrounding line code context up to 2,000 characters to ensure the developer can quickly identify the vulnerability.
-
-## LIMITATIONS / CURRENT SCOPE
-
-TrustNode currently focuses strictly on Static Code and Posture analysis. The following capabilities are explicitly out of scope for the current release:
-- No full Software Composition Analysis (SCA) dependency vulnerability scanning yet.
-- No Docker container or Dockerfile misconfiguration scanning yet.
-- No Infrastructure as Code (IaC) parsing yet.
-- No runtime workload protection (CWPP) or active cloud posture monitoring (CSPM / CNAPP).
-
----
-
-## Community vs. Professional Edition
-
-TrustNode Community Edition is fully functional, self-contained, and open-source. For advanced team features, compliance reporting, and real-time licensing management, consider **TrustNode Professional**.
-
-| Feature | Community Edition (Open Source) | Professional Edition (Proprietary Companion) |
-| :--- | :---: | :---: |
-| **Self-Hosted Deployment** | :white_check_mark: | :white_check_mark: |
-| **Core Vulnerability Scanning** | :white_check_mark: | :white_check_mark: |
-| **Basic AI Triage** | :white_check_mark: | :white_check_mark: (Advanced Models) |
-| **Custom Scan Scheduling** | :white_check_mark: | :white_check_mark: |
-| **Team Management & RBAC** | :x: | :white_check_mark: |
-| **Enterprise Integrations (Slack, Jira)** | :x: | :white_check_mark: |
-| **Compliance Reports (SOC2, OWASP)** | :x: | :white_check_mark: |
-| **Dedicated Enterprise Support** | :x: | :white_check_mark: |
-| **Multi-Engine Orchestration** | :x: | :white_check_mark: |
-
-*To manage licenses and upgrade your installation, refer to the private companion `trustnode-license-platform` client module or contact our sales team.*
-
----
-
-## Getting Started
+## Installation / Development Setup
 
 ### Prerequisites
-- [Docker](https://docs.docker.com/get-docker/) (24.0.0 or later)
-- [Docker Compose](https://docs.docker.com/compose/install/) (v2.0.0 or later)
+- Docker & Docker Compose
+- Windows PowerShell (if running natively on Windows)
 
-### Quick Start (Docker Compose)
+### Setup
+TrustNode uses a streamlined installer script:
 
-1. **Clone the repository**:
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/trustnode-org/trustnode.git
    cd trustnode
    ```
-
-2. **Initialize Environment Variables**:
-   ```bash
-   cp .env.example .env
+2. **Execute Installation:**
+   ```powershell
+   ./install.ps1 -Mode install
    ```
-   *Open `.env` to configure your database credentials, application keys, and AI scanner configurations.*
+   *The installer requires a TrustNode License Key, checks for Administrator permissions and Docker prerequisites, sets up environment variables, provisions containers, configures the database, links the local CLI wrapper, and creates the admin account.*
 
-3. **Start the Platform**:
-   ```bash
-   docker compose up -d --build
-   ```
+## Running TrustNode
 
-4. **Initialize Database and Setup Admin Account**:
-   ```bash
-   docker compose exec app php artisan migrate --seed
-   ```
+- **Start Services:**
+  ```bash
+  docker compose up -d
+  ```
+- **Verify Containers:**
+  ```bash
+  docker compose ps
+  ```
+- **Access Application:** Open `http://localhost:8000`
+- **Use CLI:** Run `trustnode` globally from any PowerShell terminal.
 
-5. **Access the Web Interface**:
-   Open `http://localhost:8000` in your web browser.
+## Scan Lifecycle
+A scan transits through the following statuses processed asynchronously by the Redis-backed queue worker:
+1. `created` - The scan record was initialized.
+2. `queued` - The scan job was dispatched to the worker.
+3. `running` - The worker is currently executing the `RepositoryScanner`.
+4. `completed` - Scan successfully finished analyzing files.
+5. `failed` - The scan aborted due to an internal error or invalid repository.
 
----
+## Findings
+Generated findings persist to the database mapping to `App\Models\Finding`. Each finding contains:
+- The identified **Rule ID**, **Title**, and **Severity**.
+- **Evidence** (with secrets masked and context safely preserved/truncated).
+- **Technical Details** (line numbers).
+- **URL/Path references**.
+- A unique deterministic **Fingerprint** hash generated per-vulnerability. The `FingerprintService` deduplicates duplicate findings across repetitive scans so issues are tracked over time.
 
-## Contributing
+## Reports
+TrustNode generates detailed asynchronous reports.
+1. Run `trustnode report <SCAN_ID>` to dispatch the generation job.
+2. Check `trustnode report status <SCAN_ID>` for `queued`, `generating`, or `completed`.
+3. When complete, run `trustnode report download <SCAN_ID>` to download the PDF to your local filesystem.
 
-We welcome contributions from the community! Please read our [Contributing Guide](CONTRIBUTING.md) to learn how to propose changes, report issues, and submit code.
+## Safety and Resource Limits
+TrustNode imposes strict limits to guarantee stability and prevent resource exhaustion:
+- **5MB Scan Limit**: Source files exceeding 5MB are automatically skipped by the `RepositoryScanner` to prevent Docker container memory/RAM OOM faults.
+- **Upload Archiving Limit**: The CLI enforces a strict 50,000 file limit and 200MB uncompressed limit on local host projects.
+- **HTTP Max Size**: Nginx and PHP limit local uploads strictly to a 100MB compressed limit.
+- **Evidence Truncation**: Extremely long, minified single-line source code matches are proactively truncated symmetrically to 2000-character windows to prevent SQL Database `TEXT` overflow exceptions.
+- **Automated Cleanup**: Temporary zips inside `%TEMP%` on the host, and `/tmp` inside the container are strictly deleted immediately post-scan for hygiene.
 
----
+## Compliance
+**Disclaimer:** TrustNode features a `ComplianceMapper` with experimental, partial, and basic heuristic mapping (e.g., mapping Web findings to generic OWASP controls, and Network findings to CIS controls). TrustNode does **not** currently claim certified or deterministic OWASP/NIST/SOC2 compliance coverage natively out of the box.
 
-## Security
+## What TrustNode Does NOT Yet Do
+The following capabilities are **explicitly not implemented**:
+- Dependency vulnerability scanning / SCA
+- OSV/NVD package vulnerability mapping
+- Docker/container misconfiguration scanning
+- Terraform scanning
+- Kubernetes scanning
+- Helm scanning
+- Live AWS/Azure/GCP posture scanning
+- Runtime workload protection
+- SIEM integration
+- SOC automation
 
-If you believe you have found a security vulnerability in TrustNode, please read our [Security Policy](SECURITY.md) for instructions on how to report it responsibly.
+## Roadmap
+- **Phase 3** — Software Composition Analysis (SCA)
+- **Phase 4** — Container Security
+- **Phase 5** — IaC Security
+- **Phase 6** — Deterministic Compliance Mapping
+- **Future** — Cloud integrations / posture scanning
+- **Future** — SOC/SIEM integrations
 
----
+## Project Structure
+- `app/` - Laravel backend source.
+  - `app/Services/Scan/` - Scan engine core orchestrators.
+  - `app/Services/Scan/Scanners/` - Modular engine rule logic (`SastScanner`, `SecretScanner`).
+  - `app/Http/Controllers/` - REST API endpoints.
+  - `app/Jobs/` - Asynchronous background jobs (`ScanLocalJob`, `ScanRepositoryJob`, etc).
+  - `app/Models/` - Database Eloquent models.
+- `cli/` - Global PHP-based CLI binary application for Windows interaction.
+- `docker/` - Nginx, Node, and PHP configurations and Dockerfiles.
+- `database/` - Migrations and Seeders.
+- `resources/` - React frontend and Blade views.
 
-## License
+## Troubleshooting
+- **413 Request Entity Too Large**: Ensure you are scanning directories smaller than the strict 100MB upload limit. Use `--exclude` to ignore large files in the `trustnode scan` CLI.
+- **Docker containers not running**: Verify Docker Desktop is active. Check `docker compose logs php` or `docker compose logs nginx` for issues.
+- **Scan remains queued**: Ensure the queue worker container (`trustnode-worker-1`) is running. Check `docker compose logs worker`.
+- **Scan failed**: Check the scan configuration or network accessibility of the Git URL.
+- **Local directory path invalid**: Ensure you pass absolute paths or relative paths in existing directories (avoid root directory scanning like `C:\`).
 
-TrustNode Community Edition is licensed under the [Apache License 2.0](LICENSE).
+## Development Status
+TrustNode is currently under active development.
+**Current focus:**
+- Modular scanner foundation
+- SAST
+- Secret detection
+
+**Next planned capability:**
+- SCA (Software Composition Analysis)
