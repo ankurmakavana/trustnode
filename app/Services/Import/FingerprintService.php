@@ -56,6 +56,13 @@ class FingerprintService
                 $dto->scannerRuleId ?? $dto->title,
                 $dto->path ?? '',
             ]);
+        } elseif ($scanner === 'scascanner') {
+            $input = implode('|', [
+                $assetId,
+                $dto->cve ?? $dto->scannerRuleId ?? $dto->title,
+                $dto->path ?? '',
+                $dto->parameter ?? '',
+            ]);
         } else {
             // Fallback rule
             $input = implode('|', [

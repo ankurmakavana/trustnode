@@ -17,6 +17,10 @@ class RepositoryScanner
         $this->scanners = [
             new \App\Services\Scan\Scanners\SastScanner(),
             new \App\Services\Scan\Scanners\SecretScanner(),
+            new \App\Services\Scan\Scanners\ScaScanner(
+                new \App\Services\Scan\Dependencies\ComposerLockParser(),
+                new \App\Services\Scan\Vulnerability\OsvApiClient()
+            ),
         ];
     }
 
