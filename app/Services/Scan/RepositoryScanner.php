@@ -108,6 +108,23 @@ class RepositoryScanner
                         $evidence = mb_convert_encoding(trim($lineContent), 'UTF-8', 'UTF-8');
                         if ($rule['category'] === 'Secret') {
                             $evidence = $this->maskSecret($matchedText);
+                        } else {
+                            if (mb_strlen($evidence) > 2000) {
+                                $matchPos = mb_strpos($evidence, $matchedText);
+                                if ($matchPos !== false) {
+                                    $start = max(0, $matchPos - 1000);
+                                    $truncatedEvidence = mb_substr($evidence, $start, 2000);
+                                    if ($start > 0) {
+                                        $truncatedEvidence = '[truncated] ...' . $truncatedEvidence;
+                                    }
+                                    if ($start + 2000 < mb_strlen($evidence)) {
+                                        $truncatedEvidence .= '... [truncated]';
+                                    }
+                                    $evidence = $truncatedEvidence;
+                                } else {
+                                    $evidence = mb_substr($evidence, 0, 2000) . '... [truncated]';
+                                }
+                            }
                         }
 
                         $findings[] = new NormalizedFinding([
