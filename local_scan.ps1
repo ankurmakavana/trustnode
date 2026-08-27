@@ -95,7 +95,47 @@ foreach ($file in $files) {
     Copy-Item -Path $file.FullName -Destination $dest -Force
 }
 
-Compress-Archive -Path "$tempDir\*" -DestinationPath $tempZip -Force
+$ProgressPreference = 'SilentlyContinue'
+$compressJob = Start-Job -ScriptBlock {
+    param($src, $dst)
+    $ProgressPreference = 'SilentlyContinue'
+    Compress-Archive -Path $src -DestinationPath $dst -Force
+} -ArgumentList "$tempDir\*", $tempZip
+
+try {
+    $cycle = 0
+    $direction = 1
+    while ($compressJob.State -eq 'Running') {
+        if ($cycle -eq 0) {
+            $text = "Packaging source..."
+        } else {
+            $text = "Packaging source..." + (" TrustNode" * $cycle)
+        }
+        Write-Host "`r$text                                          " -NoNewline
+
+        $cycle += $direction
+        if ($cycle -ge 3) {
+            $direction = -1
+        } elseif ($cycle -le 0) {
+            $direction = 1
+        }
+        Start-Sleep -Milliseconds 400
+    }
+    Write-Host "`r                                                                           `r" -NoNewline
+
+    Receive-Job $compressJob -Wait -AutoRemoveJob | Out-Null
+
+    if ($compressJob.State -ne 'Completed') {
+        Write-Host "Error: Compression failed." -ForegroundColor Red
+        Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        exit 1
+    }
+} finally {
+    if ($compressJob -and $compressJob.State -eq 'Running') {
+        Stop-Job $compressJob
+        Remove-Job $compressJob -Force
+    }
+}
 Remove-Item -Path $tempDir -Recurse -Force
 
 $maxArchiveSizeMB = 100
