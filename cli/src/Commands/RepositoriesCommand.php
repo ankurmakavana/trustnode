@@ -28,9 +28,18 @@ class RepositoriesCommand extends Command
                 return Command::SUCCESS;
             }
 
+            $output->writeln("Repositories\n");
             foreach ($repos as $repo) {
-                $output->writeln(sprintf("- %s (ID: %s)", $repo['name'] ?? 'Unknown', $repo['id'] ?? '?'));
+                $latestScan = $repo['latest_scan'] ?? $repo['latestScan'] ?? null;
+                $scanId = $latestScan ? ($latestScan['id'] ?? 'unknown') : 'none';
+                $scanStatus = $latestScan ? ($latestScan['status'] ?? 'unknown') : 'no scans';
+
+                $output->writeln(sprintf("- %s", $repo['name'] ?? 'Unknown'));
+                $output->writeln(sprintf("  Repository ID: %s", $repo['id'] ?? '?'));
+                $output->writeln(sprintf("  Latest Scan ID: %s", $scanId));
+                $output->writeln(sprintf("  Latest Scan Status: %s\n", $scanStatus));
             }
+            $output->writeln("Use `trustnode report <Latest Scan ID>` to generate a report.");
             return Command::SUCCESS;
         } catch (\Exception $e) {
             $output->writeln('<error>' . $e->getMessage() . '</error>');
