@@ -32,12 +32,24 @@ class RepositoriesCommand extends Command
             foreach ($repos as $repo) {
                 $latestScan = $repo['latest_scan'] ?? $repo['latestScan'] ?? null;
                 $scanId = $latestScan ? ($latestScan['id'] ?? 'unknown') : 'none';
-                $scanStatus = $latestScan ? ($latestScan['status'] ?? 'unknown') : 'no scans';
+                
+                if ($latestScan) {
+                    $status = $latestScan['status'] ?? 'unknown';
+                    $dateStr = $latestScan['completed_at'] ?? $latestScan['created_at'] ?? null;
+                    if ($dateStr) {
+                        $date = date('d M Y, h:i A', strtotime($dateStr));
+                        $scanStatus = sprintf("%s — %s", $status, $date);
+                    } else {
+                        $scanStatus = $status;
+                    }
+                } else {
+                    $scanStatus = 'no scans';
+                }
 
                 $output->writeln(sprintf("- %s", $repo['name'] ?? 'Unknown'));
                 $output->writeln(sprintf("  Repository ID: %s", $repo['id'] ?? '?'));
                 $output->writeln(sprintf("  Latest Scan ID: %s", $scanId));
-                $output->writeln(sprintf("  Latest Scan Status: %s\n", $scanStatus));
+                $output->writeln(sprintf("  Latest Scan: %s\n", $scanStatus));
             }
             $output->writeln("Use `trustnode report <Latest Scan ID>` to generate a report.");
             return Command::SUCCESS;
