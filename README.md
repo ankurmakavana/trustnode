@@ -45,7 +45,7 @@ TrustNode currently implements the following capabilities:
 | Finding Deduplication | Implemented | Findings are fingerprinted to track recurring vulnerabilities. |
 | Reports | Implemented | Generates PDF status reports of scan findings. |
 | Compliance Mapping | Partial | Experimental, heuristic foundational mapping to external security frameworks. |
-| SCA | Implemented | composer.lock / Packagist scanning |
+| SCA | Implemented | composer.lock / Packagist scanning, package-lock.json / npm |
 | Container Security | Not Implemented | N/A |
 | IaC Security | Not Implemented | N/A |
 | CNAPP/CSPM | Not Implemented | N/A |
@@ -101,13 +101,15 @@ The scanning engine has been refactored into a modular, orchestrator-driven arch
 - **`AbstractRegexScanner`**: A specialized abstract base for pattern-based detection providing line-by-line validation, evidence context-window truncation, and base compliance mapping.
 - **`SastScanner`**: Implements regex logic for SQLi, Eval, Exec, and Path Traversal patterns.
 - **`SecretScanner`**: Implements entropy-validated generic secret detection and provider-specific key validation.
-- **`ScaScanner`**: Implements Software Composition Analysis. Parses `composer.lock` with `ComposerLockParser` and queries the OSV API using `OsvApiClient` to detect vulnerable dependencies.
+- **`ScaScanner`**: Implements Software Composition Analysis. Parses lockfiles and queries the OSV API using `OsvApiClient` to detect vulnerable dependencies. Supports:
+  - `composer.lock` via `ComposerLockParser`
+  - `package-lock.json` (v1, v2, v3) via `NpmLockParser`
 
 ### Privacy & Telemetry
 TrustNode is self-hosted and privacy-focused. For SCA, TrustNode sends **ONLY** the `ecosystem`, `package name`, and `installed version` to the OSV database. It **DOES NOT** send source code, repository structures, environment variables, or secrets externally.
 
 ### SCA Limitations & Caching
-Currently, SCA only supports `composer.lock` / Packagist. Unreachable OSV API errors gracefully downgrade the scan (SCA skipped) rather than crashing the SAST/Secret detection. OSV results are cached (vulnerable=7 days, clean=24 hours).
+Currently, SCA only supports `composer.lock` (Packagist) and `package-lock.json` (npm). Yarn, pnpm, Python, Go, Rust, Maven, Gradle, etc., are **not yet supported**. Unreachable OSV API errors gracefully downgrade the scan (SCA skipped) rather than crashing the SAST/Secret detection. OSV results are cached (vulnerable=7 days, clean=24 hours). This is dependency vulnerability scanning, not runtime protection.
 
 Future scanner engines can seamlessly plug into this orchestrator architecture by implementing the `ScannerInterface`.
 

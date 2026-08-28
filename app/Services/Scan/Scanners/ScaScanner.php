@@ -10,11 +10,13 @@ use Illuminate\Support\Str;
 class ScaScanner implements ScannerInterface
 {
     protected ComposerLockParser $composerParser;
+    protected \App\Services\Scan\Dependencies\NpmLockParser $npmParser;
     protected OsvApiClient $osvClient;
 
-    public function __construct(ComposerLockParser $composerParser, OsvApiClient $osvClient)
+    public function __construct(ComposerLockParser $composerParser, \App\Services\Scan\Dependencies\NpmLockParser $npmParser, OsvApiClient $osvClient)
     {
         $this->composerParser = $composerParser;
+        $this->npmParser = $npmParser;
         $this->osvClient = $osvClient;
     }
 
@@ -25,6 +27,8 @@ class ScaScanner implements ScannerInterface
 
         if ($filename === 'composer.lock') {
             $dependencies = $this->composerParser->parse($content);
+        } elseif ($filename === 'package-lock.json') {
+            $dependencies = $this->npmParser->parse($content);
         } else {
             return []; // Ignore unsupported files
         }

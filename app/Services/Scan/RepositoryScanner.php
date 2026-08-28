@@ -19,6 +19,7 @@ class RepositoryScanner
             new \App\Services\Scan\Scanners\SecretScanner(),
             new \App\Services\Scan\Scanners\ScaScanner(
                 new \App\Services\Scan\Dependencies\ComposerLockParser(),
+                new \App\Services\Scan\Dependencies\NpmLockParser(),
                 new \App\Services\Scan\Vulnerability\OsvApiClient()
             ),
         ];

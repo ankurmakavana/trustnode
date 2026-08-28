@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use Tests\TestCase;
 use App\Services\Scan\Scanners\ScaScanner;
 use App\Services\Scan\Dependencies\ComposerLockParser;
+use App\Services\Scan\Dependencies\NpmLockParser;
 use App\Services\Scan\Vulnerability\OsvApiClient;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
@@ -21,14 +22,44 @@ class ScaScannerTest extends TestCase
     {
         $parser = new ComposerLockParser();
         $content = file_get_contents(base_path('tests/Fixtures/SCA/composer_vulnerable.lock'));
-        
+
         $deps = $parser->parse($content);
-        
+
         $this->assertCount(3, $deps);
         $this->assertEquals('guzzlehttp/guzzle', $deps[0]['package']);
         $this->assertEquals('7.4.1', $deps[0]['version']);
         $this->assertEquals('laravel/framework', $deps[1]['package']);
         $this->assertEquals('phpunit/phpunit', $deps[2]['package']);
+    }
+
+    public function test_it_parses_package_lock_v1_correctly()
+    {
+        $parser = new NpmLockParser();
+        $content = file_get_contents(base_path('tests/Fixtures/SCA/package-lock-v1.json'));
+
+        $deps = $parser->parse($content);
+
+        $this->assertCount(3, $deps);
+        $this->assertEquals('lodash', $deps[0]['package']);
+        $this->assertEquals('4.17.15', $deps[0]['version']);
+        $this->assertEquals('@scope/package', $deps[1]['package']);
+        $this->assertEquals('1.0.0', $deps[1]['version']);
+        $this->assertEquals('nested-package', $deps[2]['package']);
+        $this->assertEquals('2.0.0', $deps[2]['version']);
+    }
+
+    public function test_it_parses_package_lock_v3_correctly()
+    {
+        $parser = new NpmLockParser();
+        $content = file_get_contents(base_path('tests/Fixtures/SCA/package-lock-v3.json'));
+
+        $deps = $parser->parse($content);
+
+        $this->assertCount(2, $deps);
+        $this->assertEquals('axios', $deps[0]['package']);
+        $this->assertEquals('0.21.0', $deps[0]['version']);
+        $this->assertEquals('follow-redirects', $deps[1]['package']);
+        $this->assertEquals('1.13.0', $deps[1]['version']);
     }
 
     public function test_it_queries_osv_and_returns_findings()
@@ -68,11 +99,11 @@ class ScaScannerTest extends TestCase
             ], 200)
         ]);
 
-        $scanner = new ScaScanner(new ComposerLockParser(), new OsvApiClient());
+        $scanner = new ScaScanner(new ComposerLockParser(), new NpmLockParser(), new OsvApiClient());
         $content = file_get_contents(base_path('tests/Fixtures/SCA/composer_vulnerable.lock'));
-        
+
         $findings = $scanner->scan($content, [], 'composer.lock', 'https://github.com/repo');
-        
+
         $this->assertCount(1, $findings);
         $this->assertEquals('ScaScanner', $findings[0]->scanner);
         $this->assertEquals('SCA', $findings[0]->category);
@@ -81,7 +112,7 @@ class ScaScannerTest extends TestCase
         $this->assertEquals('CVE-2022-27776', $findings[0]->cve);
         $this->assertEquals('composer.lock', $findings[0]->path);
         $this->assertEquals('guzzlehttp/guzzle@7.4.1', $findings[0]->parameter);
-        
+
         $this->assertStringContainsString('Ecosystem: Packagist', $findings[0]->technicalDetails);
         $this->assertStringContainsString('Fixed Version: 7.4.3', $findings[0]->technicalDetails);
     }
@@ -92,11 +123,11 @@ class ScaScannerTest extends TestCase
             'api.osv.dev/v1/querybatch' => Http::response([], 500)
         ]);
 
-        $scanner = new ScaScanner(new ComposerLockParser(), new OsvApiClient());
+        $scanner = new ScaScanner(new ComposerLockParser(), new NpmLockParser(), new OsvApiClient());
         $content = file_get_contents(base_path('tests/Fixtures/SCA/composer_vulnerable.lock'));
-        
+
         $findings = $scanner->scan($content, [], 'composer.lock', 'https://github.com/repo');
-        
+
         $this->assertCount(0, $findings);
     }
 }

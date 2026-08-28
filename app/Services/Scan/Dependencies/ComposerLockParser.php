@@ -29,14 +29,13 @@ class ComposerLockParser
                 continue;
             }
 
-            $version = ltrim($pkg['version'], 'v'); // OSV handles versions better without 'v' prefix usually, though Packagist often includes 'v'. OSV actually normalizes this, but we'll leave it as is or trim it depending on OSV Packagist standard. Let's just use exact string.
-            // OSV prefers exact version strings for Packagist as they appear in composer.
+            $version = ltrim($pkg['version'], 'v');
             
-            $key = $pkg['name'] . '@' . $pkg['version'];
+            $key = $pkg['name'] . '@' . $version;
             $dependencies[$key] = [
                 'ecosystem' => 'Packagist',
                 'package' => $pkg['name'],
-                'version' => $pkg['version'],
+                'version' => $version,
             ];
         }
 
