@@ -266,8 +266,6 @@ TrustNode imposes strict limits to guarantee stability and prevent resource exha
 
 ## What TrustNode Does NOT Yet Do
 The following capabilities are **explicitly not implemented**:
-- Dependency vulnerability scanning / SCA
-- OSV/NVD package vulnerability mapping
 - Docker/container misconfiguration scanning
 - Terraform scanning
 - Kubernetes scanning
@@ -278,7 +276,6 @@ The following capabilities are **explicitly not implemented**:
 - SOC automation
 
 ## Roadmap
-- **Phase 3** — Software Composition Analysis (SCA)
 - **Phase 4** — Container Security
 - **Phase 5** — IaC Security
 - **Phase 6** — Deterministic Compliance Mapping
@@ -288,7 +285,7 @@ The following capabilities are **explicitly not implemented**:
 ## Project Structure
 - `app/` - Laravel backend source.
   - `app/Services/Scan/` - Scan engine core orchestrators.
-  - `app/Services/Scan/Scanners/` - Modular engine rule logic (`SastScanner`, `SecretScanner`).
+  - `app/Services/Scan/Scanners/` - Modular engine rule logic (`SastScanner`, `SecretScanner`, `ScaScanner`).
   - `app/Http/Controllers/` - REST API endpoints.
   - `app/Jobs/` - Asynchronous background jobs (`ScanLocalJob`, `ScanRepositoryJob`, etc).
   - `app/Models/` - Database Eloquent models.
@@ -310,6 +307,7 @@ TrustNode is currently under active development.
 - Modular scanner foundation
 - SAST
 - Secret detection
+- SCA (Software Composition Analysis)
 
 **Next planned capability:**
-- SCA (Software Composition Analysis)
+- Container Security
