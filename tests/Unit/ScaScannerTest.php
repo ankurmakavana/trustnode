@@ -48,6 +48,20 @@ class ScaScannerTest extends TestCase
         $this->assertEquals('2.0.0', $deps[2]['version']);
     }
 
+    public function test_it_parses_package_lock_v2_correctly()
+    {
+        $parser = new NpmLockParser();
+        $content = file_get_contents(base_path('tests/Fixtures/SCA/package-lock-v2.json'));
+
+        $deps = $parser->parse($content);
+
+        $this->assertCount(2, $deps);
+        $this->assertEquals('moment', $deps[0]['package']);
+        $this->assertEquals('2.29.1', $deps[0]['version']);
+        $this->assertEquals('@scope/utils', $deps[1]['package']);
+        $this->assertEquals('1.5.0', $deps[1]['version']);
+    }
+
     public function test_it_parses_package_lock_v3_correctly()
     {
         $parser = new NpmLockParser();

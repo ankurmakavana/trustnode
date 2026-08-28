@@ -1,0 +1,26 @@
+{
+    "name": "trustnode-test-app",
+    "version": "1.0.0",
+    "lockfileVersion": 2,
+    "packages": {
+        "": {
+            "name": "trustnode-test-app",
+            "version": "1.0.0"
+        },
+        "node_modules/moment": {
+            "version": "2.29.1",
+            "resolved": "https://registry.npmjs.org/moment/-/moment-2.29.1.tgz"
+        },
+        "node_modules/@scope/utils": {
+            "version": "1.5.0"
+        }
+    },
+    "dependencies": {
+        "moment": {
+            "version": "2.29.1"
+        },
+        "@scope/utils": {
+            "version": "1.5.0"
+        }
+    }
+}
