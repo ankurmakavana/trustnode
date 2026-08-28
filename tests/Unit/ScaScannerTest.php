@@ -76,6 +76,46 @@ class ScaScannerTest extends TestCase
         $this->assertEquals('1.13.0', $deps[1]['version']);
     }
 
+    public function test_it_parses_yarn_v1_correctly()
+    {
+        $parser = new \App\Services\Scan\Dependencies\YarnLockParser();
+        $content = file_get_contents(base_path('tests/Fixtures/SCA/yarn-v1.lock'));
+
+        $deps = $parser->parse($content);
+
+        // Expect deduplication and scope handling
+        $this->assertCount(3, $deps);
+
+        $this->assertEquals('@babel/code-frame', $deps[0]['package']);
+        $this->assertEquals('7.12.11', $deps[0]['version']);
+
+        $this->assertEquals('lodash', $deps[1]['package']);
+        $this->assertEquals('4.17.21', $deps[1]['version']);
+
+        $this->assertEquals('react', $deps[2]['package']);
+        $this->assertEquals('18.2.0', $deps[2]['version']);
+    }
+
+    public function test_it_parses_pnpm_supported_formats_correctly()
+    {
+        $parser = new \App\Services\Scan\Dependencies\PnpmLockParser();
+        $content = file_get_contents(base_path('tests/Fixtures/SCA/pnpm-lock-supported.yaml'));
+
+        $deps = $parser->parse($content);
+
+        // Expect peer suffix stripping and scope handling
+        $this->assertCount(3, $deps);
+
+        $this->assertEquals('lodash', $deps[0]['package']);
+        $this->assertEquals('4.17.21', $deps[0]['version']);
+
+        $this->assertEquals('@babel/core', $deps[1]['package']);
+        $this->assertEquals('7.12.3', $deps[1]['version']);
+
+        $this->assertEquals('vite', $deps[2]['package']);
+        $this->assertEquals('5.0.0', $deps[2]['version']); // Stripped (@types/node@20.0.0)
+    }
+
     public function test_it_queries_osv_and_returns_findings()
     {
         Http::fake([
@@ -113,7 +153,13 @@ class ScaScannerTest extends TestCase
             ], 200)
         ]);
 
-        $scanner = new ScaScanner(new ComposerLockParser(), new NpmLockParser(), new OsvApiClient());
+        $scanner = new ScaScanner(
+            new ComposerLockParser(),
+            new NpmLockParser(),
+            new \App\Services\Scan\Dependencies\YarnLockParser(),
+            new \App\Services\Scan\Dependencies\PnpmLockParser(),
+            new OsvApiClient()
+        );
         $content = file_get_contents(base_path('tests/Fixtures/SCA/composer_vulnerable.lock'));
 
         $findings = $scanner->scan($content, [], 'composer.lock', 'https://github.com/repo');
@@ -137,7 +183,13 @@ class ScaScannerTest extends TestCase
             'api.osv.dev/v1/querybatch' => Http::response([], 500)
         ]);
 
-        $scanner = new ScaScanner(new ComposerLockParser(), new NpmLockParser(), new OsvApiClient());
+        $scanner = new ScaScanner(
+            new ComposerLockParser(),
+            new NpmLockParser(),
+            new \App\Services\Scan\Dependencies\YarnLockParser(),
+            new \App\Services\Scan\Dependencies\PnpmLockParser(),
+            new OsvApiClient()
+        );
         $content = file_get_contents(base_path('tests/Fixtures/SCA/composer_vulnerable.lock'));
 
         $findings = $scanner->scan($content, [], 'composer.lock', 'https://github.com/repo');

@@ -1,0 +1,28 @@
+lockfileVersion: '6.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+dependencies:
+  lodash:
+    specifier: ^4.17.0
+    version: 4.17.21
+  '@babel/core':
+    specifier: ^7.0.0
+    version: 7.12.3
+
+packages:
+  lodash@4.17.21:
+    resolution: {integrity: sha512-xxx}
+    dev: false
+
+  '@babel/core@7.12.3':
+    resolution: {integrity: sha512-xxx}
+    dependencies:
+      '@babel/highlight': 7.10.4
+    dev: false
+
+  vite@5.0.0(@types/node@20.0.0):
+    resolution: {integrity: sha512-xxx}
+    dev: false

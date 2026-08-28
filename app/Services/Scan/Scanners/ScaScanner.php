@@ -11,12 +11,21 @@ class ScaScanner implements ScannerInterface
 {
     protected ComposerLockParser $composerParser;
     protected \App\Services\Scan\Dependencies\NpmLockParser $npmParser;
+    protected \App\Services\Scan\Dependencies\YarnLockParser $yarnParser;
+    protected \App\Services\Scan\Dependencies\PnpmLockParser $pnpmParser;
     protected OsvApiClient $osvClient;
 
-    public function __construct(ComposerLockParser $composerParser, \App\Services\Scan\Dependencies\NpmLockParser $npmParser, OsvApiClient $osvClient)
-    {
+    public function __construct(
+        ComposerLockParser $composerParser,
+        \App\Services\Scan\Dependencies\NpmLockParser $npmParser,
+        \App\Services\Scan\Dependencies\YarnLockParser $yarnParser,
+        \App\Services\Scan\Dependencies\PnpmLockParser $pnpmParser,
+        OsvApiClient $osvClient
+    ) {
         $this->composerParser = $composerParser;
         $this->npmParser = $npmParser;
+        $this->yarnParser = $yarnParser;
+        $this->pnpmParser = $pnpmParser;
         $this->osvClient = $osvClient;
     }
 
@@ -29,6 +38,10 @@ class ScaScanner implements ScannerInterface
             $dependencies = $this->composerParser->parse($content);
         } elseif ($filename === 'package-lock.json') {
             $dependencies = $this->npmParser->parse($content);
+        } elseif ($filename === 'yarn.lock') {
+            $dependencies = $this->yarnParser->parse($content);
+        } elseif ($filename === 'pnpm-lock.yaml') {
+            $dependencies = $this->pnpmParser->parse($content);
         } else {
             return []; // Ignore unsupported files
         }

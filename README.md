@@ -109,7 +109,15 @@ The scanning engine has been refactored into a modular, orchestrator-driven arch
 TrustNode is self-hosted and privacy-focused. For SCA, TrustNode sends **ONLY** the `ecosystem`, `package name`, and `installed version` to the OSV database. It **DOES NOT** send source code, repository structures, environment variables, or secrets externally.
 
 ### SCA Limitations & Caching
-Currently, SCA only supports `composer.lock` (Packagist) and `package-lock.json` (npm). Yarn, pnpm, Python, Go, Rust, Maven, Gradle, etc., are **not yet supported**. Unreachable OSV API errors gracefully downgrade the scan (SCA skipped) rather than crashing the SAST/Secret detection. OSV results are cached (vulnerable=7 days, clean=24 hours). This is dependency vulnerability scanning, not runtime protection.
+Currently, SCA supports:
+- `composer.lock` (Packagist)
+- `package-lock.json` (npm - Lockfile Versions 1, 2, and 3)
+- `yarn.lock` (Yarn Classic v1 only). *Note: Yarn Berry v2+ YAML format is not supported. Dependency aliases may not be fully resolved and are safely bypassed without corrupting OSV queries.*
+- `pnpm-lock.yaml` (pnpm v5 and v6/v9 formats). *Note: Peer dependencies appended to version numbers are stripped/normalized safely before querying OSV.*
+
+Python, Go, Rust, Maven, Gradle, etc., are **not yet supported**.
+
+Unreachable OSV API errors gracefully downgrade the scan (SCA skipped) rather than crashing the SAST/Secret detection. OSV results are cached (vulnerable=7 days, clean=24 hours). OSV queries preserve privacy by only sending the ecosystem, package name, and resolved version. This is dependency vulnerability scanning, not runtime protection.
 
 Future scanner engines can seamlessly plug into this orchestrator architecture by implementing the `ScannerInterface`.
 
