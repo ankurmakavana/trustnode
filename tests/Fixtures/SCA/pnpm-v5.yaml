@@ -1,0 +1,22 @@
+lockfileVersion: 5.4
+
+specifiers:
+  lodash: ^4.17.0
+  '@babel/core': ^7.0.0
+
+packages:
+
+  /lodash/4.17.21:
+    resolution: {integrity: sha512-xxx}
+    dev: false
+
+  /@babel/core/7.12.3:
+    resolution: {integrity: sha512-xxx}
+    dependencies:
+      /@babel/highlight/7.10.4:
+        resolution: {integrity: sha512-xxx}
+    dev: false
+
+  /vite/5.0.0(@types/node@20.0.0):
+    resolution: {integrity: sha512-xxx}
+    dev: false

@@ -6,7 +6,7 @@ class YarnLockParser
 {
     /**
      * Parses a yarn.lock (v1) file and returns normalized dependencies.
-     * 
+     *
      * Unsupported: Yarn Berry (v2+) valid YAML format.
      * Aliases are naturally bypassed or may fall into the same capture group;
      * if they have unusual formatting, they might be skipped safely.

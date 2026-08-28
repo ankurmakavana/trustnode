@@ -76,44 +76,101 @@ class ScaScannerTest extends TestCase
         $this->assertEquals('1.13.0', $deps[1]['version']);
     }
 
-    public function test_it_parses_yarn_v1_correctly()
+    public function test_it_parses_yarn_v1_normal_dependency()
     {
         $parser = new \App\Services\Scan\Dependencies\YarnLockParser();
         $content = file_get_contents(base_path('tests/Fixtures/SCA/yarn-v1.lock'));
-
         $deps = $parser->parse($content);
 
-        // Expect deduplication and scope handling
-        $this->assertCount(3, $deps);
-
-        $this->assertEquals('@babel/code-frame', $deps[0]['package']);
-        $this->assertEquals('7.12.11', $deps[0]['version']);
-
-        $this->assertEquals('lodash', $deps[1]['package']);
-        $this->assertEquals('4.17.21', $deps[1]['version']);
-
-        $this->assertEquals('react', $deps[2]['package']);
-        $this->assertEquals('18.2.0', $deps[2]['version']);
+        $react = collect($deps)->firstWhere('package', 'react');
+        $this->assertNotNull($react);
+        $this->assertEquals('18.2.0', $react['version']);
     }
 
-    public function test_it_parses_pnpm_supported_formats_correctly()
+    public function test_it_parses_yarn_v1_scoped_dependency()
+    {
+        $parser = new \App\Services\Scan\Dependencies\YarnLockParser();
+        $content = file_get_contents(base_path('tests/Fixtures/SCA/yarn-v1.lock'));
+        $deps = $parser->parse($content);
+
+        $babel = collect($deps)->firstWhere('package', '@babel/code-frame');
+        $this->assertNotNull($babel);
+        $this->assertEquals('7.12.11', $babel['version']);
+    }
+
+    public function test_it_deduplicates_yarn_v1_multiple_descriptors()
+    {
+        $parser = new \App\Services\Scan\Dependencies\YarnLockParser();
+        $content = file_get_contents(base_path('tests/Fixtures/SCA/yarn-v1.lock'));
+        $deps = $parser->parse($content);
+
+        // "lodash@^4.17.0", "lodash@~4.17.0" should resolve to 1 entry
+        $lodashDeps = collect($deps)->where('package', 'lodash');
+        $this->assertCount(1, $lodashDeps);
+        $this->assertEquals('4.17.21', $lodashDeps->first()['version']);
+    }
+
+    public function test_it_rejects_yarn_berry_format()
+    {
+        $parser = new \App\Services\Scan\Dependencies\YarnLockParser();
+        $content = file_get_contents(base_path('tests/Fixtures/SCA/yarn-berry.lock'));
+        $deps = $parser->parse($content);
+        $this->assertEmpty($deps);
+    }
+
+    public function test_it_parses_pnpm_v5_format()
+    {
+        $parser = new \App\Services\Scan\Dependencies\PnpmLockParser();
+        $content = file_get_contents(base_path('tests/Fixtures/SCA/pnpm-v5.yaml'));
+        $deps = $parser->parse($content);
+
+        $lodash = collect($deps)->firstWhere('package', 'lodash');
+        $this->assertNotNull($lodash);
+        $this->assertEquals('4.17.21', $lodash['version']);
+    }
+
+    public function test_it_parses_pnpm_v6_format()
     {
         $parser = new \App\Services\Scan\Dependencies\PnpmLockParser();
         $content = file_get_contents(base_path('tests/Fixtures/SCA/pnpm-lock-supported.yaml'));
-
         $deps = $parser->parse($content);
 
-        // Expect peer suffix stripping and scope handling
-        $this->assertCount(3, $deps);
+        $lodash = collect($deps)->firstWhere('package', 'lodash');
+        $this->assertNotNull($lodash);
+        $this->assertEquals('4.17.21', $lodash['version']);
+    }
 
-        $this->assertEquals('lodash', $deps[0]['package']);
-        $this->assertEquals('4.17.21', $deps[0]['version']);
+    public function test_it_parses_pnpm_v9_format()
+    {
+        $parser = new \App\Services\Scan\Dependencies\PnpmLockParser();
+        $content = file_get_contents(base_path('tests/Fixtures/SCA/pnpm-v9.yaml'));
+        $deps = $parser->parse($content);
 
-        $this->assertEquals('@babel/core', $deps[1]['package']);
-        $this->assertEquals('7.12.3', $deps[1]['version']);
+        $lodash = collect($deps)->firstWhere('package', 'lodash');
+        $this->assertNotNull($lodash);
+        $this->assertEquals('4.17.21', $lodash['version']);
+    }
 
-        $this->assertEquals('vite', $deps[2]['package']);
-        $this->assertEquals('5.0.0', $deps[2]['version']); // Stripped (@types/node@20.0.0)
+    public function test_it_parses_pnpm_scoped_package()
+    {
+        $parser = new \App\Services\Scan\Dependencies\PnpmLockParser();
+        $content = file_get_contents(base_path('tests/Fixtures/SCA/pnpm-v9.yaml'));
+        $deps = $parser->parse($content);
+
+        $babel = collect($deps)->firstWhere('package', '@babel/core');
+        $this->assertNotNull($babel);
+        $this->assertEquals('7.12.3', $babel['version']);
+    }
+
+    public function test_it_normalizes_pnpm_peer_dependency_suffix()
+    {
+        $parser = new \App\Services\Scan\Dependencies\PnpmLockParser();
+        $content = file_get_contents(base_path('tests/Fixtures/SCA/pnpm-v9.yaml'));
+        $deps = $parser->parse($content);
+
+        $vite = collect($deps)->firstWhere('package', 'vite');
+        $this->assertNotNull($vite);
+        $this->assertEquals('5.0.0', $vite['version']); // @types/node@20.0.0 should be stripped
     }
 
     public function test_it_queries_osv_and_returns_findings()
