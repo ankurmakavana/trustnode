@@ -25,59 +25,59 @@ It is NOT yet:
 TrustNode currently provides:
 
 **Code Security**
-→ SAST (Regex-based SQLi, Command Injection, Eval, Path Traversal)
+â†’ SAST (Regex-based SQLi, Command Injection, Eval, Path Traversal)
 
 **Secret Security**
-→ Secret Detection (High-entropy tokens, AWS, GitHub, GitLab, Stripe, Slack, GCP, JWT, Private Keys)
+â†’ Secret Detection (High-entropy tokens, AWS, GitHub, GitLab, Stripe, Slack, GCP, JWT, Private Keys)
 
 **Dependency Security**
-→ Software Composition Analysis (SCA) via lockfile parsing and OSV vulnerability lookup
+â†’ Software Composition Analysis (SCA) via lockfile parsing and OSV vulnerability lookup
 
 **Infrastructure Security**
-→ Not yet implemented / planned
+â†’ Not yet implemented / planned
 
 **Container Security**
-→ Not yet implemented / planned
+â†’ Static Dockerfile and Docker Compose analysis
 
 **Cloud Security**
-→ Not yet implemented / planned
+â†’ Not yet implemented / planned
 
 **Network Security**
-→ Not yet implemented / planned
+â†’ Not yet implemented / planned
 
 **SOC**
-→ Finding/reporting foundation, but not a full SIEM/SOC platform
+â†’ Finding/reporting foundation, but not a full SIEM/SOC platform
 
 **Compliance**
-→ Current mapper status: Experimental / Heuristic foundational mapping
+â†’ Current mapper status: Experimental / Heuristic foundational mapping
 
 ---
 
 ## Status Vocabulary
 Use exactly these statuses everywhere in this documentation:
-- ✅ IMPLEMENTED
-- 🟡 PARTIAL
-- 🧪 EXPERIMENTAL
-- 🚧 PLANNED
-- ❌ NOT IMPLEMENTED
+- âœ… IMPLEMENTED
+- ðŸŸ¡ PARTIAL
+- ðŸ§ª EXPERIMENTAL
+- ðŸš§ PLANNED
+- âŒ NOT IMPLEMENTED
 
 ---
 
 ## Security Category Scorecard
 | Category | Current Status |
 |----------|----------------|
-| Code Security | 🟡 PARTIAL |
-| Secret Security | ✅ IMPLEMENTED |
-| Dependency / SCA Security | ✅ IMPLEMENTED |
-| Container Security | ❌ NOT IMPLEMENTED |
-| IaC / Cloud Posture | ❌ NOT IMPLEMENTED |
-| Network Security | ❌ NOT IMPLEMENTED |
-| Cloud / CNAPP | ❌ NOT IMPLEMENTED |
-| SOC / Detection | 🟡 PARTIAL |
-| Compliance | 🧪 EXPERIMENTAL |
-| Reporting | ✅ IMPLEMENTED |
-| Scanning Targets | ✅ IMPLEMENTED |
-| Platform / Operations | ✅ IMPLEMENTED |
+| Code Security | ðŸŸ¡ PARTIAL |
+| Secret Security | âœ… IMPLEMENTED |
+| Dependency / SCA Security | âœ… IMPLEMENTED |
+| Container Security | âŒ IMPLEMENTED |
+| IaC / Cloud Posture | âŒ NOT IMPLEMENTED |
+| Network Security | âŒ NOT IMPLEMENTED |
+| Cloud / CNAPP | âŒ NOT IMPLEMENTED |
+| SOC / Detection | ðŸŸ¡ PARTIAL |
+| Compliance | ðŸ§ª EXPERIMENTAL |
+| Reporting | âœ… IMPLEMENTED |
+| Scanning Targets | âœ… IMPLEMENTED |
+| Platform / Operations | âœ… IMPLEMENTED |
 
 ---
 
@@ -86,37 +86,48 @@ Use exactly these statuses everywhere in this documentation:
 ### 1. Code Security
 | Capability | Status | Verified Source |
 |---|---|---|
-| SAST | ✅ IMPLEMENTED | `SastScanner.php` |
-| SQL Injection detection | ✅ IMPLEMENTED | `SastScanner.php` |
-| Command Injection detection | ✅ IMPLEMENTED | `SastScanner.php` |
-| Dangerous eval detection | ✅ IMPLEMENTED | `SastScanner.php` |
-| Path Traversal detection | ✅ IMPLEMENTED | `SastScanner.php` |
-| Regex-based detection | ✅ IMPLEMENTED | `AbstractRegexScanner.php` |
-| Cross-language nature | ✅ IMPLEMENTED | `SastScanner.php` |
-| AST-based analysis | 🚧 PLANNED | N/A |
-| Framework-aware analysis | 🚧 PLANNED | N/A |
-| Language-specific analysis | 🚧 PLANNED | N/A |
+| SAST | âœ… IMPLEMENTED | `SastScanner.php` |
+| SQL Injection detection | âœ… IMPLEMENTED | `SastScanner.php` |
+| Command Injection detection | âœ… IMPLEMENTED | `SastScanner.php` |
+| Dangerous eval detection | âœ… IMPLEMENTED | `SastScanner.php` |
+| Path Traversal detection | âœ… IMPLEMENTED | `SastScanner.php` |
+| Regex-based detection | âœ… IMPLEMENTED | `AbstractRegexScanner.php` |
+| Cross-language nature | âœ… IMPLEMENTED | `SastScanner.php` |
+| AST-based analysis | ðŸš§ PLANNED | N/A |
+| Framework-aware analysis | ðŸš§ PLANNED | N/A |
+| Language-specific analysis | ðŸš§ PLANNED | N/A |
 
 ### 2. Secret Security
 | Capability | Status | Verified Source |
 |---|---|---|
-| AWS credentials | ✅ IMPLEMENTED | `SecretScanner.php` |
-| GitHub tokens | ✅ IMPLEMENTED | `SecretScanner.php` |
-| GitLab tokens | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Stripe keys | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Slack tokens | ✅ IMPLEMENTED | `SecretScanner.php` |
-| GCP keys | ✅ IMPLEMENTED | `SecretScanner.php` |
-| JWT detection | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Private key detection | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Generic secrets | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Entropy filtering | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Placeholder filtering | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Secret masking | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Evidence truncation | ✅ IMPLEMENTED | `AbstractRegexScanner.php` |
+| AWS credentials | âœ… IMPLEMENTED | `SecretScanner.php` |
+| GitHub tokens | âœ… IMPLEMENTED | `SecretScanner.php` |
+| GitLab tokens | âœ… IMPLEMENTED | `SecretScanner.php` |
+| Stripe keys | âœ… IMPLEMENTED | `SecretScanner.php` |
+| Slack tokens | âœ… IMPLEMENTED | `SecretScanner.php` |
+| GCP keys | âœ… IMPLEMENTED | `SecretScanner.php` |
+| JWT detection | âœ… IMPLEMENTED | `SecretScanner.php` |
+| Private key detection | âœ… IMPLEMENTED | `SecretScanner.php` |
+| Generic secrets | âœ… IMPLEMENTED | `SecretScanner.php` |
+| Entropy filtering | âœ… IMPLEMENTED | `SecretScanner.php` |
+| Placeholder filtering | âœ… IMPLEMENTED | `SecretScanner.php` |
+| Secret masking | âœ… IMPLEMENTED | `SecretScanner.php` |
+| Evidence truncation | âœ… IMPLEMENTED | `AbstractRegexScanner.php` |
 
 ### 3. Dependency / SCA Security
 | Capability | Status | Verified Source |
 |---|---|---|
+| composer.lock | âœ… IMPLEMENTED | `ComposerLockParser.php` |
+| package-lock.json | âœ… IMPLEMENTED | `NpmLockParser.php` |
+| lockfileVersion 1 | âœ… IMPLEMENTED | `NpmLockParser.php` |
+| lockfileVersion 2 | âœ… IMPLEMENTED | `NpmLockParser.php` |
+| lockfileVersion 3 | âœ… IMPLEMENTED | `NpmLockParser.php` |
+| Yarn Classic v1 | âœ… IMPLEMENTED | `YarnLockParser.php` |
+| Yarn Berry v2+ | âŒ NOT IMPLEMENTED | N/A |
+| pnpm-lock.yaml (Verified v5/v6/v9 formats) | âœ… IMPLEMENTED | `PnpmLockParser.php` |
+| Python | âŒ NOT IMPLEMENTED | N/A |
+| Go | âŒ NOT IMPLEMENTED | N/A |
+| Rust | âŒ NOT IMPLEMENTED | N/A |
 | composer.lock | ✅ IMPLEMENTED | `ComposerLockParser.php` |
 | package-lock.json | ✅ IMPLEMENTED | `NpmLockParser.php` |
 | lockfileVersion 1 | ✅ IMPLEMENTED | `NpmLockParser.php` |
@@ -134,8 +145,8 @@ Use exactly these statuses everywhere in this documentation:
 ### 4. Container Security
 | Capability | Status | Verified Source |
 |---|---|---|
-| Dockerfile scanning | ❌ NOT IMPLEMENTED | N/A |
-| docker-compose scanning | ❌ NOT IMPLEMENTED | N/A |
+| Dockerfile scanning | ✅ IMPLEMENTED | `ContainerScanner.php` |
+| docker-compose scanning | ✅ IMPLEMENTED | `ContainerScanner.php` |
 | image vulnerability scanning | ❌ NOT IMPLEMENTED | N/A |
 | image configuration scanning | ❌ NOT IMPLEMENTED | N/A |
 | container runtime scanning | ❌ NOT IMPLEMENTED | N/A |
@@ -144,100 +155,100 @@ Use exactly these statuses everywhere in this documentation:
 ### 5. IaC / Cloud Posture
 | Capability | Status | Verified Source |
 |---|---|---|
-| Terraform | ❌ NOT IMPLEMENTED | N/A |
-| Kubernetes | ❌ NOT IMPLEMENTED | N/A |
-| Helm | ❌ NOT IMPLEMENTED | N/A |
-| CloudFormation | ❌ NOT IMPLEMENTED | N/A |
-| AWS posture | ❌ NOT IMPLEMENTED | N/A |
-| GCP posture | ❌ NOT IMPLEMENTED | N/A |
-| Azure posture | ❌ NOT IMPLEMENTED | N/A |
-| CSPM | ❌ NOT IMPLEMENTED | N/A |
+| Terraform | âŒ NOT IMPLEMENTED | N/A |
+| Kubernetes | âŒ NOT IMPLEMENTED | N/A |
+| Helm | âŒ NOT IMPLEMENTED | N/A |
+| CloudFormation | âŒ NOT IMPLEMENTED | N/A |
+| AWS posture | âŒ NOT IMPLEMENTED | N/A |
+| GCP posture | âŒ NOT IMPLEMENTED | N/A |
+| Azure posture | âŒ NOT IMPLEMENTED | N/A |
+| CSPM | âŒ NOT IMPLEMENTED | N/A |
 
 ### 6. Network Security
 | Capability | Status | Verified Source |
 |---|---|---|
-| network configuration analysis | ❌ NOT IMPLEMENTED | N/A |
-| exposed ports | ❌ NOT IMPLEMENTED | N/A |
-| TLS/security configuration | ❌ NOT IMPLEMENTED | N/A |
-| endpoint/network discovery | ❌ NOT IMPLEMENTED | N/A |
-| network vulnerability scanning | ❌ NOT IMPLEMENTED | N/A |
-| live network scanning | ❌ NOT IMPLEMENTED | N/A |
+| network configuration analysis | âŒ NOT IMPLEMENTED | N/A |
+| exposed ports | âŒ NOT IMPLEMENTED | N/A |
+| TLS/security configuration | âŒ NOT IMPLEMENTED | N/A |
+| endpoint/network discovery | âŒ NOT IMPLEMENTED | N/A |
+| network vulnerability scanning | âŒ NOT IMPLEMENTED | N/A |
+| live network scanning | âŒ NOT IMPLEMENTED | N/A |
 
 ### 7. Cloud / CNAPP
 | Capability | Status | Verified Source |
 |---|---|---|
-| CSPM | ❌ NOT IMPLEMENTED | N/A |
-| CWPP | ❌ NOT IMPLEMENTED | N/A |
-| CIEM | ❌ NOT IMPLEMENTED | N/A |
-| Container Security | ❌ NOT IMPLEMENTED | N/A |
-| Kubernetes runtime security | ❌ NOT IMPLEMENTED | N/A |
-| Runtime workload protection | ❌ NOT IMPLEMENTED | N/A |
-| Cloud API posture scanning | ❌ NOT IMPLEMENTED | N/A |
-| Cloud asset inventory | ❌ NOT IMPLEMENTED | N/A |
+| CSPM | âŒ NOT IMPLEMENTED | N/A |
+| CWPP | âŒ NOT IMPLEMENTED | N/A |
+| CIEM | âŒ NOT IMPLEMENTED | N/A |
+| Container Security | âŒ IMPLEMENTED | N/A |
+| Kubernetes runtime security | âŒ NOT IMPLEMENTED | N/A |
+| Runtime workload protection | âŒ NOT IMPLEMENTED | N/A |
+| Cloud API posture scanning | âŒ NOT IMPLEMENTED | N/A |
+| Cloud asset inventory | âŒ NOT IMPLEMENTED | N/A |
 
 ### 8. SOC / Detection
 | Capability | Status | Verified Source |
 |---|---|---|
-| security findings | ✅ IMPLEMENTED | `ScanLocalJob.php` |
-| severity classification | ✅ IMPLEMENTED | `ScanLocalJob.php` |
-| fingerprints | ✅ IMPLEMENTED | `FingerprintService.php` |
-| deduplication | ✅ IMPLEMENTED | `FingerprintService.php` |
-| finding persistence | ✅ IMPLEMENTED | `ScanLocalJob.php` |
-| SIEM integration | ❌ NOT IMPLEMENTED | N/A |
-| SOAR | ❌ NOT IMPLEMENTED | N/A |
-| incident response platform | ❌ NOT IMPLEMENTED | N/A |
-| ticketing platform | ❌ NOT IMPLEMENTED | N/A |
-| runtime detection platform | ❌ NOT IMPLEMENTED | N/A |
-| webhook integrations | 🚧 PLANNED | N/A |
+| security findings | âœ… IMPLEMENTED | `ScanLocalJob.php` |
+| severity classification | âœ… IMPLEMENTED | `ScanLocalJob.php` |
+| fingerprints | âœ… IMPLEMENTED | `FingerprintService.php` |
+| deduplication | âœ… IMPLEMENTED | `FingerprintService.php` |
+| finding persistence | âœ… IMPLEMENTED | `ScanLocalJob.php` |
+| SIEM integration | âŒ NOT IMPLEMENTED | N/A |
+| SOAR | âŒ NOT IMPLEMENTED | N/A |
+| incident response platform | âŒ NOT IMPLEMENTED | N/A |
+| ticketing platform | âŒ NOT IMPLEMENTED | N/A |
+| runtime detection platform | âŒ NOT IMPLEMENTED | N/A |
+| webhook integrations | ðŸš§ PLANNED | N/A |
 
 ### 9. Compliance
 | Capability | Status | Verified Source |
 |---|---|---|
-| Heuristic/control mapping | 🧪 EXPERIMENTAL | `ComplianceMapper.php` |
-| OWASP | 🧪 EXPERIMENTAL | `ComplianceMapper.php` |
-| CIS | 🧪 EXPERIMENTAL | `ComplianceMapper.php` |
-| SOC 2 certification | ❌ NOT IMPLEMENTED | N/A |
-| ISO certification | ❌ NOT IMPLEMENTED | N/A |
-| PCI certification | ❌ NOT IMPLEMENTED | N/A |
-| Regulatory certification | ❌ NOT IMPLEMENTED | N/A |
+| Heuristic/control mapping | ðŸ§ª EXPERIMENTAL | `ComplianceMapper.php` |
+| OWASP | ðŸ§ª EXPERIMENTAL | `ComplianceMapper.php` |
+| CIS | ðŸ§ª EXPERIMENTAL | `ComplianceMapper.php` |
+| SOC 2 certification | âŒ NOT IMPLEMENTED | N/A |
+| ISO certification | âŒ NOT IMPLEMENTED | N/A |
+| PCI certification | âŒ NOT IMPLEMENTED | N/A |
+| Regulatory certification | âŒ NOT IMPLEMENTED | N/A |
 
 ### 10. Reporting
 | Capability | Status | Verified Source |
 |---|---|---|
-| findings | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| HTML reports | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| PDF reports | ✅ IMPLEMENTED | `ReportController.php` |
-| severity summary | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| technical details | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| remediation | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| business impact | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| evidence | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| SCA package information | ✅ IMPLEMENTED | `ScaScanner.php` |
-| lockfile path | ✅ IMPLEMENTED | `ScaScanner.php` |
+| findings | âœ… IMPLEMENTED | `local_scan.blade.php` |
+| HTML reports | âœ… IMPLEMENTED | `local_scan.blade.php` |
+| PDF reports | âœ… IMPLEMENTED | `ReportController.php` |
+| severity summary | âœ… IMPLEMENTED | `local_scan.blade.php` |
+| technical details | âœ… IMPLEMENTED | `local_scan.blade.php` |
+| remediation | âœ… IMPLEMENTED | `local_scan.blade.php` |
+| business impact | âœ… IMPLEMENTED | `local_scan.blade.php` |
+| evidence | âœ… IMPLEMENTED | `local_scan.blade.php` |
+| SCA package information | âœ… IMPLEMENTED | `ScaScanner.php` |
+| lockfile path | âœ… IMPLEMENTED | `ScaScanner.php` |
 
 ### 11. Scanning Targets
 | Capability | Status | Verified Source |
 |---|---|---|
-| local directories | ✅ IMPLEMENTED | `local_scan.ps1` |
-| Git repositories | ✅ IMPLEMENTED | `ScanRepositoryJob.php` |
-| uploaded archives | ✅ IMPLEMENTED | `ScanLocalJob.php` |
-| supported lockfiles | ✅ IMPLEMENTED | `ScaScanner.php` |
-| source files | ✅ IMPLEMENTED | `RepositoryScanner.php` |
-| arbitrary cloud repositories | ❌ NOT IMPLEMENTED | N/A |
-| live infrastructure scanning | ❌ NOT IMPLEMENTED | N/A |
+| local directories | âœ… IMPLEMENTED | `local_scan.ps1` |
+| Git repositories | âœ… IMPLEMENTED | `ScanRepositoryJob.php` |
+| uploaded archives | âœ… IMPLEMENTED | `ScanLocalJob.php` |
+| supported lockfiles | âœ… IMPLEMENTED | `ScaScanner.php` |
+| source files | âœ… IMPLEMENTED | `RepositoryScanner.php` |
+| arbitrary cloud repositories | âŒ NOT IMPLEMENTED | N/A |
+| live infrastructure scanning | âŒ NOT IMPLEMENTED | N/A |
 
 ### 12. Platform / Operations
 | Capability | Status | Verified Source |
 |---|---|---|
-| CLI | ✅ IMPLEMENTED | `cli/` |
-| API | ✅ IMPLEMENTED | `app/Http/Controllers/` |
-| queue processing | ✅ IMPLEMENTED | `app/Jobs/` |
-| Redis queue / cache | ✅ IMPLEMENTED | `compose.dev.yaml` |
-| Docker development environment| ✅ IMPLEMENTED | `docker/` |
-| temporary workspace cleanup | ✅ IMPLEMENTED | `local_scan.ps1`, `ScanLocalJob.php` |
-| retry handling | ✅ IMPLEMENTED | `OsvApiClient.php` |
-| error handling | ✅ IMPLEMENTED | `OsvApiClient.php`, `ScanLocalJob.php` |
-| scan lifecycle (progress/status) | ✅ IMPLEMENTED | `ScanLocalJob.php` |
+| CLI | âœ… IMPLEMENTED | `cli/` |
+| API | âœ… IMPLEMENTED | `app/Http/Controllers/` |
+| queue processing | âœ… IMPLEMENTED | `app/Jobs/` |
+| Redis queue / cache | âœ… IMPLEMENTED | `compose.dev.yaml` |
+| Docker development environment| âœ… IMPLEMENTED | `docker/` |
+| temporary workspace cleanup | âœ… IMPLEMENTED | `local_scan.ps1`, `ScanLocalJob.php` |
+| retry handling | âœ… IMPLEMENTED | `OsvApiClient.php` |
+| error handling | âœ… IMPLEMENTED | `OsvApiClient.php`, `ScanLocalJob.php` |
+| scan lifecycle (progress/status) | âœ… IMPLEMENTED | `ScanLocalJob.php` |
 
 ---
 
@@ -321,33 +332,33 @@ TrustNode enforces exact limits traceable to the source code to guarantee stabil
 
 ## Security Roadmap
 
-**Phase 1: Scanner foundation / modular architecture** — completed
-**Phase 2: Secret detection expansion** — completed
-**Phase 3: SCA** — completed for current supported ecosystems
+**Phase 1: Scanner foundation / modular architecture** â€” completed
 
-**Phase 4: Container Security** (🚧 PLANNED)
-- Dockerfile scanning
-- container configuration checks
+**Phase 2: Secret detection expansion** â€” completed
 
-**Phase 5: IaC Security** (🚧 PLANNED)
+**Phase 3: SCA** â€” completed for current supported ecosystems
+
+**Phase 4: Container Security** â€” completed (Dockerfile and Compose static analysis)
+
+**Phase 5: IaC Security** (ðŸš§ PLANNED)
 - Terraform
 - Kubernetes
 - Helm
 
-**Phase 6: Advanced Code Security** (🚧 PLANNED)
+**Phase 6: Advanced Code Security** (ðŸš§ PLANNED)
 - AST
 - framework-aware rules
 - language-specific analysis
 
-**Phase 7: Compliance** (🚧 PLANNED)
+**Phase 7: Compliance** (ðŸš§ PLANNED)
 - deterministic rule-to-control mapping
 
-**Phase 8: SOC / Integrations** (🚧 PLANNED)
+**Phase 8: SOC / Integrations** (ðŸš§ PLANNED)
 - SIEM
 - ticketing
 - webhooks
 
-**Phase 9: Cloud Security** (🚧 PLANNED)
+**Phase 9: Cloud Security** (ðŸš§ PLANNED)
 - CSPM
 - cloud APIs
 - runtime capabilities

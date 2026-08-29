@@ -24,6 +24,7 @@ class RepositoryScanner
                 new \App\Services\Scan\Dependencies\PnpmLockParser(),
                 new \App\Services\Scan\Vulnerability\OsvApiClient()
             ),
+            new \App\Services\Scan\Scanners\ContainerScanner(),
         ];
     }
 
