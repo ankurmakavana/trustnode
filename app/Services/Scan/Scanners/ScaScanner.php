@@ -99,6 +99,7 @@ class ScaScanner implements ScannerInterface
                 if ($fixedVersion) {
                     $techDetails .= "Fixed Version: {$fixedVersion}\n";
                 }
+                $techDetails .= "Lockfile Path: {$relativePath}\n";
                 $techDetails .= "OSV ID: {$vuln['id']}\n";
                 if (!empty($vuln['aliases'])) {
                     $techDetails .= "Aliases: " . implode(', ', $vuln['aliases']) . "\n";

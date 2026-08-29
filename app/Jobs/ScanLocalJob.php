@@ -123,8 +123,8 @@ class ScanLocalJob implements ShouldQueue
                         'remediation' => $dto->remediation ?? '',
                         'technical_details' => $dto->technicalDetails ?? '',
                         'evidence' => $dto->evidence ?? '',
-                        'url' => $dto->url ?? '',
-                        'scanner' => 'RepositoryScanner',
+                        'url' => $dto->url ?? $dto->path ?? '',
+                        'scanner' => $dto->scanner ?? 'RepositoryScanner',
                         'created_by' => $this->scan->created_by,
                     ]
                 );
