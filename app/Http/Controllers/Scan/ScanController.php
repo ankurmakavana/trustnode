@@ -76,6 +76,18 @@ class ScanController extends Controller
     }
 
     /**
+     * Display lifecycle, delta, baseline, and regression intelligence for the specified scan.
+     */
+    public function lifecycle(Scan $scan, \App\Services\Scan\ScanBaselineComparisonService $comparisonService): JsonResponse
+    {
+        $this->authorize('viewAny', Scan::class);
+
+        $comparison = $comparisonService->compare($scan);
+
+        return response()->json($comparison);
+    }
+
+    /**
      * Update the parameters of a scan profile.
      */
     public function update(UpdateScanRequest $request, Scan $scan): ScanResource

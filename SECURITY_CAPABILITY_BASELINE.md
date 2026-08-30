@@ -59,6 +59,7 @@ flowchart TD
 | Tenant Context Isolation | IMPLEMENTED | `TenantScope.php`, `AppServiceProvider.php` | `TenantIsolationTest.php` | |
 | Archive Extraction Safety| IMPLEMENTED | `ScanLocalJob.php` | `ArchiveSecurityTest.php` | Bounded memory extraction |
 | Finding Lifecycle Intelligence | IMPLEMENTED | `FindingLifecycleService.php`, `FindingIdentity.php` | `FindingLifecycleIntelligenceTest.php` | NEW, RECURRING, RESOLVED, REGRESSION state tracking within target/tenant boundaries |
+| Security Baseline & Regression Intelligence | IMPLEMENTED | `ScanBaselineComparisonService.php` | `ScanBaselineRegressionTest.php` | Deterministic baseline identification, scan delta, severity changes, regression details, and posture assessment |
 
 ## 5. Scanner Inventory
 | Scanner | Category | Input | Rules | Network Access | Status |
@@ -107,8 +108,9 @@ flowchart TD
 - **Status:** 🟡 PARTIAL
 - Finding normalization and fingerprint deduplication is implemented.
 - Finding Lifecycle Intelligence is implemented: deterministic tracking of `NEW`, `RECURRING`, `RESOLVED`, and `REGRESSION` finding states across historical completed scans within tenant and target boundaries.
+- Security Baseline & Regression Intelligence is implemented: deterministic baseline identification, scan delta, severity changes, regression details, and posture direction calculation (`improving`, `worsening`, `unchanged`, `initial_baseline`).
 - Triage states, severities, HTML/PDF exports exist.
-- No incident case management, SIEM integrations, SOAR workflows, correlation, anomaly baselines, threat hunting, or cloud posture management.
+- No incident case management, SIEM integrations, SOAR workflows, correlation, anomaly baselines, threat hunting, cloud posture management, or predictive risk analytics.
 
 ## 14. Compliance
 - **Status:** 🧪 EXPERIMENTAL

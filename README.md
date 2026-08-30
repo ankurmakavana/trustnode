@@ -186,6 +186,7 @@ Use exactly these statuses everywhere in this documentation:
 | deduplication | ✅ IMPLEMENTED | `FingerprintService.php` |
 | finding persistence | ✅ IMPLEMENTED | `ScanLocalJob.php` |
 | finding lifecycle intelligence | ✅ IMPLEMENTED | `FindingLifecycleService.php` |
+| security baseline & regression intelligence | ✅ IMPLEMENTED | `ScanBaselineComparisonService.php` |
 | SIEM integration | ❌ NOT IMPLEMENTED | N/A |
 | SOAR | ❌ NOT IMPLEMENTED | N/A |
 | incident response platform | ❌ NOT IMPLEMENTED | N/A |

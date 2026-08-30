@@ -144,6 +144,44 @@
             </tbody>
         </table>
 
+        @php
+            $comparison = $comparison ?? null;
+            if (!$comparison && isset($scan) && $scan instanceof \App\Models\Scan) {
+                $comparison = app(\App\Services\Scan\ScanBaselineComparisonService::class)->compare($scan);
+            }
+        @endphp
+
+        @if ($comparison)
+            <h2>Security Posture Change</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>New</th>
+                        <th>Recurring</th>
+                        <th>Resolved</th>
+                        <th>Regression</th>
+                        <th>Previous Open</th>
+                        <th>Current Open</th>
+                        <th>Net Change</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="font-weight: bold; color: #b91c1c;">{{ $comparison['lifecycle_counts']['new'] }}</td>
+                        <td style="font-weight: bold; color: #4338ca;">{{ $comparison['lifecycle_counts']['recurring'] }}</td>
+                        <td style="font-weight: bold; color: #15803d;">{{ $comparison['lifecycle_counts']['resolved'] }}</td>
+                        <td style="font-weight: bold; color: #c2410c;">{{ $comparison['lifecycle_counts']['regression'] }}</td>
+                        <td style="font-weight: bold;">{{ $comparison['posture']['previous_open_count'] }}</td>
+                        <td style="font-weight: bold;">{{ $comparison['posture']['current_open_count'] }}</td>
+                        <td style="font-weight: bold; color: {{ $comparison['posture']['net_change'] > 0 ? '#b91c1c' : ($comparison['posture']['net_change'] < 0 ? '#15803d' : '#374151') }};">
+                            {{ $comparison['posture']['net_change'] > 0 ? '+' : '' }}{{ $comparison['posture']['net_change'] }}
+                            ({{ strtoupper($comparison['posture']['assessment']) }})
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        @endif
+
         <h2>Vulnerability Findings</h2>
         <p class="section-desc">The following security issues were detected by the TrustNode static analysis engine.</p>
 
