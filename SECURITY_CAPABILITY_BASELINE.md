@@ -60,6 +60,7 @@ flowchart TD
 | Archive Extraction Safety| IMPLEMENTED | `ScanLocalJob.php` | `ArchiveSecurityTest.php` | Bounded memory extraction |
 | Finding Lifecycle Intelligence | IMPLEMENTED | `FindingLifecycleService.php`, `FindingIdentity.php` | `FindingLifecycleIntelligenceTest.php` | NEW, RECURRING, RESOLVED, REGRESSION state tracking within target/tenant boundaries |
 | Security Baseline & Regression Intelligence | IMPLEMENTED | `ScanBaselineComparisonService.php` | `ScanBaselineRegressionTest.php` | Deterministic baseline identification, scan delta, severity changes, regression details, and posture assessment |
+| Security Posture Dashboard & Historical Trend | IMPLEMENTED | `DashboardService.php` | `SecurityPostureDashboardTest.php` | Tenant-scoped & target-filtered lifecycle summary, bounded historical posture trend, and posture direction assessment |
 
 ## 5. Scanner Inventory
 | Scanner | Category | Input | Rules | Network Access | Status |
