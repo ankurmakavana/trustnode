@@ -114,8 +114,8 @@ class KubernetesScanner implements ScannerInterface
             $currentPath = implode('.', $pathKeys);
 
             // Rule 1: Privileged (CRITICAL)
-            if (preg_match('/^\s*privileged:\s*true\b/i', $line)) {
-                if ($kind !== 'ConfigMap' && str_contains($currentPath, 'securityContext')) {
+            if (preg_match('/^\s*privileged:\s*(true|"true"|\'true\')\b/i', $line)) {
+                if ($kind !== 'ConfigMap' && $kind !== 'Secret' && str_contains($currentPath, 'securityContext')) {
                     $findings[] = $this->createFinding(
                         'SEC-IAC-K8S-PRIVILEGED',
                         'Privileged Kubernetes Container',
@@ -131,53 +131,61 @@ class KubernetesScanner implements ScannerInterface
             }
 
             // Rule 2: HostNetwork (HIGH)
-            if (preg_match('/^\s*hostNetwork:\s*true\b/i', $line) && $kind !== 'ConfigMap') {
-                $findings[] = $this->createFinding(
-                    'SEC-IAC-K8S-HOST-NETWORK',
-                    'Kubernetes HostNetwork Enabled',
-                    'HIGH',
-                    "Pod shares the host's network namespace.",
-                    $realLineNum,
-                    trim($line),
-                    $relativePath,
-                    $repositoryUrl,
-                    $kind
-                );
+            if (preg_match('/^\s*hostNetwork:\s*(true|"true"|\'true\')\b/i', $line)) {
+                // Must be in a PodSpec, which typically means path ends with spec or template.spec
+                // We just ensure it's not inside containers, config maps, or arbitrary deeply nested objects.
+                if ($kind !== 'ConfigMap' && $kind !== 'Secret' && !str_contains($currentPath, 'containers') && str_contains($currentPath, 'spec')) {
+                    $findings[] = $this->createFinding(
+                        'SEC-IAC-K8S-HOST-NETWORK',
+                        'Kubernetes HostNetwork Enabled',
+                        'HIGH',
+                        "Pod shares the host's network namespace.",
+                        $realLineNum,
+                        trim($line),
+                        $relativePath,
+                        $repositoryUrl,
+                        $kind
+                    );
+                }
             }
 
             // Rule 3: HostPID (HIGH)
-            if (preg_match('/^\s*hostPID:\s*true\b/i', $line) && $kind !== 'ConfigMap') {
-                $findings[] = $this->createFinding(
-                    'SEC-IAC-K8S-HOST-PID',
-                    'Kubernetes HostPID Enabled',
-                    'HIGH',
-                    "Pod shares the host's PID namespace.",
-                    $realLineNum,
-                    trim($line),
-                    $relativePath,
-                    $repositoryUrl,
-                    $kind
-                );
+            if (preg_match('/^\s*hostPID:\s*(true|"true"|\'true\')\b/i', $line)) {
+                if ($kind !== 'ConfigMap' && $kind !== 'Secret' && !str_contains($currentPath, 'containers') && str_contains($currentPath, 'spec')) {
+                    $findings[] = $this->createFinding(
+                        'SEC-IAC-K8S-HOST-PID',
+                        'Kubernetes HostPID Enabled',
+                        'HIGH',
+                        "Pod shares the host's PID namespace.",
+                        $realLineNum,
+                        trim($line),
+                        $relativePath,
+                        $repositoryUrl,
+                        $kind
+                    );
+                }
             }
 
             // Rule 4: HostPath (HIGH)
-            if (preg_match('/^\s*hostPath:/i', $line) && $kind !== 'ConfigMap') {
-                $findings[] = $this->createFinding(
-                    'SEC-IAC-K8S-HOST-PATH',
-                    'Kubernetes HostPath Mount',
-                    'HIGH',
-                    "Pod mounts a directory from the host filesystem.",
-                    $realLineNum,
-                    trim($line),
-                    $relativePath,
-                    $repositoryUrl,
-                    $kind
-                );
+            if (preg_match('/^\s*hostPath:/i', $line)) {
+                if ($kind !== 'ConfigMap' && $kind !== 'Secret' && !str_contains($currentPath, 'containers') && str_contains($currentPath, 'spec')) {
+                    $findings[] = $this->createFinding(
+                        'SEC-IAC-K8S-HOST-PATH',
+                        'Kubernetes HostPath Mount',
+                        'HIGH',
+                        "Pod mounts a directory from the host filesystem.",
+                        $realLineNum,
+                        trim($line),
+                        $relativePath,
+                        $repositoryUrl,
+                        $kind
+                    );
+                }
             }
 
             // Rule 5: Privilege Escalation (HIGH)
-            if (preg_match('/^\s*allowPrivilegeEscalation:\s*true\b/i', $line)) {
-                if ($kind !== 'ConfigMap' && str_contains($currentPath, 'securityContext')) {
+            if (preg_match('/^\s*allowPrivilegeEscalation:\s*(true|"true"|\'true\')\b/i', $line)) {
+                if ($kind !== 'ConfigMap' && $kind !== 'Secret' && str_contains($currentPath, 'securityContext')) {
                     $findings[] = $this->createFinding(
                         'SEC-IAC-K8S-PRIVILEGE-ESCALATION',
                         'Kubernetes Privilege Escalation Allowed',
@@ -193,8 +201,8 @@ class KubernetesScanner implements ScannerInterface
             }
 
             // Rule 6: Run As Root (HIGH)
-            if (preg_match('/^\s*runAsUser:\s*0\b/i', $line)) {
-                if ($kind !== 'ConfigMap' && str_contains($currentPath, 'securityContext')) {
+            if (preg_match('/^\s*runAsUser:\s*(0|"0"|\'0\')\b/i', $line)) {
+                if ($kind !== 'ConfigMap' && $kind !== 'Secret' && str_contains($currentPath, 'securityContext')) {
                     $findings[] = $this->createFinding(
                         'SEC-IAC-K8S-RUN-AS-ROOT',
                         'Kubernetes Container Runs as Root',
@@ -210,18 +218,20 @@ class KubernetesScanner implements ScannerInterface
             }
 
             // Rule 7: Public Service LoadBalancer (MEDIUM)
-            if ($kind === 'Service' && preg_match('/^\s*type:\s*LoadBalancer\b/i', $line)) {
-                $findings[] = $this->createFinding(
-                    'SEC-IAC-K8S-PUBLIC-SERVICE',
-                    'Kubernetes Public LoadBalancer Service',
-                    'MEDIUM',
-                    "Service exposes internal workloads to the internet via LoadBalancer.",
-                    $realLineNum,
-                    trim($line),
-                    $relativePath,
-                    $repositoryUrl,
-                    $kind
-                );
+            if (preg_match('/^\s*type:\s*LoadBalancer\b/i', $line)) {
+                if ($kind === 'Service' && str_contains($currentPath, 'spec')) {
+                    $findings[] = $this->createFinding(
+                        'SEC-IAC-K8S-PUBLIC-SERVICE',
+                        'Kubernetes Public LoadBalancer Service',
+                        'MEDIUM',
+                        "Service exposes internal workloads to the internet via LoadBalancer.",
+                        $realLineNum,
+                        trim($line),
+                        $relativePath,
+                        $repositoryUrl,
+                        $kind
+                    );
+                }
             }
         }
 

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: structural-test
+spec:
+  volumes:
+    - name: host
+      hostPath:
+        path: /var/run
+  containers:
+    - name: safe
+      securityContext:
+        privileged: false
+    - name: unsafe
+      securityContext:
+        privileged: true
+        allowPrivilegeEscalation: true
+        runAsUser: 0
+  hostNetwork: true
+  hostPID: true

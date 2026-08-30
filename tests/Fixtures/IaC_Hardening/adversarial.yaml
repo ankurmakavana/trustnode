@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-secret
+stringData:
+  privileged: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: comments-test
+spec:
+  template:
+    spec:
+      # privileged: true
+      # hostNetwork: true
+      # hostPID: true
+      containers:
+        - name: app
+          someField: "privileged: true"
+          description: |
+            privileged: true
+          database:
+            hostNetwork: true
