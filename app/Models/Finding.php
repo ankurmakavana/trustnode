@@ -24,6 +24,7 @@ class Finding extends Model
         'cvss_score',
         'severity',
         'status',
+        'lifecycle_status',
         'category',
         'cwe',
         'description',
@@ -47,6 +48,7 @@ class Finding extends Model
     protected $casts = [
         'severity' => FindingSeverity::class,
         'status' => FindingStatus::class,
+        'lifecycle_status' => \App\Enums\Finding\FindingLifecycleStatus::class,
         'cvss_score' => 'float',
     ];
 

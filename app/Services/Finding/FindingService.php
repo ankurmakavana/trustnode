@@ -35,6 +35,10 @@ class FindingService
             $query->where('status', $filters['status']);
         }
 
+        if (! empty($filters['lifecycle_status'])) {
+            $query->where('lifecycle_status', $filters['lifecycle_status']);
+        }
+
         if (! empty($filters['asset_id'])) {
             $query->where('asset_id', $filters['asset_id']);
         }

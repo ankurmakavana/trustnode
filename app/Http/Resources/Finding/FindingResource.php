@@ -18,6 +18,7 @@ class FindingResource extends JsonResource
             'cvss_score' => $this->cvss_score !== null ? (float) $this->cvss_score : null,
             'severity' => $this->severity->value,
             'status' => $this->status->value,
+            'lifecycle_status' => $this->lifecycle_status?->value ?? 'new',
             'category' => $this->category,
             'cwe' => $this->cwe,
             'description' => $this->description,

@@ -58,6 +58,7 @@ flowchart TD
 | HTTP Header Checks | IMPLEMENTED | `NativeInfrastructureScanner.php` | `NativeNetworkScannerTest` | Head request missing checks |
 | Tenant Context Isolation | IMPLEMENTED | `TenantScope.php`, `AppServiceProvider.php` | `TenantIsolationTest.php` | |
 | Archive Extraction Safety| IMPLEMENTED | `ScanLocalJob.php` | `ArchiveSecurityTest.php` | Bounded memory extraction |
+| Finding Lifecycle Intelligence | IMPLEMENTED | `FindingLifecycleService.php`, `FindingIdentity.php` | `FindingLifecycleIntelligenceTest.php` | NEW, RECURRING, RESOLVED, REGRESSION state tracking within target/tenant boundaries |
 
 ## 5. Scanner Inventory
 | Scanner | Category | Input | Rules | Network Access | Status |
@@ -105,8 +106,9 @@ flowchart TD
 ## 13. SOC/Detection
 - **Status:** 🟡 PARTIAL
 - Finding normalization and fingerprint deduplication is implemented.
+- Finding Lifecycle Intelligence is implemented: deterministic tracking of `NEW`, `RECURRING`, `RESOLVED`, and `REGRESSION` finding states across historical completed scans within tenant and target boundaries.
 - Triage states, severities, HTML/PDF exports exist.
-- No incident case management, SIEM integrations, SOAR workflows, correlation, or anomaly baselines.
+- No incident case management, SIEM integrations, SOAR workflows, correlation, anomaly baselines, threat hunting, or cloud posture management.
 
 ## 14. Compliance
 - **Status:** 🧪 EXPERIMENTAL

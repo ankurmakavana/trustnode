@@ -15,6 +15,7 @@ class FindingIdentity extends Model
         'uuid',
         'identity_hash',
         'fingerprint',
+        'lifecycle_status',
         'asset_id',
         'target_id',
         'local_project_id',
@@ -22,11 +23,15 @@ class FindingIdentity extends Model
         'updated_by',
         'first_seen_at',
         'last_seen_at',
+        'resolved_at',
+        'resolved_by_scan_id',
     ];
 
     protected $casts = [
+        'lifecycle_status' => \App\Enums\Finding\FindingLifecycleStatus::class,
         'first_seen_at' => 'datetime',
         'last_seen_at' => 'datetime',
+        'resolved_at' => 'datetime',
     ];
 
     protected static function booted()
@@ -42,6 +47,16 @@ class FindingIdentity extends Model
     public function findings(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(Finding::class);
+    }
+
+    public function lifecycleHistories(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(FindingLifecycleHistory::class);
+    }
+
+    public function resolvedByScan(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Scan::class, 'resolved_by_scan_id');
     }
 
     public function asset(): \Illuminate\Database\Eloquent\Relations\BelongsTo

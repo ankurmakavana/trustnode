@@ -130,14 +130,10 @@ class ScanRepositoryJob implements ShouldQueue, TenantAwareJob
                         'fingerprint' => $fingerprint,
                         'asset_id' => $asset->id,
                         'created_by' => $this->scan->created_by,
-                        'first_seen_at' => now(),
-                        'last_seen_at' => now(),
+                        'first_seen_at' => $this->scan->started_at ?? now(),
+                        'last_seen_at' => $this->scan->started_at ?? now(),
                     ]
                 );
-
-                if (!$findingIdentity->wasRecentlyCreated) {
-                    $findingIdentity->update(['last_seen_at' => now()]);
-                }
 
                 // Check for duplicates within this scan (just in case)
                 $findingModel = Finding::updateOrCreate(
@@ -199,6 +195,8 @@ class ScanRepositoryJob implements ShouldQueue, TenantAwareJob
                 'completed_at' => now(),
                 'duration' => $duration,
             ]);
+
+            app(\App\Services\Finding\FindingLifecycleService::class)->process($this->scan);
 
             $this->repository->update([
                 'last_scan_at' => now(),

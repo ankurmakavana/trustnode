@@ -243,14 +243,10 @@ class ScanLocalJob implements ShouldQueue, TenantAwareJob
                         'fingerprint' => $fingerprint,
                         'local_project_id' => $this->scan->local_project_id,
                         'created_by' => $this->scan->created_by,
-                        'first_seen_at' => now(),
-                        'last_seen_at' => now(),
+                        'first_seen_at' => $this->scan->started_at ?? now(),
+                        'last_seen_at' => $this->scan->started_at ?? now(),
                     ]
                 );
-
-                if (!$findingIdentity->wasRecentlyCreated) {
-                    $findingIdentity->update(['last_seen_at' => now()]);
-                }
 
                 $findingModel = Finding::updateOrCreate(
                     [
@@ -312,6 +308,8 @@ class ScanLocalJob implements ShouldQueue, TenantAwareJob
                 'completed_at' => now(),
                 'duration' => $duration,
             ]);
+
+            app(\App\Services\Finding\FindingLifecycleService::class)->process($this->scan);
 
             \App\Services\Notification\NotificationRouter::dispatch(
                 \App\Enums\Notification\NotificationType::SCAN_COMPLETED,

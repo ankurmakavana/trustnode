@@ -155,6 +155,9 @@
                     <div class="finding-header">
                         <div class="finding-title">{{ $f->title }}</div>
                         <div class="finding-badge-container">
+                            @if ($f->lifecycle_status)
+                                <span class="badge" style="background-color: #e0e7ff; color: #3730a3; margin-right: 5px;">{{ strtoupper($f->lifecycle_status->value ?? $f->lifecycle_status) }}</span>
+                            @endif
                             <span class="badge badge-{{ strtolower($f->severity->value ?? $f->severity) }}">{{ $f->severity->value ?? $f->severity }}</span>
                         </div>
                     </div>
