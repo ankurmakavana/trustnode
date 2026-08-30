@@ -11,6 +11,7 @@ use App\Services\Import\FingerprintService;
 use App\Services\Scan\RepositoryScanner;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Contracts\TenantAwareJob;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -20,7 +21,7 @@ use Illuminate\Support\Str;
 use App\Notifications\ScanCompletedNotification;
 use App\Notifications\ScanFailedNotification;
 
-class ScanLocalJob implements ShouldQueue
+class ScanLocalJob implements ShouldQueue, TenantAwareJob
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -49,20 +50,145 @@ class ScanLocalJob implements ShouldQueue
         try {
             $this->scan->update(['progress' => 10]);
 
-            // 1. Extract archive
+            // 1. Validate and safely extract archive
+            $zipPath = Storage::disk('local')->path($this->archivePath);
+
             if (!file_exists($workspacePath)) {
                 mkdir($workspacePath, 0755, true);
             }
-            
-            $zipPath = Storage::disk('local')->path($this->archivePath);
+
             $zip = new \ZipArchive;
             $res = $zip->open($zipPath);
-            if ($res === TRUE) {
-                $zip->extractTo($workspacePath);
-                $zip->close();
-            } else {
-                throw new \RuntimeException('Failed to extract local scan archive. Error code: ' . $res . ' Path: ' . $zipPath . ' exists: ' . (file_exists($zipPath) ? 'yes' : 'no') . ' size: ' . (file_exists($zipPath) ? filesize($zipPath) : '0'));
+            if ($res !== TRUE) {
+                throw new \RuntimeException('Failed to open local scan archive. Error code: ' . $res);
             }
+
+            $maxFiles = 50000;
+            $maxTotalUncompressed = 200 * 1024 * 1024; // 200 MB
+            $maxPerFile = 5 * 1024 * 1024; // 5 MB
+
+            if ($zip->numFiles > $maxFiles) {
+                $zip->close();
+                throw new \RuntimeException('Archive contains too many files. Limit is ' . $maxFiles);
+            }
+
+            $totalUncompressed = 0;
+            $safeEntries = [];
+
+            // Pre-extraction validation pass
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $stat = $zip->statIndex($i);
+                if ($stat === false) continue;
+
+                $name = $stat['name'];
+                $size = $stat['size'];
+
+                // Symlinks or special files could be identified via external attributes.
+                // ZipArchive doesn't directly expose symlink via stat() cross-platform safely,
+                // but usually symlinks have size > 0 and specific external attributes.
+                // We'll reject them if we detect them, but rely on path validation primary.
+                $extAttr = isset($stat['ext']) ? $stat['ext'] : 0;
+                $isSymlink = ($extAttr & 0120000) === 0120000; // UNIX symlink flag
+
+                if ($isSymlink) {
+                    $zip->close();
+                    throw new \RuntimeException("Archive contains symlink entries which are not permitted: {$name}");
+                }
+
+                if ($size > $maxPerFile) {
+                    $zip->close();
+                    throw new \RuntimeException("Archive contains an oversized file exceeding {$maxPerFile} bytes: {$name}");
+                }
+
+                $totalUncompressed += $size;
+                if ($totalUncompressed > $maxTotalUncompressed) {
+                    $zip->close();
+                    throw new \RuntimeException("Archive exceeds total uncompressed size limit of {$maxTotalUncompressed} bytes.");
+                }
+
+                // Check for Zip Slip / Path Traversal
+                if (
+                    str_contains($name, '../') ||
+                    str_contains($name, '..\\') ||
+                    str_starts_with($name, '/') ||
+                    str_starts_with($name, '\\') ||
+                    preg_match('/^[a-zA-Z]:\\\\/', $name) || // Windows Drive
+                    str_starts_with($name, '\\\\') || // Windows UNC
+                    str_contains($name, "\0")
+                ) {
+                    $zip->close();
+                    throw new \RuntimeException("Archive contains illegal path traversal or absolute path: {$name}");
+                }
+
+                $safeEntries[] = $name;
+            }
+
+            // Realpath of workspace for strict post-write containment check
+            $realWorkspacePath = realpath($workspacePath);
+            if (!$realWorkspacePath) {
+                $zip->close();
+                throw new \RuntimeException("Failed to resolve absolute workspace path.");
+            }
+
+            // Extraction pass
+            foreach ($safeEntries as $name) {
+                $destPath = $workspacePath . DIRECTORY_SEPARATOR . $name;
+
+                // Lexical normalization check before writing (if needed), but we've rejected '..'
+
+                // Check if directory
+                if (str_ends_with($name, '/') || str_ends_with($name, '\\')) {
+                    if (!is_dir($destPath)) {
+                        mkdir($destPath, 0755, true);
+                    }
+                    continue;
+                }
+
+                // Ensure parent directory exists
+                $parentDir = dirname($destPath);
+                if (!is_dir($parentDir)) {
+                    mkdir($parentDir, 0755, true);
+                }
+
+                // Extract single file safely using stream
+                $fp = $zip->getStream($name);
+                if (!$fp) continue;
+
+                $destFp = fopen($destPath, 'wb');
+                if (!$destFp) {
+                    fclose($fp);
+                    continue;
+                }
+
+                // Write with bounds checking to prevent mismatch between stat size and actual stream size
+                $writtenBytes = 0;
+                while (!feof($fp)) {
+                    $chunk = fread($fp, 8192);
+                    if ($chunk === false) break;
+
+                    $writtenBytes += strlen($chunk);
+                    if ($writtenBytes > $maxPerFile) {
+                        fclose($destFp);
+                        fclose($fp);
+                        $zip->close();
+                        throw new \RuntimeException("Stream size exceeded per-file limit during extraction of {$name}");
+                    }
+
+                    fwrite($destFp, $chunk);
+                }
+
+                fclose($destFp);
+                fclose($fp);
+
+                // Post-write realpath containment verification
+                $realDestPath = realpath($destPath);
+                if (!$realDestPath || !str_starts_with($realDestPath, $realWorkspacePath)) {
+                    $zip->close();
+                    throw new \RuntimeException("Path containment verification failed for extracted file: {$name}");
+                }
+            }
+
+            $zip->close();
 
             $this->scan->update(['progress' => 20]);
 
@@ -213,7 +339,7 @@ class ScanLocalJob implements ShouldQueue
     public function failed(\Throwable $exception): void
     {
         Log::error('ScanLocalJob failed fatally: '.$exception->getMessage(), ['exception' => $exception]);
-        
+
         $this->scan->update([
             'status' => 'failed',
             'completed_at' => now(),
@@ -224,5 +350,10 @@ class ScanLocalJob implements ShouldQueue
             new \App\Services\Notification\NotificationContext(scan: $this->scan),
             new ScanFailedNotification($this->scan, 'Scan failed fatally.')
         );
+    }
+
+    public function getTenantId(): ?int
+    {
+        return $this->scan->created_by;
     }
 }
