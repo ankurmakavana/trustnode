@@ -15,7 +15,7 @@ It is NOT yet:
 - a runtime protection platform
 - a full CNAPP
 - a SIEM
-- a network vulnerability scanner
+- a comprehensive network vulnerability scanner (only basic port/TLS/HTTP scanning is supported)
 - a live CSPM platform
 - a container runtime security platform
 
@@ -43,7 +43,7 @@ TrustNode currently provides:
 â†’ Not yet implemented / planned
 
 **Network Security**
-â†’ Not yet implemented / planned
+→ Basic Active Infrastructure Scanning (Ports, TLS certificates, HTTP headers)
 
 **SOC**
 â†’ Finding/reporting foundation, but not a full SIEM/SOC platform
@@ -71,7 +71,7 @@ Use exactly these statuses everywhere in this documentation:
 | Dependency / SCA Security | ✅ IMPLEMENTED |
 | Container Security | ✅ IMPLEMENTED |
 | IaC / Cloud Posture | 🟡 PARTIAL |
-| Network Security | ❌ NOT IMPLEMENTED |
+| Network Security | 🟡 PARTIAL |
 | Cloud / CNAPP | ❌ NOT IMPLEMENTED |
 | SOC / Detection | 🟡 PARTIAL |
 | Compliance | 🧪 EXPERIMENTAL |
@@ -156,11 +156,14 @@ Use exactly these statuses everywhere in this documentation:
 | Capability | Status | Verified Source |
 |---|---|---|
 | network configuration analysis | ❌ NOT IMPLEMENTED | N/A |
-| exposed ports | ❌ NOT IMPLEMENTED | N/A |
-| TLS/security configuration | ❌ NOT IMPLEMENTED | N/A |
+| exposed ports | ✅ IMPLEMENTED | `NativeInfrastructureScanner.php` |
+| TLS/security configuration | ✅ IMPLEMENTED | `NativeInfrastructureScanner.php` |
 | endpoint/network discovery | ❌ NOT IMPLEMENTED | N/A |
 | network vulnerability scanning | ❌ NOT IMPLEMENTED | N/A |
-| live network scanning | ❌ NOT IMPLEMENTED | N/A |
+| live network scanning | ✅ IMPLEMENTED | `NativeInfrastructureScanner.php` |
+| HTTP security headers | ✅ IMPLEMENTED | `NativeInfrastructureScanner.php` |
+
+*Note: The native infrastructure scanner currently performs active network connectivity to discover open ports (TCP handshake on common ports), validates TLS certificate expiration, and checks for basic missing HTTP security headers on a single target. SSRF and DNS rebinding protections are strictly enforced.*
 
 ### 7. Cloud / CNAPP
 | Capability | Status | Verified Source |
@@ -378,6 +381,11 @@ The current implementation has been explicitly verified via unit testing and liv
   - false-positive tests
   - multi-document tests
   - structural tests
+- **Network infrastructure scanning:** VERIFIED for:
+  - SSRF / private IP mitigation (`TargetValidator.php`)
+  - TCP port scanning aggregation (`NativeInfrastructureScanner.php`)
+  - TLS certificate expiration parsing
+  - HTTP security header extraction
 
 ---
 
