@@ -196,8 +196,12 @@ Use exactly these statuses everywhere in this documentation:
 | Capability | Status | Verified Source |
 |---|---|---|
 | Heuristic/control mapping | 🧪 EXPERIMENTAL | `ComplianceMapper.php` |
-| OWASP | 🧪 EXPERIMENTAL | `ComplianceMapper.php` |
-| CIS | 🧪 EXPERIMENTAL | `ComplianceMapper.php` |
+| OWASP | 🧪 EXPERIMENTAL | `ComplianceSeeder.php` |
+| MITRE | 🧪 EXPERIMENTAL | `ComplianceSeeder.php` |
+| ISO | 🧪 EXPERIMENTAL | `ComplianceSeeder.php` |
+| PCI | 🧪 EXPERIMENTAL | `ComplianceSeeder.php` |
+| NIST | 🧪 EXPERIMENTAL | `ComplianceSeeder.php` |
+| SOC 2 | 🧪 EXPERIMENTAL | `ComplianceSeeder.php` |
 | SOC 2 certification | ❌ NOT IMPLEMENTED | N/A |
 | ISO certification | ❌ NOT IMPLEMENTED | N/A |
 | PCI certification | ❌ NOT IMPLEMENTED | N/A |
