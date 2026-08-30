@@ -68,8 +68,8 @@ Use exactly these statuses everywhere in this documentation:
 |----------|----------------|
 | Code Security | 🟡 PARTIAL |
 | Secret Security | ✅ IMPLEMENTED |
-| Dependency / SCA Security | ✅ IMPLEMENTED |
-| Container Security | ✅ IMPLEMENTED |
+| Dependency / SCA Security | 🟡 PARTIAL |
+| Container Security | 🟡 PARTIAL |
 | IaC / Cloud Posture | 🟡 PARTIAL |
 | Network Security | 🟡 PARTIAL |
 | Cloud / CNAPP | ❌ NOT IMPLEMENTED |
@@ -171,7 +171,7 @@ Use exactly these statuses everywhere in this documentation:
 | CSPM | ❌ NOT IMPLEMENTED | N/A |
 | CWPP | ❌ NOT IMPLEMENTED | N/A |
 | CIEM | ❌ NOT IMPLEMENTED | N/A |
-| Container Security | ✅ IMPLEMENTED | N/A |
+| Container Security | 🟡 PARTIAL | N/A |
 | Kubernetes runtime security | ❌ NOT IMPLEMENTED | N/A |
 | Runtime workload protection | ❌ NOT IMPLEMENTED | N/A |
 | Cloud API posture scanning | ❌ NOT IMPLEMENTED | N/A |
