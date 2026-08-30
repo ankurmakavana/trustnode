@@ -45,7 +45,24 @@ class ScanE2ETest extends TestCase
         // 2. Verify job was dispatched
         Queue::assertPushed(ScanInfrastructureJob::class);
 
-        // 3. Process the job manually
+        // 3. Process the job manually with a mock scanner to avoid scanning example.com
+        $mockScanner = $this->getMockBuilder(\App\Services\Scan\Infrastructure\NativeInfrastructureScanner::class)
+            ->onlyMethods(['scan'])
+            ->getMock();
+            
+        $mockScanner->expects($this->once())
+            ->method('scan')
+            ->willReturn([
+                new \App\DTOs\Import\NormalizedFinding([
+                    'scanner' => 'NativeInfrastructureScanner',
+                    'title' => 'Open Ports Detected',
+                    'severity' => 'info',
+                    'url' => 'example.com'
+                ])
+            ]);
+            
+        $this->app->instance(\App\Services\Scan\Infrastructure\NativeInfrastructureScanner::class, $mockScanner);
+
         $job = new ScanInfrastructureJob($scan);
         app()->call([$job, 'handle']);
 
