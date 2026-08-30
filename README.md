@@ -25,41 +25,41 @@ It is NOT yet:
 TrustNode currently provides:
 
 **Code Security**
-â†’ SAST (Regex-based SQLi, Command Injection, Eval, Path Traversal)
+→ SAST (Regex-based SQLi, Command Injection, Eval, Path Traversal)
 
 **Secret Security**
-â†’ Secret Detection (High-entropy tokens, AWS, GitHub, GitLab, Stripe, Slack, GCP, JWT, Private Keys)
+→ Secret Detection (High-entropy tokens, AWS, GitHub, GitLab, Stripe, Slack, GCP, JWT, Private Keys)
 
 **Dependency Security**
-â†’ Software Composition Analysis (SCA) via lockfile parsing and OSV vulnerability lookup
+→ Software Composition Analysis (SCA) via lockfile parsing and OSV vulnerability lookup
 
 **Infrastructure Security**
-â†’ Not yet implemented / planned
+→ Not yet implemented / planned
 
 **Container Security**
-â†’ Static Dockerfile and Docker Compose analysis
+→ Static Dockerfile and Docker Compose analysis
 
 **Cloud Security**
-â†’ Not yet implemented / planned
+→ Not yet implemented / planned
 
 **Network Security**
 → Basic Active Infrastructure Scanning (Ports, TLS certificates, HTTP headers)
 
 **SOC**
-â†’ Finding/reporting foundation, but not a full SIEM/SOC platform
+→ Finding/reporting foundation, lifecycle tracking, and scan-to-scan baseline delta, but not a full SIEM/SOC platform
 
 **Compliance**
-â†’ Current mapper status: Experimental / Heuristic foundational mapping
+→ Current mapper status: Experimental / Heuristic foundational mapping (OWASP, MITRE, ISO, PCI, NIST, SOC 2)
 
 ---
 
 ## Status Vocabulary
 Use exactly these statuses everywhere in this documentation:
-- âœ… IMPLEMENTED
-- ðŸŸ¡ PARTIAL
-- ðŸ§ª EXPERIMENTAL
-- ðŸš§ PLANNED
-- âŒ NOT IMPLEMENTED
+- ✅ IMPLEMENTED
+- 🟡 PARTIAL
+- 🧪 EXPERIMENTAL
+- 🚧 PLANNED
+- ❌ NOT IMPLEMENTED
 
 ---
 
@@ -231,8 +231,8 @@ Use exactly these statuses everywhere in this documentation:
 | uploaded archives | ✅ IMPLEMENTED | `ScanLocalJob.php` |
 | supported lockfiles | ✅ IMPLEMENTED | `ScaScanner.php` |
 | source files | ✅ IMPLEMENTED | `RepositoryScanner.php` |
+| live infrastructure hosts (port/TLS/headers) | ✅ IMPLEMENTED | `NativeInfrastructureScanner.php` |
 | arbitrary cloud repositories | ❌ NOT IMPLEMENTED | N/A |
-| live infrastructure scanning | ❌ NOT IMPLEMENTED | N/A |
 
 ### 12. Platform / Operations
 | Capability | Status | Verified Source |
@@ -256,7 +256,7 @@ The scanning engine uses a modular, orchestrator-driven architecture:
 Local Directory / Git Repository
             |
             v
-      Scan Trigger
+       Scan Trigger
             |
             v
      Queue / Scan Job
@@ -285,7 +285,7 @@ SastScanner   SecretScanner     ScaScanner
                      Fingerprint / Persistence
                                   |
                                   v
-                              Reports
+                               Reports
 ```
 
 ---
@@ -347,15 +347,15 @@ TrustNode enforces exact limits traceable to the source code to guarantee stabil
 - framework-aware rules
 - language-specific analysis
 
-**Phase 7: Compliance** (ðŸš§ PLANNED)
-- deterministic rule-to-control mapping
+**Phase 7: Compliance** (🧪 EXPERIMENTAL)
+- Heuristic rule-to-control mapping for OWASP, MITRE, ISO, PCI, NIST, and SOC 2
 
-**Phase 8: SOC / Integrations** (ðŸš§ PLANNED)
+**Phase 8: SOC / Integrations** (🚧 PLANNED)
 - SIEM
 - ticketing
 - webhooks
 
-**Phase 9: Cloud Security** (ðŸš§ PLANNED)
+**Phase 9: Cloud Security** (🚧 PLANNED)
 - CSPM
 - cloud APIs
 - runtime capabilities
