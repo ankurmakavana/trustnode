@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: insecure-deployment
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: badapp
+        image: nginx
+        securityContext:
+          privileged: true
+          allowPrivilegeEscalation: true
+          runAsUser: 0
+      volumes:
+      - name: host-root
+        hostPath:
+          path: /
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: insecure-service
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80

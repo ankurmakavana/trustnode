@@ -70,7 +70,7 @@ Use exactly these statuses everywhere in this documentation:
 | Secret Security | âœ… IMPLEMENTED |
 | Dependency / SCA Security | âœ… IMPLEMENTED |
 | Container Security | âŒ IMPLEMENTED |
-| IaC / Cloud Posture | âŒ NOT IMPLEMENTED |
+| IaC / Cloud Posture | ðŸŸ¡ PARTIAL |
 | Network Security | âŒ NOT IMPLEMENTED |
 | Cloud / CNAPP | âŒ NOT IMPLEMENTED |
 | SOC / Detection | ðŸŸ¡ PARTIAL |
@@ -153,16 +153,18 @@ Use exactly these statuses everywhere in this documentation:
 | registry scanning | ❌ NOT IMPLEMENTED | N/A |
 
 ### 5. IaC / Cloud Posture
-| Capability | Status | Verified Source |
+| IaC Capability | Status | Verified Source |
 |---|---|---|
 | Terraform | âŒ NOT IMPLEMENTED | N/A |
-| Kubernetes | âŒ NOT IMPLEMENTED | N/A |
+| Kubernetes static analysis | âœ… IMPLEMENTED | `KubernetesScanner.php` |
 | Helm | âŒ NOT IMPLEMENTED | N/A |
 | CloudFormation | âŒ NOT IMPLEMENTED | N/A |
 | AWS posture | âŒ NOT IMPLEMENTED | N/A |
 | GCP posture | âŒ NOT IMPLEMENTED | N/A |
 | Azure posture | âŒ NOT IMPLEMENTED | N/A |
 | CSPM | âŒ NOT IMPLEMENTED | N/A |
+
+*Note: This scanner performs offline static analysis (no external API calls or Kubernetes cluster connections) and requires no YAML dependencies. It evaluates `privileged`, `hostNetwork`, `hostPID`, `hostPath`, `allowPrivilegeEscalation`, `runAsUser`, and `LoadBalancer` exposure.*
 
 ### 6. Network Security
 | Capability | Status | Verified Source |

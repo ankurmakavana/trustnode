@@ -25,6 +25,7 @@ class RepositoryScanner
                 new \App\Services\Scan\Vulnerability\OsvApiClient()
             ),
             new \App\Services\Scan\Scanners\ContainerScanner(),
+            new \App\Services\Scan\Scanners\KubernetesScanner(),
         ];
     }
 

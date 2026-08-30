@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: false-positive-config
+data:
+  config.yaml: |
+    # This should be ignored
+    privileged: true
+    hostNetwork: true
+    hostPID: true
+    hostPath: /test
+    allowPrivilegeEscalation: true
+    runAsUser: 0
+    type: LoadBalancer
+  other.txt: "hostNetwork: true is bad but this is just a string"
