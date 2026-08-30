@@ -34,6 +34,7 @@ class Finding extends Model
         'asset_id',
         'target_id',
         'scan_id',
+        'finding_identity_id',
         'assigned_analyst',
         'created_by',
         'updated_by',
@@ -88,6 +89,11 @@ class Finding extends Model
     public function scan(): BelongsTo
     {
         return $this->belongsTo(Scan::class);
+    }
+
+    public function findingIdentity(): BelongsTo
+    {
+        return $this->belongsTo(FindingIdentity::class);
     }
 
     public function analyst(): BelongsTo

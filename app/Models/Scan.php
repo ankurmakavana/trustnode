@@ -24,6 +24,7 @@ class Scan extends Model
         'type',
         'engine',
         'target',
+        'local_project_id',
         'schedule',
         'status',
         'progress',
@@ -76,6 +77,11 @@ class Scan extends Model
     public function repository(): BelongsTo
     {
         return $this->belongsTo(Repository::class, 'repository_id');
+    }
+
+    public function localProject(): BelongsTo
+    {
+        return $this->belongsTo(LocalProject::class, 'local_project_id');
     }
 
     public function activityLogs(): HasMany

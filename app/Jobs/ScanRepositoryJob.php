@@ -120,7 +120,26 @@ class ScanRepositoryJob implements ShouldQueue, TenantAwareJob
                     }
                 }
 
-                // Check for duplicates
+                $identityHash = hash('sha256', ($this->scan->created_by ?? '') . '|' . $fingerprint . '|' . $asset->id . '||');
+
+                $findingIdentity = \App\Models\FindingIdentity::firstOrCreate(
+                    [
+                        'identity_hash' => $identityHash,
+                    ],
+                    [
+                        'fingerprint' => $fingerprint,
+                        'asset_id' => $asset->id,
+                        'created_by' => $this->scan->created_by,
+                        'first_seen_at' => now(),
+                        'last_seen_at' => now(),
+                    ]
+                );
+
+                if (!$findingIdentity->wasRecentlyCreated) {
+                    $findingIdentity->update(['last_seen_at' => now()]);
+                }
+
+                // Check for duplicates within this scan (just in case)
                 $findingModel = Finding::updateOrCreate(
                     [
                         'fingerprint' => $fingerprint,
@@ -129,6 +148,7 @@ class ScanRepositoryJob implements ShouldQueue, TenantAwareJob
                     [
                         'title' => $dto->title,
                         'asset_id' => $asset->id,
+                        'finding_identity_id' => $findingIdentity->id,
                         'severity' => $severity,
                         'status' => FindingStatus::OPEN,
                         'category' => $dto->category ?? 'SAST',

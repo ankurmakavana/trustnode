@@ -189,10 +189,19 @@ class ScanController extends Controller
 
         $targetDir = $request->input('target');
 
-        // 1. Create a Scan record
-        // Re-using the Scan model. We will set type=local or just target=local path
+        // 1. Create a LocalProject record for stable identity
+        $localProject = \App\Models\LocalProject::firstOrCreate(
+            ['path' => $targetDir],
+            [
+                'name' => basename($targetDir),
+                'created_by' => $request->user()->id,
+            ]
+        );
+
+        // 2. Create a Scan record
         $scan = Scan::create([
             'repository_id' => null,
+            'local_project_id' => $localProject->id,
             'name'          => 'Local Scan: ' . basename($targetDir),
             'target'        => $targetDir,
             'type'          => 'local',

@@ -78,6 +78,25 @@ class ScanInfrastructureJob implements ShouldQueue, TenantAwareJob
                     }
                 }
 
+                $identityHash = hash('sha256', ($this->scan->created_by ?? '') . '|' . $fingerprint . '||' . $validatedTarget->original . '|');
+
+                $findingIdentity = \App\Models\FindingIdentity::firstOrCreate(
+                    [
+                        'identity_hash' => $identityHash,
+                    ],
+                    [
+                        'fingerprint' => $fingerprint,
+                        // target_id is null since we bypass inventory creation, but hash ensures identity
+                        'created_by' => $this->scan->created_by,
+                        'first_seen_at' => now(),
+                        'last_seen_at' => now(),
+                    ]
+                );
+
+                if (!$findingIdentity->wasRecentlyCreated) {
+                    $findingIdentity->update(['last_seen_at' => now()]);
+                }
+
                 $findingModel = Finding::updateOrCreate(
                     [
                         'fingerprint' => $fingerprint,
@@ -86,6 +105,7 @@ class ScanInfrastructureJob implements ShouldQueue, TenantAwareJob
                     [
                         'title' => $dto->title,
                         'asset_id' => null,
+                        'finding_identity_id' => $findingIdentity->id,
                         'severity' => $severity,
                         'status' => FindingStatus::OPEN,
                         'category' => $dto->category ?? 'Infrastructure',
