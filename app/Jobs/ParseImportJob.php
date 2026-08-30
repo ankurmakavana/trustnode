@@ -6,11 +6,12 @@ use App\Models\ImportJob;
 use App\Services\Import\ImportService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Contracts\TenantAwareJob;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-class ParseImportJob implements ShouldQueue
+class ParseImportJob implements ShouldQueue, TenantAwareJob
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -60,5 +61,10 @@ class ParseImportJob implements ShouldQueue
                 'message' => 'Parsing failed: '.$e->getMessage(),
             ]);
         }
+    }
+
+    public function getTenantId(): ?int
+    {
+        return $this->jobModel->created_by;
     }
 }

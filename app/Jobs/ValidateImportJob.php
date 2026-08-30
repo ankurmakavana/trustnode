@@ -6,12 +6,13 @@ use App\Models\ImportJob;
 use App\Services\Import\ValidationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Contracts\TenantAwareJob;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
 
-class ValidateImportJob implements ShouldQueue
+class ValidateImportJob implements ShouldQueue, TenantAwareJob
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -90,5 +91,10 @@ class ValidateImportJob implements ShouldQueue
             'scanner' => $this->scanner,
             'status' => 'failed',
         ]);
+    }
+
+    public function getTenantId(): ?int
+    {
+        return $this->jobModel->created_by;
     }
 }

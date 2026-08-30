@@ -22,6 +22,7 @@ class AssetGroup extends Model
 
     protected static function booted()
     {
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
         static::creating(function ($group) {
             if (empty($group->uuid)) {
                 $group->uuid = (string) Str::uuid();

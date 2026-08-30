@@ -34,6 +34,7 @@ class Target extends Model
 
     protected static function booted()
     {
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
         static::creating(function ($target) {
             if (empty($target->uuid)) {
                 $target->uuid = (string) Str::uuid();

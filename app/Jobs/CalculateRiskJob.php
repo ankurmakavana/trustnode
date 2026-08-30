@@ -6,12 +6,13 @@ use App\Models\ImportJob;
 use App\Services\Import\RiskMapper;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Contracts\TenantAwareJob;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-class CalculateRiskJob implements ShouldQueue
+class CalculateRiskJob implements ShouldQueue, TenantAwareJob
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -77,5 +78,10 @@ class CalculateRiskJob implements ShouldQueue
             $this->dupCount,
             $this->scans
         );
+    }
+
+    public function getTenantId(): ?int
+    {
+        return $this->jobModel->created_by;
     }
 }

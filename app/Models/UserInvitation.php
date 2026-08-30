@@ -27,6 +27,7 @@ class UserInvitation extends Model
 
     protected static function booted()
     {
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
         static::creating(function ($invitation) {
             if (empty($invitation->uuid)) {
                 $invitation->uuid = (string) Str::uuid();

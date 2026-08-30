@@ -10,11 +10,12 @@ use App\Models\ImportJob;
 use App\Models\Scan;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Contracts\TenantAwareJob;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-class FinalizeImportJob implements ShouldQueue
+class FinalizeImportJob implements ShouldQueue, TenantAwareJob
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -109,5 +110,10 @@ class FinalizeImportJob implements ShouldQueue
             'level' => 'info',
             'message' => 'Import job completed successfully.',
         ]);
+    }
+
+    public function getTenantId(): ?int
+    {
+        return $this->jobModel->created_by;
     }
 }

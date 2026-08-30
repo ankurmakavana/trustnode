@@ -12,6 +12,7 @@ use App\Services\Scan\Database\DatabaseCredentialVault;
 use App\Services\Scan\Database\MysqlSecurityScanner;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Contracts\TenantAwareJob;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -20,7 +21,7 @@ use Illuminate\Support\Str;
 use App\Notifications\ScanCompletedNotification;
 use App\Notifications\ScanFailedNotification;
 
-class ScanDatabaseJob implements ShouldQueue
+class ScanDatabaseJob implements ShouldQueue, TenantAwareJob
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -221,5 +222,10 @@ class ScanDatabaseJob implements ShouldQueue
         ]);
         
         $this->failScan('Scan failed fatally.');
+    }
+
+    public function getTenantId(): ?int
+    {
+        return $this->scan->created_by;
     }
 }

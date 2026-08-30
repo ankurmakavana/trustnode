@@ -31,4 +31,10 @@ class RiskTreatment extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    protected static function booted()
+    {
+        parent::booted();
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
+    }
 }

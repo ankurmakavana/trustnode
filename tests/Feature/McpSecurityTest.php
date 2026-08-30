@@ -14,7 +14,9 @@ class McpSecurityTest extends TestCase
     public function test_mcp_token_with_read_abilities_cannot_modify_resources()
     {
         // 1. Create a user
-        $user = User::factory()->create();
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $adminRole = \App\Models\Role::first();
+        $user = User::factory()->create(['role_id' => $adminRole->id]);
 
         // 2. Authenticate the user with only read abilities (as Claude MCP would use)
         Sanctum::actingAs(
@@ -39,20 +41,26 @@ class McpSecurityTest extends TestCase
     
     public function test_mcp_token_cross_tenant_isolation()
     {
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $adminRole = \App\Models\Role::first();
+
         // User A creates a scan
-        $userA = User::factory()->create();
-        $repoA = \App\Models\Repository::factory()->create();
+        $userA = User::factory()->create(['role_id' => $adminRole->id]);
+        $repoA = \App\Models\Repository::factory()->create(['created_by' => $userA->id]);
         
-        $scanA = \App\Models\Scan::factory()->create([
+        $scanA = \App\Models\Scan::create([
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
             'created_by' => $userA->id,
             'repository_id' => $repoA->id,
-            'type' => \App\Enums\Scan\ScanType::REPOSITORY,
-            'engine' => \App\Enums\Scan\ScanEngine::REPOSITORY_SCANNER,
+            'type' => \App\Enums\Scan\ScanType::REPOSITORY->value,
+            'status' => 'queued',
+            'name' => 'test scan',
+            'engine' => 'repositoryscanner',
             'target' => 'https://github.com/test'
         ]);
 
         // User B authenticates via MCP token
-        $userB = User::factory()->create();
+        $userB = User::factory()->create(['role_id' => $adminRole->id]);
         Sanctum::actingAs(
             $userB,
             ['scans:read', 'findings:read', 'reports:read']

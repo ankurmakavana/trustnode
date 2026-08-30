@@ -42,6 +42,7 @@ class Risk extends Model
 
     protected static function booted()
     {
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
         static::creating(function ($risk) {
             $risk->uuid = (string) Str::uuid();
             if (empty($risk->risk_id)) {

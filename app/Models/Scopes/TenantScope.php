@@ -14,11 +14,19 @@ class TenantScope implements Scope
      */
     public function apply(Builder $builder, Model $model)
     {
+        $tenantId = null;
+
         if (Auth::check()) {
+            $tenantId = Auth::id();
+        } elseif (\App\Services\TenantContext::currentUserId()) {
+            $tenantId = \App\Services\TenantContext::currentUserId();
+        }
+
+        if ($tenantId) {
             if ($model instanceof \App\Models\ScanReport) {
-                $builder->where($model->getTable() . '.requested_by', Auth::id());
+                $builder->where($model->getTable() . '.requested_by', $tenantId);
             } else {
-                $builder->where($model->getTable() . '.created_by', Auth::id());
+                $builder->where($model->getTable() . '.created_by', $tenantId);
             }
         }
     }

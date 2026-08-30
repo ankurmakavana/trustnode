@@ -36,6 +36,7 @@ class Asset extends Model
 
     protected static function booted()
     {
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
         static::creating(function ($asset) {
             if (empty($asset->uuid)) {
                 $asset->uuid = (string) Str::uuid();

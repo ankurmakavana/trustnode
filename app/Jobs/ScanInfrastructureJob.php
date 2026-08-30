@@ -13,6 +13,7 @@ use App\Services\Scan\Infrastructure\NativeInfrastructureScanner;
 use App\Services\Scan\Infrastructure\TargetValidator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Contracts\TenantAwareJob;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -21,7 +22,7 @@ use Illuminate\Support\Str;
 use App\Notifications\ScanCompletedNotification;
 use App\Notifications\ScanFailedNotification;
 
-class ScanInfrastructureJob implements ShouldQueue
+class ScanInfrastructureJob implements ShouldQueue, TenantAwareJob
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -172,5 +173,10 @@ class ScanInfrastructureJob implements ShouldQueue
             new \App\Services\Notification\NotificationContext(scan: $this->scan),
             new ScanFailedNotification($this->scan, 'Scan failed fatally.')
         );
+    }
+
+    public function getTenantId(): ?int
+    {
+        return $this->scan->created_by;
     }
 }

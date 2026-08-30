@@ -8,6 +8,7 @@ use App\Models\ScanReport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Contracts\TenantAwareJob;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -16,7 +17,7 @@ use Throwable;
 use App\Notifications\ReportReadyNotification;
 use App\Notifications\ReportFailedNotification;
 
-class GenerateScanReport implements ShouldQueue
+class GenerateScanReport implements ShouldQueue, TenantAwareJob
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -132,5 +133,10 @@ class GenerateScanReport implements ShouldQueue
             
             throw $e;
         }
+    }
+
+    public function getTenantId(): ?int
+    {
+        return $this->scanReport->requested_by;
     }
 }

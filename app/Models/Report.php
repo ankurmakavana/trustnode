@@ -52,4 +52,10 @@ class Report extends Model
     {
         return $this->hasMany(ReportHistory::class)->orderBy('created_at', 'desc');
     }
+
+    protected static function booted()
+    {
+        parent::booted();
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
+    }
 }

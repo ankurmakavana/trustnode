@@ -15,6 +15,7 @@ use App\Services\Repository\RepositoryService;
 use App\Services\Scan\RepositoryScanner;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Contracts\TenantAwareJob;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -24,7 +25,7 @@ use Illuminate\Support\Str;
 use App\Notifications\ScanCompletedNotification;
 use App\Notifications\ScanFailedNotification;
 
-class ScanRepositoryJob implements ShouldQueue
+class ScanRepositoryJob implements ShouldQueue, TenantAwareJob
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -238,5 +239,10 @@ class ScanRepositoryJob implements ShouldQueue
             new \App\Services\Notification\NotificationContext(scan: $this->scan, repository: $this->repository ?? null),
             new ScanFailedNotification($this->scan, 'Scan failed fatally.')
         );
+    }
+
+    public function getTenantId(): ?int
+    {
+        return $this->scan->created_by;
     }
 }

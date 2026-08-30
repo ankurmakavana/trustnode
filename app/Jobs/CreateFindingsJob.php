@@ -8,11 +8,12 @@ use App\Services\Import\DuplicateDetectionService;
 use App\Services\Import\FindingMapper;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Contracts\TenantAwareJob;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-class CreateFindingsJob implements ShouldQueue
+class CreateFindingsJob implements ShouldQueue, TenantAwareJob
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -100,5 +101,10 @@ class CreateFindingsJob implements ShouldQueue
             $dupCount,
             $this->scans
         );
+    }
+
+    public function getTenantId(): ?int
+    {
+        return $this->jobModel->created_by;
     }
 }

@@ -77,4 +77,10 @@ class ImportJob extends Model
     {
         return $this->hasMany(Scan::class);
     }
+
+    protected static function booted()
+    {
+        parent::booted();
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
+    }
 }
