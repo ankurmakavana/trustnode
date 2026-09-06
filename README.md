@@ -187,7 +187,7 @@ The following capabilities represent the planned roadmap:
 - **Node.js**: 18.x or higher & npm
 - **Database**: SQLite (default), MySQL 8.0+, or PostgreSQL 15+
 
-### Installation
+### Installation & Setup
 
 1. **Clone the repository:**
    ```bash
@@ -195,22 +195,35 @@ The following capabilities represent the planned roadmap:
    cd trustnode
    ```
 
-2. **Run automated setup:**
+2. **Run the automated setup command:**
    ```bash
    composer run-script setup
    ```
-   *This command installs Composer dependencies, creates your `.env` file, generates the application key, runs database migrations, and builds frontend assets.*
+   *This single command prepares the entire environment: it installs Composer dependencies, initializes `.env` from `.env.example`, generates the application encryption key, runs database migrations, installs npm packages, and creates the production frontend build.*
 
-3. **Start the development server:**
-   ```bash
-   composer run-script dev
-   ```
-   *This command starts the Laravel application server (`php artisan serve`), background queue listener (`php artisan queue:listen`), log tailing, and the Vite development server concurrently.*
+### Development Server
 
-4. **Verify installation by running the test suite:**
-   ```bash
-   php artisan test
-   ```
+Start all development daemons concurrently:
+```bash
+composer run-script dev
+```
+*This command uses `concurrently` to run the Laravel development server (`php artisan serve`), background queue listener (`php artisan queue:listen --tries=1 --timeout=0`), real-time log tailing (`php artisan pail`), and the Vite development server (`npm run dev`).*
+
+### Backend Verification & Testing
+
+Execute the automated backend test suite:
+```bash
+php artisan test
+```
+*Runs the PHPUnit test suite asserting tenant isolation, scanner execution, finding identity deduplication, baseline delta calculations, SSRF defenses, and API endpoints.*
+
+### Frontend Build Verification
+
+Compile and bundle the production React frontend assets:
+```bash
+npm run build
+```
+*Executes `vite build` to ensure all React components, dashboard charts, and CSS styling compile cleanly into `public/build`.*
 
 ---
 
