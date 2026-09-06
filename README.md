@@ -179,9 +179,24 @@ The following capabilities represent the planned roadmap:
 
 ---
 
-## Quick Start
+## Web Application vs. CLI
 
-Run TrustNode self-hosted with Docker and start scanning in minutes:
+TrustNode provides two distinct operational interfaces sharing the same underlying security engine:
+
+| Capability | TrustNode Web Application | TrustNode CLI |
+|---|---|---|
+| **Primary Use Case** | Interactive team dashboard & visual posture management | Terminal scanning, scripts, and CI/CD pipelines |
+| **Execution Method** | Self-hosted Docker container stack | Terminal command (`php cli/bin/trustnode`) |
+| **User Interface** | Web browser (`http://localhost:8000`) | Command-line standard output |
+| **Scan Initiation** | Web form target selection | Command line: `php cli/bin/trustnode scan <target>` |
+| **Findings Triage** | Interactive table with filters & detail views | Tabular terminal list: `php cli/bin/trustnode findings` |
+| **Reports** | Interactive HTML & downloadable PDF | PDF download: `php cli/bin/trustnode report download` |
+
+---
+
+## Quick Start (Web Application)
+
+Get the self-hosted TrustNode Web Application running with Docker in minutes:
 
 ### 1. Clone TrustNode
 ```bash
@@ -193,98 +208,78 @@ cd trustnode
 ```bash
 docker compose -f compose.dev.yaml up -d
 ```
-*Starts the Nginx web proxy (port `8000`), PHP-FPM application worker, Vite frontend compiler, MySQL database, and Redis queue/cache containers.*
+*Starts the self-hosted stack: Nginx web proxy (port `8000`), PHP-FPM application worker, Vite frontend compiler, MySQL database, and Redis queue/cache containers.*
 
-Once started, access the web dashboard at: `http://localhost:8000`
-
-### 3. Check TrustNode CLI
-```bash
-php cli/bin/trustnode list
-```
-*(On Windows systems with the CLI wrapper: `.\trustnode.cmd help`)*
-
-### 4. Run a Security Scan
-```bash
-php cli/bin/trustnode scan https://github.com/org/repo.git
-```
-*Triggers multi-engine static analysis across SAST, Secrets, Dependencies (SCA), Docker configurations, and Kubernetes manifests.*
-
-### 5. Check Scan Status
-```bash
-php cli/bin/trustnode scan status <scan-id>
+### 3. Open TrustNode in Your Browser
+Navigate to:
+```text
+http://localhost:8000
 ```
 
-### 6. View Findings & Reports
-```bash
-# View finding summary from completed scans
-php cli/bin/trustnode findings
-
-# Request and download security audit report
-php cli/bin/trustnode report <scan-id>
-php cli/bin/trustnode report download <scan-id> --output="./report.pdf"
-```
+### 4. Use the Web Application
+1. **Register a Target**: Go to **Targets** and add a Git repository URL or network host.
+2. **Start a Scan**: Click **Run Scan** to trigger multi-engine static and dynamic analysis.
+3. **Monitor Progress**: View real-time background scan execution and queue status.
+4. **Triage Findings**: Inspect severity breakdowns, masked code evidence, and remediation guidance under **Findings**.
+5. **Track Posture**: Review historical trend charts and baseline deltas on the **Dashboard**.
+6. **Export Reports**: Generate and download audit-ready HTML and PDF security reports.
 
 ---
 
 ## TrustNode CLI
 
-TrustNode includes a dedicated CLI in `cli/bin/trustnode` (and `trustnode.cmd` for Windows) for automated CI/CD and terminal workflows.
+TrustNode provides a dedicated command-line interface located in `cli/bin/trustnode` (with Windows batch wrapper `trustnode.cmd`) for developers, automation scripts, and CI/CD environments.
 
-### Command Reference
+### 1. Discover CLI Commands
+View the complete list of available CLI commands and global options:
+```bash
+php cli/bin/trustnode list
+```
+*(On Windows: `.\trustnode.cmd help`)*
 
-| Command | Description | Example |
-|---|---|---|
-| `list` | Lists all available TrustNode CLI commands | `php cli/bin/trustnode list` |
-| `scan <target>` | Starts a security scan against a Git repository | `php cli/bin/trustnode scan https://github.com/org/repo.git` |
-| `scan status <id>` | Checks status and progress of an active scan | `php cli/bin/trustnode scan status 1` |
-| `findings` | Lists triaged security findings across targets | `php cli/bin/trustnode findings` |
-| `report <id>` | Requests audit report generation for a scan | `php cli/bin/trustnode report 1` |
-| `report status <id>`| Checks report generation completion status | `php cli/bin/trustnode report status 1` |
-| `report download <id>`| Downloads the compiled PDF report | `php cli/bin/trustnode report download 1 --output="./report.pdf"` |
+### 2. Run a Repository Scan
+Start a security scan against a Git repository:
+```bash
+php cli/bin/trustnode scan https://github.com/org/repo.git
+```
+*Submits the repository to the scanning orchestrator, executes SAST, Secret Detection, Lockfile SCA, Dockerfile/Compose, and Kubernetes analyzers, and outputs the assigned scan ID.*
 
-### CLI Authentication & Diagnostics (Optional)
+### 3. Check Scan Status
+Monitor progress and lifecycle state for an active scan:
+```bash
+php cli/bin/trustnode scan status <scan-id>
+```
 
-For private instances or authenticated API access:
+### 4. Inspect Security Findings
+List findings identified across completed scans:
+```bash
+php cli/bin/trustnode findings
+```
+
+### 5. Generate & Download Security Reports
+```bash
+# Request PDF report generation
+php cli/bin/trustnode report <scan-id>
+
+# Check report status
+php cli/bin/trustnode report status <scan-id>
+
+# Download the compiled PDF report
+php cli/bin/trustnode report download <scan-id> --output="./report.pdf"
+```
+
+### 6. CLI Authentication & Diagnostics (Optional)
+When interacting with authenticated remote instances:
 ```bash
 # Authenticate CLI session with an API token
 php cli/bin/trustnode login --token="<your-api-token>"
 
-# Inspect authenticated identity
+# Inspect current authenticated user
 php cli/bin/trustnode whoami
 
-# Check CLI connectivity and API health
+# Diagnose API connectivity and token health
 php cli/bin/trustnode doctor
 ```
-
----
-
-## Development & Verification
-
-For developers contributing to TrustNode or running outside Docker:
-
-### Automated Environment Setup
-```bash
-composer run-script setup
-```
-*Installs Composer dependencies, creates `.env` from `.env.example`, generates the application key, runs migrations, and builds frontend assets.*
-
-### Development Stack
-```bash
-composer run-script dev
-```
-*Concurrently runs `php artisan serve`, queue worker `php artisan queue:listen`, log tailing `php artisan pail`, and Vite dev server `npm run dev`.*
-
-### Backend Test Suite
-```bash
-php artisan test
-```
-*Executes the PHPUnit test suite asserting tenant isolation, scanner execution, finding identity deduplication, baseline delta calculations, SSRF defenses, and API endpoints.*
-
-### Frontend Production Build
-```bash
-npm run build
-```
-*Executes `vite build` to compile React components and stylesheets into `public/build`.*
 
 ---
 
@@ -362,6 +357,36 @@ If you are an AI coding agent operating inside the TrustNode repository, follow 
 - **Preserve Tenant Isolation**: Always respect `TenantScope` and `TenantContext`. Never bypass tenant constraints in queries or jobs.
 - **Do Not Invent Capabilities**: When documenting or planning, categorize unimplemented capabilities strictly as `🚧 PLANNED`.
 - **Maintain Test Coverage**: Run `php artisan test` to verify changes before completing tasks. Never modify application logic solely to make tests artificially pass.
+
+---
+
+## Development & Verification
+
+For developers contributing to TrustNode or running outside Docker:
+
+### Automated Environment Setup
+```bash
+composer run-script setup
+```
+*Installs Composer dependencies, creates `.env` from `.env.example`, generates the application key, runs migrations, and builds frontend assets.*
+
+### Development Stack
+```bash
+composer run-script dev
+```
+*Concurrently runs `php artisan serve`, queue worker `php artisan queue:listen`, log tailing `php artisan pail`, and Vite dev server `npm run dev`.*
+
+### Backend Test Suite
+```bash
+php artisan test
+```
+*Executes the PHPUnit test suite asserting tenant isolation, scanner execution, finding identity deduplication, baseline delta calculations, SSRF defenses, and API endpoints.*
+
+### Frontend Production Build
+```bash
+npm run build
+```
+*Executes `vite build` to compile React components and stylesheets into `public/build`.*
 
 ---
 
