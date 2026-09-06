@@ -178,9 +178,9 @@ TrustNode transforms raw scan outputs into continuous posture metrics:
 
 ## Security Reports
 
-TrustNode produces publication-ready security audit reports containing executive summaries and in-depth technical evidence:
+TrustNode produces structured security audit reports containing executive summaries and in-depth technical evidence:
 
-- **Executive Summary**: High-level risk score, scan metadata, target information, and severity distribution breakdown (Critical, High, Medium, Low, Info).
+- **Executive Summary**: Target risk rating, scan metadata, target information, and severity distribution breakdown (Critical, High, Medium, Low, Info).
 - **Technical Finding Details**: Comprehensive vulnerability descriptions, assigned CWE/CVE references, compliance framework mappings (OWASP, MITRE ATT&CK), and specific remediation steps.
 - **Sanitized Evidence**: Source file locations, line numbers, and masked code snippets ensuring credentials and sensitive tokens are never exposed in plaintext.
 - **Downloadable Formats**: Styled HTML summary documents and downloadable PDF audit reports generated via `/api/scans/:id/report/download`.
@@ -264,7 +264,7 @@ To scan a local project directory directly from PowerShell without Git remotes:
 
 ## Scanning Workflows
 
-TrustNode executes static and dynamic analysis organized by target resource:
+TrustNode performs security analysis across multiple target resource types:
 
 ### Repository Scanning
 - **How it works**: Connects to remote Git repositories (public or private via personal access token).
