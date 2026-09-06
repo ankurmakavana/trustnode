@@ -183,7 +183,7 @@ TrustNode produces publication-ready security audit reports containing executive
 - **Executive Summary**: High-level risk score, scan metadata, target information, and severity distribution breakdown (Critical, High, Medium, Low, Info).
 - **Technical Finding Details**: Comprehensive vulnerability descriptions, assigned CWE/CVE references, compliance framework mappings (OWASP, MITRE ATT&CK), and specific remediation steps.
 - **Sanitized Evidence**: Source file locations, line numbers, and masked code snippets ensuring credentials and sensitive tokens are never exposed in plaintext.
-- **Downloadable Formats**: Interactive HTML viewing and downloadable PDF reports generated via backend rendering (`/api/scans/:id/report/download`).
+- **Downloadable Formats**: Styled HTML summary documents and downloadable PDF audit reports generated via `/api/scans/:id/report/download`.
 
 ---
 
@@ -191,16 +191,16 @@ TrustNode produces publication-ready security audit reports containing executive
 
 Get started with the TrustNode CLI:
 
-### 1. Clone & Start Background Engine
+### 1. Get TrustNode
 ```bash
 git clone https://github.com/ankurmakavana/trustnode.git
 cd trustnode
 
-# Start the local scanning engine in the background
+# Start the required TrustNode services
 docker compose -f compose.dev.yaml up -d
 ```
 
-### 2. Discover CLI Commands
+### 2. Verify the CLI
 ```bash
 php cli/bin/trustnode list
 ```
@@ -217,12 +217,12 @@ php cli/bin/trustnode scan https://github.com/org/repo.git
 php cli/bin/trustnode scan status <scan-id>
 ```
 
-### 5. Inspect Security Findings
+### 5. Inspect Findings
 ```bash
 php cli/bin/trustnode findings
 ```
 
-### 6. Generate & Download Security Report
+### 6. Generate & Download Report
 ```bash
 # Request report generation
 php cli/bin/trustnode report <scan-id>
@@ -235,50 +235,30 @@ php cli/bin/trustnode report download <scan-id> --output="./report.pdf"
 
 ## Using TrustNode
 
-TrustNode provides command-line and script-based interfaces for executing security scans across projects:
+TrustNode is primarily operated through its command-line interface. The CLI supports repository scanning, scan status inspection, findings retrieval, report generation, and report download.
 
-### 1. CLI
+### Authentication & Diagnostics
 
-The primary command-line tool is located at `cli/bin/trustnode` (and `trustnode.cmd` on Windows) for terminal scanning and CI/CD pipelines:
+When interacting with authenticated or remote TrustNode instances:
 
 ```bash
-# Command discovery
-php cli/bin/trustnode list
-
-# Start a repository scan
-php cli/bin/trustnode scan https://github.com/org/repo.git
-
-# Monitor scan progress
-php cli/bin/trustnode scan status <scan-id>
-
-# View finding summaries across scans
-php cli/bin/trustnode findings
-
-# Generate and download audit report
-php cli/bin/trustnode report <scan-id>
-php cli/bin/trustnode report status <scan-id>
-php cli/bin/trustnode report download <scan-id> --output="./report.pdf"
-
-# Optional: Authenticate CLI session for remote instances
+# Authenticate CLI session
 php cli/bin/trustnode login --token="<your-api-token>"
+
+# Verify active authenticated identity
 php cli/bin/trustnode whoami
+
+# Check CLI connectivity and configuration health
 php cli/bin/trustnode doctor
 ```
 
-### 2. Local Project Scanning
+### Local Project Scanning
 
 To scan a local project directory directly from PowerShell without Git remotes:
 ```powershell
 .\local_scan.ps1 -Target "C:\path\to\your\project" -InstallDir "C:\path\to\trustnode"
 ```
 *Validates the path, archives source code respecting safety limits (50k files, 200 MB max), uploads to the scan API, monitors progress, and outputs findings directly to the console.*
-
-### 3. Optional Interactive Interface
-
-TrustNode also provides an optional browser interface for visual posture analytics, baseline comparisons, and target management:
-- **Dashboard & Trends**: Visualizes severity distribution and 10-scan historical posture trajectory.
-- **Finding Triage**: Filter findings by severity and lifecycle states (`NEW`, `RECURRING`, `RESOLVED`, `REGRESSION`).
-- **Reports**: View and download executive HTML and PDF audit summaries.
 
 ---
 
@@ -344,8 +324,6 @@ We welcome contributions from security researchers, AppSec engineers, developers
 ## For Contributors
 
 For contributors setting up the development environment locally:
-
-TrustNode's backend services and CLI are built in PHP/Laravel with a React dashboard interface.
 
 ### Development Commands
 ```bash
