@@ -181,108 +181,110 @@ The following capabilities represent the planned roadmap:
 
 ## Quick Start
 
-### Prerequisites
-- **PHP**: 8.2 or higher (with `pdo`, `mbstring`, `openssl`, `curl`, `dom`, `zip` extensions)
-- **Composer**: 2.x
-- **Node.js**: 18.x or higher & npm
-- **Database**: SQLite (default), MySQL 8.0+, or PostgreSQL 15+
+Run TrustNode self-hosted with Docker and start scanning in minutes:
 
-### Installation & Setup
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/ankurmakavana/trustnode.git
-   cd trustnode
-   ```
-
-2. **Run the automated setup command:**
-   ```bash
-   composer run-script setup
-   ```
-   *This single command prepares the entire environment: it installs Composer dependencies, initializes `.env` from `.env.example`, generates the application encryption key, runs database migrations, installs npm packages, and creates the production frontend build.*
-
-### Development Server
-
-Start all development daemons concurrently:
+### 1. Clone TrustNode
 ```bash
-composer run-script dev
+git clone https://github.com/ankurmakavana/trustnode.git
+cd trustnode
 ```
-*This command uses `concurrently` to run the Laravel development server (`php artisan serve`), background queue listener (`php artisan queue:listen --tries=1 --timeout=0`), real-time log tailing (`php artisan pail`), and the Vite development server (`npm run dev`).*
 
-### Backend Verification & Testing
-
-Execute the automated backend test suite:
+### 2. Start TrustNode with Docker
 ```bash
-php artisan test
+docker compose -f compose.dev.yaml up -d
 ```
-*Runs the PHPUnit test suite asserting tenant isolation, scanner execution, finding identity deduplication, baseline delta calculations, SSRF defenses, and API endpoints.*
+*Starts the Nginx web proxy (port `8000`), PHP-FPM application worker, Vite frontend compiler, MySQL database, and Redis queue/cache containers.*
 
-### Frontend Build Verification
+Once started, access the web dashboard at: `http://localhost:8000`
 
-Compile and bundle the production React frontend assets:
-```bash
-npm run build
-```
-*Executes `vite build` to ensure all React components, dashboard charts, and CSS styling compile cleanly into `public/build`.*
-
----
-
-## TrustNode CLI
-
-TrustNode provides a dedicated command-line interface located in `cli/bin/trustnode` (with Windows batch wrapper `trustnode.cmd`).
-
-### CLI Discovery & Help
-
-View available CLI commands and global options:
+### 3. Check TrustNode CLI
 ```bash
 php cli/bin/trustnode list
 ```
 *(On Windows systems with the CLI wrapper: `.\trustnode.cmd help`)*
 
-### User Authentication & Diagnostics
+### 4. Run a Security Scan
+```bash
+php cli/bin/trustnode scan https://github.com/org/repo.git
+```
+*Triggers multi-engine static analysis across SAST, Secrets, Dependencies (SCA), Docker configurations, and Kubernetes manifests.*
 
-1. **Authenticate the CLI session with an API token:**
-   ```bash
-   php cli/bin/trustnode login --token="<your-api-token>"
-   ```
-2. **Verify current authenticated identity:**
-   ```bash
-   php cli/bin/trustnode whoami
-   ```
-3. **Run CLI health and connectivity diagnostics:**
-   ```bash
-   php cli/bin/trustnode doctor
-   ```
+### 5. Check Scan Status
+```bash
+php cli/bin/trustnode scan status <scan-id>
+```
 
-### Security Scanning via CLI
+### 6. View Findings & Reports
+```bash
+# View finding summary from completed scans
+php cli/bin/trustnode findings
 
-1. **Scan a Git repository:**
-   ```bash
-   php cli/bin/trustnode scan https://github.com/org/repo.git
-   ```
-   *Submits the repository URL to the scanning orchestrator, triggers multi-engine static analysis, and outputs the assigned scan ID.*
+# Request and download security audit report
+php cli/bin/trustnode report <scan-id>
+php cli/bin/trustnode report download <scan-id> --output="./report.pdf"
+```
 
-2. **Check scan status and progress:**
-   ```bash
-   php cli/bin/trustnode scan status <scan-id>
-   ```
+---
 
-3. **List findings for completed scans:**
-   ```bash
-   php cli/bin/trustnode findings
-   ```
+## TrustNode CLI
 
-4. **Request, monitor, and download security audit reports:**
-   ```bash
-   # Request report generation
-   php cli/bin/trustnode report <scan-id>
+TrustNode includes a dedicated CLI in `cli/bin/trustnode` (and `trustnode.cmd` for Windows) for automated CI/CD and terminal workflows.
 
-   # Check report generation status
-   php cli/bin/trustnode report status <scan-id>
+### Command Reference
 
-   # Download generated report to a local file
-   php cli/bin/trustnode report download <scan-id> --output="./report.pdf"
-   ```
+| Command | Description | Example |
+|---|---|---|
+| `list` | Lists all available TrustNode CLI commands | `php cli/bin/trustnode list` |
+| `scan <target>` | Starts a security scan against a Git repository | `php cli/bin/trustnode scan https://github.com/org/repo.git` |
+| `scan status <id>` | Checks status and progress of an active scan | `php cli/bin/trustnode scan status 1` |
+| `findings` | Lists triaged security findings across targets | `php cli/bin/trustnode findings` |
+| `report <id>` | Requests audit report generation for a scan | `php cli/bin/trustnode report 1` |
+| `report status <id>`| Checks report generation completion status | `php cli/bin/trustnode report status 1` |
+| `report download <id>`| Downloads the compiled PDF report | `php cli/bin/trustnode report download 1 --output="./report.pdf"` |
+
+### CLI Authentication & Diagnostics (Optional)
+
+For private instances or authenticated API access:
+```bash
+# Authenticate CLI session with an API token
+php cli/bin/trustnode login --token="<your-api-token>"
+
+# Inspect authenticated identity
+php cli/bin/trustnode whoami
+
+# Check CLI connectivity and API health
+php cli/bin/trustnode doctor
+```
+
+---
+
+## Development & Verification
+
+For developers contributing to TrustNode or running outside Docker:
+
+### Automated Environment Setup
+```bash
+composer run-script setup
+```
+*Installs Composer dependencies, creates `.env` from `.env.example`, generates the application key, runs migrations, and builds frontend assets.*
+
+### Development Stack
+```bash
+composer run-script dev
+```
+*Concurrently runs `php artisan serve`, queue worker `php artisan queue:listen`, log tailing `php artisan pail`, and Vite dev server `npm run dev`.*
+
+### Backend Test Suite
+```bash
+php artisan test
+```
+*Executes the PHPUnit test suite asserting tenant isolation, scanner execution, finding identity deduplication, baseline delta calculations, SSRF defenses, and API endpoints.*
+
+### Frontend Production Build
+```bash
+npm run build
+```
+*Executes `vite build` to compile React components and stylesheets into `public/build`.*
 
 ---
 
