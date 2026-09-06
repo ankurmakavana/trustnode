@@ -1,413 +1,322 @@
-# TrustNode Security Capability Inventory
+# TrustNode
 
-TrustNode is a self-hosted static security scanning platform focused on Source Code Security, Secret Detection, Software Composition Analysis (SCA), Local and Repository Scanning, Security Findings, and Security Reporting.
-
-## What TrustNode Is Today
-TrustNode is currently a self-hosted static security scanning platform focused on:
-1. Source Code Security (SAST)
-2. Secret Detection
-3. Software Composition Analysis (SCA)
-4. Local and Repository Scanning
-5. Security Findings (deduplication, fingerprinting)
-6. Security Reporting (HTML/PDF)
-
-It is NOT yet:
-- a runtime protection platform
-- a full CNAPP
-- a SIEM
-- a comprehensive network vulnerability scanner (only basic port/TLS/HTTP scanning is supported)
-- a live CSPM platform
-- a container runtime security platform
+TrustNode is an open-source **Continuous Security & Remediation Platform** designed to secure modern software environments from the ground up.
 
 ---
 
-## Current Security Coverage
-TrustNode currently provides:
+## Why TrustNode?
 
-**Code Security**
-→ SAST (Regex-based SQLi, Command Injection, Eval, Path Traversal)
+Modern security models often attempt to enforce governance solely from the top down—auditing deployed infrastructure or reacting to security alerts long after vulnerabilities reach production. However, security posture decays when the individual components composing a system are neglected.
 
-**Secret Security**
-→ Secret Detection (High-entropy tokens, AWS, GitHub, GitLab, Stripe, Slack, GCP, JWT, Private Keys)
-
-**Dependency Security**
-→ Software Composition Analysis (SCA) via lockfile parsing and OSV vulnerability lookup
-
-**Infrastructure Security**
-→ Not yet implemented / planned
-
-**Container Security**
-→ Static Dockerfile and Docker Compose analysis
-
-**Cloud Security**
-→ Not yet implemented / planned
-
-**Network Security**
-→ Basic Active Infrastructure Scanning (Ports, TLS certificates, HTTP headers)
-
-**SOC**
-→ Finding/reporting foundation, lifecycle tracking, and scan-to-scan baseline delta, but not a full SIEM/SOC platform
-
-**Compliance**
-→ Current mapper status: Experimental / Heuristic foundational mapping (OWASP, MITRE, ISO, PCI, NIST, SOC 2)
+Vulnerabilities, exposed secrets, malicious dependencies, insecure container configurations, and misconfigured orchestration manifests do not originate in the cloud; they enter through everyday development workflows, local projects, and version-controlled repositories. Securing systems effectively requires continuous detection, deterministic tracking, and actionable remediation at the resource level before risks compound into organizational exposure.
 
 ---
 
-## Status Vocabulary
-Use exactly these statuses everywhere in this documentation:
-- ✅ IMPLEMENTED
-- 🟡 PARTIAL
-- 🧪 EXPERIMENTAL
-- 🚧 PLANNED
-- ❌ NOT IMPLEMENTED
+## Security Philosophy
+
+> **"Security starts from the smallest entity/resource."**
+
+TrustNode is built on the principle that organizational security is the cumulative state of every individual resource within the environment.
+
+```
++-----------------------------------------------------------------------------------+
+|                           Organizational Security Posture                         |
++-----------------------------------------------------------------------------------+
+                                         ▲
+                                         │ Cumulative Posture & Baseline Drift
++-----------------------------------------------------------------------------------+
+|      Source Code  •  Secrets  •  Dependencies  •  Containers  •  Manifests       |
+|                               (Resource Level)                                    |
++-----------------------------------------------------------------------------------+
+```
+
+TrustNode focuses on securing the smallest resources that enter or exist within an organization:
+- **Source code** files and syntax constructs
+- **Authentication credentials**, tokens, and cryptographic keys
+- **Third-party software dependencies** and lockfile specifications
+- **Container definitions** (`Dockerfile`, `docker-compose.yml`)
+- **Kubernetes manifests** and workload definitions
+- **Infrastructure targets** and network boundaries
+
+By identifying weaknesses early, establishing deterministic identity for findings, and monitoring lifecycle transitions across completed scans, TrustNode provides the foundation for moving from individual resource security toward comprehensive organizational security.
 
 ---
 
-## Security Category Scorecard
-| Category | Current Status |
-|----------|----------------|
-| Code Security | 🟡 PARTIAL |
-| Secret Security | ✅ IMPLEMENTED |
-| Dependency / SCA Security | 🟡 PARTIAL |
-| Container Security | 🟡 PARTIAL |
-| IaC / Cloud Posture | 🟡 PARTIAL |
-| Network Security | 🟡 PARTIAL |
-| Cloud / CNAPP | ❌ NOT IMPLEMENTED |
-| SOC / Detection | 🟡 PARTIAL |
-| Compliance | 🧪 EXPERIMENTAL |
-| Reporting | ✅ IMPLEMENTED |
-| Scanning Targets | ✅ IMPLEMENTED |
-| Platform / Operations | ✅ IMPLEMENTED |
+## What We Are Building
+
+TrustNode is evolving into a unified **Continuous Security & Remediation Platform**.
+
+### Current Implementation vs. Long-Term Direction
+
+| Area | Current Implementation | Long-Term Direction (Roadmap) |
+|---|---|---|
+| **Code Security** | Fast regex-based SAST for high-impact flaws (SQLi, Command Injection, Eval, Path Traversal) | AST-based semantic analysis, taint tracking, and framework-aware rule engines |
+| **Secret Detection** | High-entropy token detection, known provider patterns (AWS, GitHub, GitLab, Stripe, Slack, GCP, JWT, Private Keys), placeholder suppression, and credential masking | Custom regex engines, enterprise secret management integration, and automated revocation workflows |
+| **SCA / Dependencies** | Lockfile parsing (`composer.lock`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`) with OSV vulnerability lookup and local caching | Multi-language ecosystem expansion (Python, Go, Rust, Java), automated PR dependency patching |
+| **Container & IaC** | Static analysis of `Dockerfile`, `docker-compose.yml`, and Kubernetes YAML manifests | Container image registry scanning, runtime container monitoring, Terraform (HCL), and Helm chart parsers |
+| **Network Security** | Active TCP port probing, TLS certificate expiry inspection, and HTTP security header evaluation | Continuous asset discovery, banner analysis, and distributed network sensors |
+| **Finding Intelligence** | Deterministic `FindingIdentity` generation, 4-state lifecycle tracking (`NEW`, `RECURRING`, `RESOLVED`, `REGRESSION`), and point-to-point baseline regression intelligence | Automated remediation PR generation, cross-target correlation, and ML-assisted triage |
+| **Posture & Trends** | Tenant-scoped & target-filtered dashboard, 10-scan historical posture trend, and direction calculation (`improving`, `worsening`, `unchanged`) | Long-range posture analytics, executive reporting, SLA compliance tracking, and security benchmarking |
+| **Cloud & CNAPP** | 🚧 Planned (No live cloud provider integrations currently exist) | Cloud security posture management (CSPM), CIEM, and cloud workload protection (CWPP) |
 
 ---
 
-## Master Security Capability Matrix
+## Objective
 
-### 1. Code Security
-| Capability | Status | Verified Source |
-|---|---|---|
-| SAST | ✅ IMPLEMENTED | `SastScanner.php` |
-| SQL Injection detection | ✅ IMPLEMENTED | `SastScanner.php` |
-| Command Injection detection | ✅ IMPLEMENTED | `SastScanner.php` |
-| Dangerous eval detection | ✅ IMPLEMENTED | `SastScanner.php` |
-| Path Traversal detection | ✅ IMPLEMENTED | `SastScanner.php` |
-| Regex-based detection | ✅ IMPLEMENTED | `AbstractRegexScanner.php` |
-| Cross-language nature | ✅ IMPLEMENTED | `SastScanner.php` |
-| AST-based analysis | 🚧 PLANNED | N/A |
-| Framework-aware analysis | 🚧 PLANNED | N/A |
-| Language-specific analysis | 🚧 PLANNED | N/A |
-
-### 2. Secret Security
-| Capability | Status | Verified Source |
-|---|---|---|
-| AWS credentials | ✅ IMPLEMENTED | `SecretScanner.php` |
-| GitHub tokens | ✅ IMPLEMENTED | `SecretScanner.php` |
-| GitLab tokens | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Stripe keys | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Slack tokens | ✅ IMPLEMENTED | `SecretScanner.php` |
-| GCP keys | ✅ IMPLEMENTED | `SecretScanner.php` |
-| JWT detection | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Private key detection | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Generic secrets | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Entropy filtering | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Placeholder filtering | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Secret masking | ✅ IMPLEMENTED | `SecretScanner.php` |
-| Evidence truncation | ✅ IMPLEMENTED | `AbstractRegexScanner.php` |
-
-### 3. Dependency / SCA Security
-| Capability | Status | Verified Source |
-|---|---|---|
-| composer.lock | ✅ IMPLEMENTED | `ComposerLockParser.php` |
-| package-lock.json | ✅ IMPLEMENTED | `NpmLockParser.php` |
-| lockfileVersion 1 | ✅ IMPLEMENTED | `NpmLockParser.php` |
-| lockfileVersion 2 | ✅ IMPLEMENTED | `NpmLockParser.php` |
-| lockfileVersion 3 | ✅ IMPLEMENTED | `NpmLockParser.php` |
-| Yarn Classic v1 | ✅ IMPLEMENTED | `YarnLockParser.php` |
-| Yarn Berry v2+ | ❌ NOT IMPLEMENTED | N/A |
-| pnpm-lock.yaml (Verified v5/v6/v9 formats) | ✅ IMPLEMENTED | `PnpmLockParser.php` |
-| Python | ❌ NOT IMPLEMENTED | N/A |
-| Go | ❌ NOT IMPLEMENTED | N/A |
-| Rust | ❌ NOT IMPLEMENTED | N/A |
-| Maven | ❌ NOT IMPLEMENTED | N/A |
-| Gradle | ❌ NOT IMPLEMENTED | N/A |
-
-### 4. Container Security
-| Capability | Status | Verified Source |
-|---|---|---|
-| Dockerfile scanning | ✅ IMPLEMENTED | `ContainerScanner.php` |
-| docker-compose scanning | ✅ IMPLEMENTED | `ContainerScanner.php` |
-| image vulnerability scanning | ❌ NOT IMPLEMENTED | N/A |
-| image configuration scanning | ❌ NOT IMPLEMENTED | N/A |
-| container runtime scanning | ❌ NOT IMPLEMENTED | N/A |
-| registry scanning | ❌ NOT IMPLEMENTED | N/A |
-
-### 5. IaC / Cloud Posture
-| IaC Capability | Status | Verified Source |
-|---|---|---|
-| Kubernetes static analysis | ✅ IMPLEMENTED | `KubernetesScanner.php` |
-| Terraform | ❌ NOT IMPLEMENTED | N/A |
-| Helm | ❌ NOT IMPLEMENTED | N/A |
-| Cloud posture APIs | ❌ NOT IMPLEMENTED | N/A |
-| Kubernetes cluster/runtime scanning | ❌ NOT IMPLEMENTED | N/A |
-
-*Note: This scanner performs offline static analysis (no external API calls or Kubernetes cluster connections) and requires no YAML dependencies. It evaluates `privileged`, `hostNetwork`, `hostPID`, `hostPath`, `allowPrivilegeEscalation`, `runAsUser`, and `LoadBalancer` exposure.*
-
-### 6. Network Security
-| Capability | Status | Verified Source |
-|---|---|---|
-| network configuration analysis | ❌ NOT IMPLEMENTED | N/A |
-| exposed ports | ✅ IMPLEMENTED | `NativeInfrastructureScanner.php` |
-| TLS/security configuration | ✅ IMPLEMENTED | `NativeInfrastructureScanner.php` |
-| endpoint/network discovery | ❌ NOT IMPLEMENTED | N/A |
-| network vulnerability scanning | ❌ NOT IMPLEMENTED | N/A |
-| live network scanning | ✅ IMPLEMENTED | `NativeInfrastructureScanner.php` |
-| HTTP security headers | ✅ IMPLEMENTED | `NativeInfrastructureScanner.php` |
-
-*Note: The native infrastructure scanner currently performs active network connectivity to discover open ports (TCP handshake on common ports), validates TLS certificate expiration, and checks for basic missing HTTP security headers on a single target. SSRF and DNS rebinding protections are strictly enforced.*
-
-### 7. Cloud / CNAPP
-| Capability | Status | Verified Source |
-|---|---|---|
-| CSPM | ❌ NOT IMPLEMENTED | N/A |
-| CWPP | ❌ NOT IMPLEMENTED | N/A |
-| CIEM | ❌ NOT IMPLEMENTED | N/A |
-| Container Security | 🟡 PARTIAL | N/A |
-| Kubernetes runtime security | ❌ NOT IMPLEMENTED | N/A |
-| Runtime workload protection | ❌ NOT IMPLEMENTED | N/A |
-| Cloud API posture scanning | ❌ NOT IMPLEMENTED | N/A |
-| Cloud asset inventory | ❌ NOT IMPLEMENTED | N/A |
-
-### 8. SOC / Detection
-| Capability | Status | Verified Source |
-|---|---|---|
-| security findings | ✅ IMPLEMENTED | `ScanLocalJob.php` |
-| severity classification | ✅ IMPLEMENTED | `ScanLocalJob.php` |
-| fingerprints | ✅ IMPLEMENTED | `FingerprintService.php` |
-| deduplication | ✅ IMPLEMENTED | `FingerprintService.php` |
-| finding persistence | ✅ IMPLEMENTED | `ScanLocalJob.php` |
-| finding lifecycle intelligence | ✅ IMPLEMENTED | `FindingLifecycleService.php` |
-| security baseline & regression intelligence | ✅ IMPLEMENTED | `ScanBaselineComparisonService.php` |
-| security posture dashboard & historical trend | ✅ IMPLEMENTED | `DashboardService.php` |
-| SIEM integration | ❌ NOT IMPLEMENTED | N/A |
-| SOAR | ❌ NOT IMPLEMENTED | N/A |
-| incident response platform | ❌ NOT IMPLEMENTED | N/A |
-| ticketing platform | ❌ NOT IMPLEMENTED | N/A |
-| runtime detection platform | ❌ NOT IMPLEMENTED | N/A |
-| webhook integrations | 🚧 PLANNED | N/A |
-
-### 9. Compliance
-| Capability | Status | Verified Source |
-|---|---|---|
-| Heuristic/control mapping | 🧪 EXPERIMENTAL | `ComplianceMapper.php` |
-| OWASP | 🧪 EXPERIMENTAL | `ComplianceSeeder.php` |
-| MITRE | 🧪 EXPERIMENTAL | `ComplianceSeeder.php` |
-| ISO | 🧪 EXPERIMENTAL | `ComplianceSeeder.php` |
-| PCI | 🧪 EXPERIMENTAL | `ComplianceSeeder.php` |
-| NIST | 🧪 EXPERIMENTAL | `ComplianceSeeder.php` |
-| SOC 2 | 🧪 EXPERIMENTAL | `ComplianceSeeder.php` |
-| SOC 2 certification | ❌ NOT IMPLEMENTED | N/A |
-| ISO certification | ❌ NOT IMPLEMENTED | N/A |
-| PCI certification | ❌ NOT IMPLEMENTED | N/A |
-| Regulatory certification | ❌ NOT IMPLEMENTED | N/A |
-
-### 10. Reporting
-| Capability | Status | Verified Source |
-|---|---|---|
-| findings | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| HTML reports | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| PDF reports | ✅ IMPLEMENTED | `ReportController.php` |
-| severity summary | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| technical details | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| remediation | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| business impact | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| evidence | ✅ IMPLEMENTED | `local_scan.blade.php` |
-| SCA package information | ✅ IMPLEMENTED | `ScaScanner.php` |
-| lockfile path | ✅ IMPLEMENTED | `ScaScanner.php` |
-
-### 11. Scanning Targets
-| Capability | Status | Verified Source |
-|---|---|---|
-| local directories | ✅ IMPLEMENTED | `local_scan.ps1` |
-| Git repositories | ✅ IMPLEMENTED | `ScanRepositoryJob.php` |
-| uploaded archives | ✅ IMPLEMENTED | `ScanLocalJob.php` |
-| supported lockfiles | ✅ IMPLEMENTED | `ScaScanner.php` |
-| source files | ✅ IMPLEMENTED | `RepositoryScanner.php` |
-| live infrastructure hosts (port/TLS/headers) | ✅ IMPLEMENTED | `NativeInfrastructureScanner.php` |
-| arbitrary cloud repositories | ❌ NOT IMPLEMENTED | N/A |
-
-### 12. Platform / Operations
-| Capability | Status | Verified Source |
-|---|---|---|
-| CLI | ✅ IMPLEMENTED | `cli/` |
-| API | ✅ IMPLEMENTED | `app/Http/Controllers/` |
-| queue processing | ✅ IMPLEMENTED | `app/Jobs/` |
-| Redis queue / cache | ✅ IMPLEMENTED | `compose.dev.yaml` |
-| Docker development environment| ✅ IMPLEMENTED | `docker/` |
-| temporary workspace cleanup | ✅ IMPLEMENTED | `local_scan.ps1`, `ScanLocalJob.php` |
-| retry handling | ✅ IMPLEMENTED | `OsvApiClient.php` |
-| error handling | ✅ IMPLEMENTED | `OsvApiClient.php`, `ScanLocalJob.php` |
-| scan lifecycle (progress/status) | ✅ IMPLEMENTED | `ScanLocalJob.php` |
+TrustNode’s objective is to provide a deterministic, transparent security platform that:
+1. **Secures Source Resources**: Validates code, configuration, credentials, and dependencies at their source.
+2. **Detects Weaknesses Early**: Catches security regressions prior to deployment.
+3. **Creates Actionable Findings**: Normalizes findings across diverse scanner engines with remediation guidance, impact analysis, and sanitized evidence.
+4. **Tracks Findings Over Time**: Maintains persistent finding identities to track whether issues are newly introduced, recurring, resolved, or regressed.
+5. **Measures Security Posture**: Evaluates historical trends to determine whether an asset's security posture is improving, worsening, or remaining stable.
+6. **Progressively Expands**: Builds an extensible foundation for broader organizational security without compromising resource-level fidelity.
 
 ---
 
-## Scanner Architecture
-The scanning engine uses a modular, orchestrator-driven architecture:
+## Who Is TrustNode For?
 
-```text
-Local Directory / Git Repository
-            |
-            v
-       Scan Trigger
-            |
-            v
-     Queue / Scan Job
-            |
-            v
-    RepositoryScanner
-            |
-     +------+-------+----------------+
-     |              |                |
-     v              v                v
-SastScanner   SecretScanner     ScaScanner
-                                  |
-                  +---------------+---------------+
-                  |       |       |       |
-                  v       v       v       v
-              Composer   NPM    Yarn    pnpm
-                Parser   Parser  Parser  Parser
-                                  |
-                                  v
-                            OsvApiClient
-                                  |
-                                  v
-                         NormalizedFinding
-                                  |
-                                  v
-                     Fingerprint / Persistence
-                                  |
-                                  v
-                               Reports
+- **Developers**: Test repositories and local directories for security issues before committing code or merging pull requests.
+- **AppSec & DevSecOps Engineers**: Run fast, repeatable security scans across projects, enforce security baselines, and prevent regressions in CI/CD pipelines.
+- **Security Engineers & Analysts**: Triage findings with normalized severity, inspect masked evidence, and export comprehensive HTML/PDF technical audit reports.
+- **Small Organizations & Teams**: Self-host a unified security scanner and posture dashboard without complex external enterprise dependencies.
+- **Open-Source Contributors**: Extend modular scanner engines, parsers, and compliance mappers within a clean, tested Laravel architecture.
+
+---
+
+## Security Capability Inventory
+
+TrustNode maintains an authoritative 12-category security capability inventory:
+
+| # | Security Category | Status | Summary |
+|---|---|---|---|
+| 1 | **Code Security** | 🟡 PARTIAL | Static pattern-based SAST for SQLi, Command Injection, dangerous eval, and path traversal. |
+| 2 | **Secret Security** | ✅ IMPLEMENTED | High-entropy secrets, cloud/API tokens (AWS, GitHub, GitLab, Stripe, Slack, GCP, JWT, Private Keys) with masking and placeholder filtering. |
+| 3 | **Dependency / SCA Security** | 🟡 PARTIAL | Lockfile analysis for Packagist (`composer.lock`), npm (`package-lock.json` v1-v3), Yarn Classic (`yarn.lock`), and pnpm (`pnpm-lock.yaml`) backed by OSV.dev vulnerability intelligence. |
+| 4 | **Container Security** | 🟡 PARTIAL | Static analysis of `Dockerfile` and `docker-compose.yml` configurations for privilege escalation, root execution, and exposed sockets. |
+| 5 | **IaC / Cloud Posture** | 🟡 PARTIAL | Offline static analysis of raw Kubernetes manifests for security context misconfigurations and network exposures. |
+| 6 | **Network Security** | 🟡 PARTIAL | Active TCP port discovery on common ports, TLS certificate expiration checks, and HTTP security header evaluation. |
+| 7 | **Cloud / CNAPP** | 🚧 PLANNED | Long-term roadmap for cloud provider API posture scanning (CSPM), identity entitlements (CIEM), and workload protection (CWPP). |
+| 8 | **SOC / Detection** | 🟡 PARTIAL | Finding normalization, SHA-256 fingerprinting, 4-state lifecycle tracking, point-to-point baseline regression comparison, and posture trend dashboard. |
+| 9 | **Compliance** | 🧪 EXPERIMENTAL | Heuristic control mapping for OWASP Top 10, MITRE ATT&CK, ISO 27001, PCI DSS, NIST SP 800-53, and SOC 2. |
+| 10 | **Reporting** | ✅ IMPLEMENTED | Generation of styled HTML and downloadable PDF audit reports detailing findings, remediation steps, and technical evidence. |
+| 11 | **Scanning Targets** | ✅ IMPLEMENTED | Scan execution across local directories (CLI upload), Git repositories (clone), uploaded ZIP archives, and verified network infrastructure hosts. |
+| 12 | **Platform / Operations** | ✅ IMPLEMENTED | Multi-tenant context isolation (`TenantScope`), background queue execution, strict archive extraction boundaries, and SSRF/DNS rebinding protection. |
+
+> **Status Vocabulary:**
+> - ✅ **IMPLEMENTED** — Fully functional, tested, and actively available in the codebase.
+> - 🟡 **PARTIAL** — Available with specific boundaries or supported subsets.
+> - 🧪 **EXPERIMENTAL** — Heuristic or foundational capability under active development.
+> - 🚧 **PLANNED** — Roadmap capability designed for future implementation.
+
+---
+
+## What TrustNode Does Today
+
+- **Multi-Engine Static Scanning**: Analyzes source code, credentials, lockfiles, Docker configurations, and Kubernetes YAML in a single unified scan.
+- **Active Infrastructure Probing**: Scans target hostnames and IP addresses for open ports, TLS validity, and missing security headers with SSRF protection.
+- **Finding Identity & Deduplication**: Generates deterministic SHA-256 fingerprints based on rule ID, target, file path, and normalized code snippets.
+- **Lifecycle State Tracking**: Categorizes every finding on completed scans as `NEW`, `RECURRING`, `RESOLVED`, or `REGRESSION`.
+- **Point-to-Point Baseline Comparison**: Compares any scan against a chosen baseline to calculate delta metrics, severity migrations, new/resolved findings, and posture state.
+- **Posture Trend Visualization**: Displays historical finding counts, lifecycle transitions, and posture direction indicators (`improving`, `worsening`, `unchanged`) across historical scans.
+- **Security Audit Reports**: Exports comprehensive HTML and PDF reports containing executive summaries, technical details, remediation guidance, and vulnerability references.
+
+---
+
+## Planned Security Direction
+
+The following capabilities represent the planned roadmap:
+
+- 🚧 **Advanced AST-Based SAST**: Abstract Syntax Tree parsers and semantic data-flow analysis to reduce false positives and detect complex injection chains.
+- 🚧 **Terraform & Helm Analysis**: HCL parser integration and Helm template rendering for comprehensive Infrastructure-as-Code auditing.
+- 🚧 **Expanded SCA Ecosystems**: Support for Python (`requirements.txt`, `Pipfile.lock`, `poetry.lock`), Go (`go.sum`), Rust (`Cargo.lock`), and Java (`pom.xml`, `build.gradle`).
+- 🚧 **Container Registry & Image Scanning**: Static container image layer inspection and package scanning via container engine integration.
+- 🚧 **Cloud Posture (CSPM / CIEM)**: Read-only API connectors for AWS, Azure, and GCP to audit cloud infrastructure configurations and identity permissions.
+- 🚧 **SIEM & Webhook Integrations**: Webhook notifications and event streaming for Slack, Microsoft Teams, Jira, and SIEM ingestion.
+- 🚧 **Remediation Intelligence**: Automated pull request generation for dependency upgrades and vulnerability patching.
+
+---
+
+## How TrustNode Works
+
+```
+[Target / Resource]
+  ├── Git Repository
+  ├── Local Directory / Archive
+  └── Infrastructure Host / IP
+            │
+            ▼
+[Target Validation & SSRF Enforcement]
+            │
+            ▼
+[Scan Job Dispatch] (Laravel Queue)
+            │
+            ▼
+[Unified Scanner Engine]
+  ├── SastScanner (Pattern matching)
+  ├── SecretScanner (Entropy & token detection)
+  ├── ScaScanner (Lockfile parsing + OSV.dev lookup)
+  ├── ContainerScanner (Dockerfile & Compose analysis)
+  ├── KubernetesScanner (Manifest static inspection)
+  └── NativeInfrastructureScanner (Ports, TLS, Headers)
+            │
+            ▼
+[Normalized Finding DTO]
+            │
+            ▼
+[Finding Identity & Fingerprinting] (SHA-256 hash)
+            │
+            ▼
+[Finding Lifecycle Engine]
+  ├── State Evaluation (NEW, RECURRING, RESOLVED, REGRESSION)
+  └── Tenant-Scoped Persistence (Finding & FindingIdentity)
+            │
+            ▼
+[Baseline & Posture Intelligence]
+  ├── Baseline Comparison (Scan-to-Scan Delta)
+  ├── Posture Trend Aggregation (10-Scan Historical Window)
+  └── Executive / Technical Reports (HTML & PDF)
 ```
 
 ---
 
-## External Network Dependencies
-TrustNode makes the following external network requests during operation:
+## Quick Start
 
-| Service | Purpose | Required? | Data Sent | Failure Behavior |
-|---|---|---|---|---|
-| OSV API (`api.osv.dev`) | Dependency vulnerability intelligence | No | ecosystem, package name, installed version | Warning logged, SCA findings skipped, broader scan continues seamlessly |
+### Prerequisites
+- **PHP**: 8.2 or higher (with `pdo`, `mbstring`, `openssl`, `curl`, `dom`, `zip` extensions)
+- **Composer**: 2.x
+- **Node.js**: 18.x or higher & npm
+- **Database**: SQLite (default), MySQL 8.0+, or PostgreSQL 15+
 
-**External Network Dependency != Network Security.**
-TrustNode using OSV does NOT mean TrustNode implements Network Security. Outbound dependency lookups do not constitute network posture scanning.
+### Installation
 
-**What TrustNode DOES NOT Send:**
-- source code
-- secrets
-- environment variables
-- repository contents
-- local file contents
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/ankurmakavana/trustnode.git
+   cd trustnode
+   ```
 
-**OSV Integration Behavior:**
-- **Batch Size:** Up to 500 dependencies per request.
-- **Timeout & Retries:** 10-second timeout with up to 3 retries (1000ms backoff).
-- **Caching:** OSV API results are cached (Vulnerability results: 7 days. Clean results: 24 hours).
-- **Cache Backend:** Redis (Verified via `compose.dev.yaml`).
+2. **Run automated setup:**
+   ```bash
+   composer run-script setup
+   ```
+   *This command installs Composer dependencies, creates your `.env` file, generates the application key, runs database migrations, and builds frontend assets.*
 
----
+3. **Start the development server:**
+   ```bash
+   composer run-script dev
+   ```
+   *This command starts the Laravel application server (`php artisan serve`), background queue listener (`php artisan queue:listen`), log tailing, and the Vite development server concurrently.*
 
-## Resource and Safety Limits
-TrustNode enforces exact limits traceable to the source code to guarantee stability:
-- **Archive Upload Limit**: 100 MB max compressed (`local_scan.ps1`)
-- **File Count Limit**: 50,000 files (`local_scan.ps1`)
-- **Uncompressed Source Limit**: 200 MB (`local_scan.ps1`)
-- **Per-file Source Read Limit**: 5 MB (`RepositoryScanner.php`)
-- **Evidence Truncation Limit**: 2,000 characters symmetrically (`AbstractRegexScanner.php`)
-- **OSV Timeout/Retry Limits**: 10 seconds timeout, 3 retries (`OsvApiClient.php`)
-- **Temporary Workspace Cleanup**: Deleted from `%TEMP%` host (`local_scan.ps1`) and `/tmp` container (`ScanLocalJob.php`) immediately post-scan.
+4. **Verify installation by running the test suite:**
+   ```bash
+   php artisan test
+   ```
 
 ---
 
-## Security Roadmap
+## Scanning Workflows
 
-**Phase 1: Scanner foundation / modular architecture** — completed
+### 1. Local Directory Scanning via CLI
+You can scan any local codebase directory using the included PowerShell scanning script:
 
-**Phase 2: Secret detection expansion** — completed
+```powershell
+.\local_scan.ps1 -Target "C:\path\to\your\project" -InstallDir "c:\xampp\htdocs\trustnode"
+```
 
-**Phase 3: SCA** — completed for current supported ecosystems
+The script packages the source files (respecting exclusion rules and safety limits), uploads the archive to the local TrustNode scan API, monitors scan progress, and outputs findings and report links directly to the console.
 
-**Phase 4: Container Security** — completed (Dockerfile and Compose static analysis)
+### 2. Git Repository Scanning
+1. Navigate to the TrustNode web dashboard.
+2. Add a new Git Repository target providing the repository URL (and optional personal access token for private repositories).
+3. Trigger a scan. TrustNode securely clones the repository into an isolated temporary workspace, executes all configured scanners, updates finding lifecycles, and deletes the temporary workspace upon completion.
 
-**Phase 5: IaC Security** (🟡 PARTIAL)
-- Kubernetes (✅ IMPLEMENTED)
-- Terraform (🚧 PLANNED)
-- Helm (🚧 PLANNED)
-
-**Phase 6: Advanced Code Security** (🚧 PLANNED)
-- AST
-- framework-aware rules
-- language-specific analysis
-
-**Phase 7: Compliance** (🧪 EXPERIMENTAL)
-- Heuristic rule-to-control mapping for OWASP, MITRE, ISO, PCI, NIST, and SOC 2
-
-**Phase 8: SOC / Integrations** (🚧 PLANNED)
-- SIEM
-- ticketing
-- webhooks
-
-**Phase 9: Cloud Security** (🚧 PLANNED)
-- CSPM
-- cloud APIs
-- runtime capabilities
+### 3. Network Infrastructure Scanning
+1. Add an infrastructure target (domain or public IP).
+2. Trigger an infrastructure scan. TrustNode validates the target against SSRF / private IP blocklists, probes designated TCP ports, verifies TLS certificate expiration, and checks HTTP security headers.
 
 ---
 
-## Verification Status
-The current implementation has been explicitly verified via unit testing and live Docker E2E regression pipelines:
+## Security Reports
 
-- **Local directory scanning:** LIVE DOCKER E2E VERIFIED (via CLI zip upload)
-- **Repository scanning:** LIVE DOCKER E2E VERIFIED (via Git clone)
-- **Report generation:** LIVE DOCKER E2E VERIFIED (HTML and PDF rendering)
-- **OSV success:** LIVE DOCKER E2E VERIFIED
-- **OSV failure resilience:** LIVE DOCKER E2E VERIFIED (OSV downtime simulated gracefully)
-- **OSV cache behavior:** LIVE DOCKER E2E VERIFIED (Repeated OSV lookups explicitly bypass HTTP)
-- **Fingerprint/deduplication:** LIVE DOCKER E2E VERIFIED
-- **SAST regression:** LIVE DOCKER E2E VERIFIED
-- **Secret scanner regression:** LIVE DOCKER E2E VERIFIED
-- **SCA parsing & lookup:** LIVE DOCKER E2E VERIFIED for:
-  - composer.lock (Composer SCA)
-  - package-lock.json v1/v2/v3
-  - Yarn Classic v1
-  - pnpm verified formats (v5, v6, v9)
-- **Container analysis:** LIVE DOCKER E2E VERIFIED for:
-  - Dockerfile
-  - docker-compose
-- **Kubernetes analysis:** LIVE DOCKER E2E VERIFIED for:
-  - parser unit tests
-  - false-positive tests
-  - multi-document tests
-  - structural tests
-- **Network infrastructure scanning:** VERIFIED for:
-  - SSRF / private IP mitigation (`TargetValidator.php`)
-  - TCP port scanning aggregation (`NativeInfrastructureScanner.php`)
-  - TLS certificate expiration parsing
-  - HTTP security header extraction
+TrustNode generates structured security audit reports available in two formats:
+- **Interactive HTML Report**: Color-coded severity breakdown, filterable findings table, vulnerability descriptions, remediation steps, and masked code evidence.
+- **Downloadable PDF Report**: Print-ready executive and technical audit documentation generated via DomPDF.
 
 ---
 
-## Documentation Maintenance Rules
+## For AI Coding Agents
 
-**README.md is the authoritative current security capability inventory.**
+If you are an AI coding agent operating inside the TrustNode repository, follow these rules:
 
-Whenever a scanner capability changes:
-1. update implementation
-2. update tests
-3. verify E2E where applicable
-4. update README capability matrix
-5. update category scorecard
-6. update verification status
-7. update roadmap/limitations if needed
-8. commit code + documentation together where practical
+### 1. Verify Before Claiming
+- **Documentation is not proof of implementation.** Source code, database migrations, and automated tests are the only authoritative source of truth.
+- Always inspect the source files before making statements about system capabilities or adding new features.
 
-Never allow README to become a marketing document detached from code.
+### 2. Core Repository Map
+- `app/Services/Scan/Scanners/`: Scanner implementations (`SastScanner.php`, `SecretScanner.php`, `ScaScanner.php`, `ContainerScanner.php`, `KubernetesScanner.php`).
+- `app/Services/Scan/Infrastructure/`: Active infrastructure scanning and SSRF validation (`NativeInfrastructureScanner.php`, `TargetValidator.php`).
+- `app/Services/Scan/Dependencies/`: Lockfile parsers for Composer, npm, Yarn Classic, and pnpm.
+- `app/Services/Finding/`: Finding lifecycle tracking (`FindingLifecycleService.php`) and CRUD operations (`FindingService.php`).
+- `app/Services/Scan/ScanBaselineComparisonService.php`: Scan-to-scan baseline comparison and regression calculation.
+- `app/Services/Dashboard/DashboardService.php`: Posture trend aggregation and widget calculations.
+- `app/Models/`: Eloquent models (`Finding.php`, `FindingIdentity.php`, `Scan.php`, `LocalProject.php`, `Asset.php`, `Target.php`).
+- `app/Jobs/`: Scan execution jobs (`ScanLocalJob.php`, `ScanRepositoryJob.php`, `ScanInfrastructureJob.php`).
+- `routes/api.php`: Authenticated and public API endpoints.
+- `tests/`: Automated feature and unit tests.
+
+### 3. Implementation Guardrails
+- **Preserve Tenant Isolation**: Always respect `TenantScope` and `TenantContext`. Never bypass tenant constraints in queries or jobs.
+- **Do Not Invent Capabilities**: When documenting or planning, categorize unimplemented capabilities strictly as `🚧 PLANNED`. Never use `❌ NOT IMPLEMENTED`.
+- **Maintain Test Coverage**: Run `php artisan test` to verify changes before completing tasks. Never modify application logic solely to make tests artificially pass.
+
+---
+
+## Contributing
+
+We welcome contributions from security researchers, AppSec engineers, developers, and open-source practitioners!
+
+### Contribution Process
+1. **Fork & Clone**: Fork the repository on GitHub and clone your fork locally.
+2. **Create a Feature Branch**:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+3. **Inspect Existing Architecture**: Review existing scanners, services, and tests before writing code.
+4. **Implement Focused Changes**: Keep pull requests focused on a single capability, scanner enhancement, or bug fix.
+5. **Add Automated Tests**: Write corresponding unit or feature tests under `tests/Unit` or `tests/Feature`.
+6. **Validate Quality & Run Tests**:
+   ```bash
+   php artisan test
+   npm run build
+   ```
+7. **Submit a Pull Request**: Provide a clear description of the problem, the technical solution, and test verification output.
+
+### Who Should Contribute?
+- **Security Researchers**: Add detection patterns for new secret types or dangerous coding constructs.
+- **DevSecOps Engineers**: Enhance container/IaC static analysis rules and CI/CD integration workflows.
+- **Backend Developers**: Expand lockfile parsers, improve lifecycle intelligence, and optimize database queries.
+- **Frontend Developers**: Refine dashboard visualizations, trend graphs, and report layouts.
+
+---
+
+## Security Policy
+
+Security is the core foundation of TrustNode. If you discover a security vulnerability within the platform:
+
+- **Do NOT open a public GitHub issue.**
+- Please review our full [Security Policy](SECURITY.md) and report vulnerabilities directly to our security response team at **security@trustnode.io**.
+- We follow coordinated vulnerability disclosure guidelines and acknowledge all validated reports within 48 hours.
+
+---
+
+## Documentation
+
+The primary technical documentation files located at the repository root are:
+- [README.md](README.md) — High-level platform overview, security capability inventory, and quick start guide.
+- [SECURITY_CAPABILITY_BASELINE.md](SECURITY_CAPABILITY_BASELINE.md) — Detailed technical baseline, scanner specifications, security boundaries, and gap analysis.
+
+---
+
+## License
+
+TrustNode is open-source software licensed under the [Apache License 2.0](LICENSE).
