@@ -179,24 +179,9 @@ The following capabilities represent the planned roadmap:
 
 ---
 
-## Web Application vs. CLI
+## Quick Start
 
-TrustNode provides two distinct operational interfaces sharing the same underlying security engine:
-
-| Capability | TrustNode Web Application | TrustNode CLI |
-|---|---|---|
-| **Primary Use Case** | Interactive team dashboard & visual posture management | Terminal scanning, scripts, and CI/CD pipelines |
-| **Execution Method** | Self-hosted Docker container stack | Terminal command (`php cli/bin/trustnode`) |
-| **User Interface** | Web browser (`http://localhost:8000`) | Command-line standard output |
-| **Scan Initiation** | Web form target selection | Command line: `php cli/bin/trustnode scan <target>` |
-| **Findings Triage** | Interactive table with filters & detail views | Tabular terminal list: `php cli/bin/trustnode findings` |
-| **Reports** | Interactive HTML & downloadable PDF | PDF download: `php cli/bin/trustnode report download` |
-
----
-
-## Quick Start (Web Application)
-
-Get the self-hosted TrustNode Web Application running with Docker in minutes:
+Run TrustNode self-hosted with Docker and access the security platform:
 
 ### 1. Clone TrustNode
 ```bash
@@ -208,118 +193,91 @@ cd trustnode
 ```bash
 docker compose -f compose.dev.yaml up -d
 ```
-*Starts the self-hosted stack: Nginx web proxy (port `8000`), PHP-FPM application worker, Vite frontend compiler, MySQL database, and Redis queue/cache containers.*
+*Starts the self-hosted stack: Nginx proxy (port `8000`), PHP-FPM application worker, Vite frontend compiler, MySQL database, and Redis queue/cache containers.*
 
-### 3. Open TrustNode in Your Browser
-Navigate to:
+### 3. Open the TrustNode Interface
+Open your browser and navigate to:
 ```text
 http://localhost:8000
 ```
 
-### 4. Use the Web Application
-1. **Register a Target**: Go to **Targets** and add a Git repository URL or network host.
-2. **Start a Scan**: Click **Run Scan** to trigger multi-engine static and dynamic analysis.
-3. **Monitor Progress**: View real-time background scan execution and queue status.
-4. **Triage Findings**: Inspect severity breakdowns, masked code evidence, and remediation guidance under **Findings**.
-5. **Track Posture**: Review historical trend charts and baseline deltas on the **Dashboard**.
-6. **Export Reports**: Generate and download audit-ready HTML and PDF security reports.
-
 ---
 
-## TrustNode CLI
+## Using TrustNode
 
-TrustNode provides a dedicated command-line interface located in `cli/bin/trustnode` (with Windows batch wrapper `trustnode.cmd`) for developers, automation scripts, and CI/CD environments.
+TrustNode provides multiple operational interfaces for interacting with the unified security scanning engine:
 
-### 1. Discover CLI Commands
-View the complete list of available CLI commands and global options:
+### 1. Security Dashboard & Interactive Interface
+- **Target Management**: Register Git repositories, upload project archives, or configure infrastructure network targets.
+- **Scan Execution**: Trigger background scanning across enabled security engines and monitor queue execution.
+- **Findings Triage**: Filter findings by severity (`Critical`, `High`, `Medium`, `Low`) and lifecycle status (`NEW`, `RECURRING`, `RESOLVED`, `REGRESSION`).
+- **Posture Analytics**: Inspect baseline regression trends and historical vulnerability deltas.
+- **Report Exports**: Download audit-ready HTML and PDF security reports.
+
+### 2. TrustNode CLI
+TrustNode includes a command-line interface located at `cli/bin/trustnode` (with Windows wrapper `trustnode.cmd`) for automated terminal workflows and CI/CD pipelines:
+
 ```bash
+# Discover available CLI commands
 php cli/bin/trustnode list
-```
-*(On Windows: `.\trustnode.cmd help`)*
 
-### 2. Run a Repository Scan
-Start a security scan against a Git repository:
-```bash
+# Start a repository security scan
 php cli/bin/trustnode scan https://github.com/org/repo.git
-```
-*Submits the repository to the scanning orchestrator, executes SAST, Secret Detection, Lockfile SCA, Dockerfile/Compose, and Kubernetes analyzers, and outputs the assigned scan ID.*
 
-### 3. Check Scan Status
-Monitor progress and lifecycle state for an active scan:
-```bash
+# Check scan progress and status
 php cli/bin/trustnode scan status <scan-id>
-```
 
-### 4. Inspect Security Findings
-List findings identified across completed scans:
-```bash
+# View finding summaries across completed scans
 php cli/bin/trustnode findings
-```
 
-### 5. Generate & Download Security Reports
-```bash
-# Request PDF report generation
+# Request and download security audit report
 php cli/bin/trustnode report <scan-id>
-
-# Check report status
-php cli/bin/trustnode report status <scan-id>
-
-# Download the compiled PDF report
 php cli/bin/trustnode report download <scan-id> --output="./report.pdf"
-```
 
-### 6. CLI Authentication & Diagnostics (Optional)
-When interacting with authenticated remote instances:
-```bash
-# Authenticate CLI session with an API token
+# Optional: Authenticate CLI session for remote instances
 php cli/bin/trustnode login --token="<your-api-token>"
-
-# Inspect current authenticated user
 php cli/bin/trustnode whoami
-
-# Diagnose API connectivity and token health
 php cli/bin/trustnode doctor
 ```
+
+### 3. Local Project Scanning Script
+For scanning a codebase on local disk directly from PowerShell without manual archive creation:
+```powershell
+.\local_scan.ps1 -Target "C:\path\to\your\project" -InstallDir "c:\xampp\htdocs\trustnode"
+```
+*Packages source files respecting safety exclusions, uploads them to the scan API, monitors progress, and outputs finding severities and report links.*
 
 ---
 
 ## Scanning Workflows
 
-TrustNode executes static and dynamic analysis across multiple target types:
+TrustNode executes static and dynamic analysis organized by target resource:
 
-### 1. Local Directory Scanning via Script
-To scan a local codebase on disk without configuring Git remotes, use the included PowerShell scanning script:
+### 1. Repository Scanning
+- **How it works**: Connects to remote Git repositories (public or private via personal access token).
+- **Execution**: Securely clones the repository into an isolated temporary workspace, runs SAST, Secret Detection, Lockfile SCA, Dockerfile/Compose, and Kubernetes analyzers, and removes the workspace upon completion.
+- **Initiation**: Via the TrustNode dashboard or CLI (`php cli/bin/trustnode scan <repository-url>`).
 
-```powershell
-.\local_scan.ps1 -Target "C:\path\to\your\project" -InstallDir "c:\xampp\htdocs\trustnode"
-```
+### 2. Local Project Scanning
+- **How it works**: Scans a project directory residing on local storage.
+- **Execution**: Automatically packages the codebase into an archive (enforcing safety bounds: max 50,000 files, max 200 MB uncompressed, excluding `.git`, `node_modules`, `vendor`), uploads it to `POST /api/scans/local`, and evaluates all static analyzers.
+- **Initiation**: Via `.\local_scan.ps1` or archive upload in the dashboard.
 
-**What the script does:**
-1. Validates the local directory and guards against scanning filesystem roots.
-2. Packages source files into a temporary archive (enforcing safety ceilings: max 50,000 files, max 200 MB uncompressed, excluding `.git`, `node_modules`, `vendor`).
-3. Uploads the archive to `POST /api/scans/local`.
-4. Polls `GET /api/scans/{id}` until the background job completes.
-5. Displays formatted finding severities, technical details, and direct report download links.
-
-### 2. Git Repository Scanning (Web & CLI)
-- **Web UI**: Navigate to `/targets`, add a repository URL (with optional personal access token), and trigger a scan.
-- **CLI**: Execute `php cli/bin/trustnode scan <repository-url>`.
-- **Engine execution**: Scans source files across all enabled static rules (SAST, Secret Detection, Lockfile SCA, Dockerfile/Compose, and Kubernetes manifests).
-
-### 3. Network Infrastructure Scanning (Web & API)
-- **Web UI**: Register a target hostname or public IP under `/targets` and trigger an infrastructure scan.
-- **Engine execution**: Validates the host against SSRF/private network blocklists, performs active TCP handshakes across 14 standard ports, checks TLS certificate expiration on ports 443/8443, and audits HTTP security headers.
+### 3. Infrastructure Scanning
+- **How it works**: Audits external network boundaries of domains or public IP addresses.
+- **Execution**: Enforces SSRF and DNS rebinding protections, performs active TCP port handshakes across 14 common ports, validates TLS certificate expiration, and checks HTTP security headers.
+- **Initiation**: Via the TrustNode dashboard under target management.
 
 ---
 
-## Security Posture Dashboard & Lifecycle Views
+## Security Posture Dashboard
 
-When running the web interface, TrustNode provides dedicated views for tracking security posture:
+TrustNode continuously correlates scan occurrences into persistent security posture intelligence:
 
-- **Dashboard / Security Posture Overview** (`/dashboard`): Visualizes total findings, active target counts, severity distributions (Critical, High, Medium, Low), finding lifecycle status counters (`NEW`, `RECURRING`, `RESOLVED`, `REGRESSION`), and the 10-scan historical posture trend chart with direction indicators (`improving`, `worsening`, `unchanged`).
-- **Scan Targets & Creation** (`/targets`, `/scans`): Target registration and scan dispatch for Git repositories, uploaded ZIP projects, and network endpoints.
-- **Findings Catalog & Triage** (`/findings`): Centralized findings inventory with status filtering, severity categorization, rule references, target mapping, and direct links to generated reports.
-- **Finding Detail & Lifecycle History** (`/findings/:id`): Deep technical inspection of normalized findings, including masked source code evidence, Shannon entropy metrics, remediation instructions, and chronological lifecycle transition logs (`NEW` → `RECURRING` → `RESOLVED` → `REGRESSION`).
+- **Finding Identity**: Unique SHA-256 fingerprints track findings across scans regardless of code movements.
+- **Lifecycle States**: Automatically categorizes findings into `NEW`, `RECURRING`, `RESOLVED`, and `REGRESSION`.
+- **Posture Trend**: Visualizes a 10-scan historical trajectory with direction calculation (`improving`, `worsening`, `unchanged`).
+- **Baseline Comparison**: Compares any scan against a chosen baseline to calculate delta metrics, newly introduced vulnerabilities, and resolved issues.
 
 ---
 
@@ -327,7 +285,7 @@ When running the web interface, TrustNode provides dedicated views for tracking 
 
 TrustNode generates structured security audit reports available in two formats:
 - **Interactive HTML Report**: Color-coded severity breakdown, filterable findings table, vulnerability descriptions, remediation steps, and masked code evidence.
-- **Downloadable PDF Report**: Print-ready executive and technical audit documentation generated via DomPDF (`/api/scans/:id/report/download`).
+- **Downloadable PDF Report**: Print-ready executive and technical audit documentation generated via DomPDF (`/api/scans/:id/report/download` or `php cli/bin/trustnode report download <id>`).
 
 ---
 
