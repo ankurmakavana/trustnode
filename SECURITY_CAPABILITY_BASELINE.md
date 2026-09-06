@@ -272,8 +272,7 @@ flowchart TD
    - 🟡 `PARTIAL`
    - 🧪 `EXPERIMENTAL`
    - 🚧 `PLANNED`
-3. Never use `❌ NOT IMPLEMENTED` in documentation.
-4. When new scanner capabilities, parsers, or services are added:
+3. When new scanner capabilities, parsers, or services are added:
    - Implement the feature and write tests.
    - Run the automated test suite.
    - Update `README.md` and `SECURITY_CAPABILITY_BASELINE.md` simultaneously.

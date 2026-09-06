@@ -236,11 +236,22 @@ The script packages the source files (respecting exclusion rules and safety limi
 
 ---
 
+## Security Posture Dashboard & Lifecycle Views
+
+When running the web interface, TrustNode provides dedicated views for tracking security posture:
+
+- **Dashboard / Security Posture Overview** (`/dashboard`): Visualizes total findings, active target counts, severity distributions (Critical, High, Medium, Low), finding lifecycle status counters (`NEW`, `RECURRING`, `RESOLVED`, `REGRESSION`), and the 10-scan historical posture trend chart with direction indicators (`improving`, `worsening`, `unchanged`).
+- **Scan Targets & Creation** (`/targets`, `/scans`): Target registration and scan dispatch for Git repositories, uploaded ZIP projects, and network endpoints.
+- **Findings Catalog & Triage** (`/findings`): Centralized findings inventory with status filtering, severity categorization, rule references, target mapping, and direct links to generated reports.
+- **Finding Detail & Lifecycle History** (`/findings/:id`): Deep technical inspection of normalized findings, including masked source code evidence, Shannon entropy metrics, remediation instructions, and chronological lifecycle transition logs (`NEW` → `RECURRING` → `RESOLVED` → `REGRESSION`).
+
+---
+
 ## Security Reports
 
 TrustNode generates structured security audit reports available in two formats:
 - **Interactive HTML Report**: Color-coded severity breakdown, filterable findings table, vulnerability descriptions, remediation steps, and masked code evidence.
-- **Downloadable PDF Report**: Print-ready executive and technical audit documentation generated via DomPDF.
+- **Downloadable PDF Report**: Print-ready executive and technical audit documentation generated via DomPDF (`/api/scans/:id/report/download`).
 
 ---
 
@@ -266,7 +277,7 @@ If you are an AI coding agent operating inside the TrustNode repository, follow 
 
 ### 3. Implementation Guardrails
 - **Preserve Tenant Isolation**: Always respect `TenantScope` and `TenantContext`. Never bypass tenant constraints in queries or jobs.
-- **Do Not Invent Capabilities**: When documenting or planning, categorize unimplemented capabilities strictly as `🚧 PLANNED`. Never use `❌ NOT IMPLEMENTED`.
+- **Do Not Invent Capabilities**: When documenting or planning, categorize unimplemented capabilities strictly as `🚧 PLANNED`.
 - **Maintain Test Coverage**: Run `php artisan test` to verify changes before completing tasks. Never modify application logic solely to make tests artificially pass.
 
 ---
