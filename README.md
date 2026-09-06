@@ -227,25 +227,91 @@ npm run build
 
 ---
 
+## TrustNode CLI
+
+TrustNode provides a dedicated command-line interface located in `cli/bin/trustnode` (with Windows batch wrapper `trustnode.cmd`).
+
+### CLI Discovery & Help
+
+View available CLI commands and global options:
+```bash
+php cli/bin/trustnode list
+```
+*(On Windows systems with the CLI wrapper: `.\trustnode.cmd help`)*
+
+### User Authentication & Diagnostics
+
+1. **Authenticate the CLI session with an API token:**
+   ```bash
+   php cli/bin/trustnode login --token="<your-api-token>"
+   ```
+2. **Verify current authenticated identity:**
+   ```bash
+   php cli/bin/trustnode whoami
+   ```
+3. **Run CLI health and connectivity diagnostics:**
+   ```bash
+   php cli/bin/trustnode doctor
+   ```
+
+### Security Scanning via CLI
+
+1. **Scan a Git repository:**
+   ```bash
+   php cli/bin/trustnode scan https://github.com/org/repo.git
+   ```
+   *Submits the repository URL to the scanning orchestrator, triggers multi-engine static analysis, and outputs the assigned scan ID.*
+
+2. **Check scan status and progress:**
+   ```bash
+   php cli/bin/trustnode scan status <scan-id>
+   ```
+
+3. **List findings for completed scans:**
+   ```bash
+   php cli/bin/trustnode findings
+   ```
+
+4. **Request, monitor, and download security audit reports:**
+   ```bash
+   # Request report generation
+   php cli/bin/trustnode report <scan-id>
+
+   # Check report generation status
+   php cli/bin/trustnode report status <scan-id>
+
+   # Download generated report to a local file
+   php cli/bin/trustnode report download <scan-id> --output="./report.pdf"
+   ```
+
+---
+
 ## Scanning Workflows
 
-### 1. Local Directory Scanning via CLI
-You can scan any local codebase directory using the included PowerShell scanning script:
+TrustNode executes static and dynamic analysis across multiple target types:
+
+### 1. Local Directory Scanning via Script
+To scan a local codebase on disk without configuring Git remotes, use the included PowerShell scanning script:
 
 ```powershell
 .\local_scan.ps1 -Target "C:\path\to\your\project" -InstallDir "c:\xampp\htdocs\trustnode"
 ```
 
-The script packages the source files (respecting exclusion rules and safety limits), uploads the archive to the local TrustNode scan API, monitors scan progress, and outputs findings and report links directly to the console.
+**What the script does:**
+1. Validates the local directory and guards against scanning filesystem roots.
+2. Packages source files into a temporary archive (enforcing safety ceilings: max 50,000 files, max 200 MB uncompressed, excluding `.git`, `node_modules`, `vendor`).
+3. Uploads the archive to `POST /api/scans/local`.
+4. Polls `GET /api/scans/{id}` until the background job completes.
+5. Displays formatted finding severities, technical details, and direct report download links.
 
-### 2. Git Repository Scanning
-1. Navigate to the TrustNode web dashboard.
-2. Add a new Git Repository target providing the repository URL (and optional personal access token for private repositories).
-3. Trigger a scan. TrustNode securely clones the repository into an isolated temporary workspace, executes all configured scanners, updates finding lifecycles, and deletes the temporary workspace upon completion.
+### 2. Git Repository Scanning (Web & CLI)
+- **Web UI**: Navigate to `/targets`, add a repository URL (with optional personal access token), and trigger a scan.
+- **CLI**: Execute `php cli/bin/trustnode scan <repository-url>`.
+- **Engine execution**: Scans source files across all enabled static rules (SAST, Secret Detection, Lockfile SCA, Dockerfile/Compose, and Kubernetes manifests).
 
-### 3. Network Infrastructure Scanning
-1. Add an infrastructure target (domain or public IP).
-2. Trigger an infrastructure scan. TrustNode validates the target against SSRF / private IP blocklists, probes designated TCP ports, verifies TLS certificate expiration, and checks HTTP security headers.
+### 3. Network Infrastructure Scanning (Web & API)
+- **Web UI**: Register a target hostname or public IP under `/targets` and trigger an infrastructure scan.
+- **Engine execution**: Validates the host against SSRF/private network blocklists, performs active TCP handshakes across 14 standard ports, checks TLS certificate expiration on ports 443/8443, and audits HTTP security headers.
 
 ---
 
@@ -277,6 +343,8 @@ If you are an AI coding agent operating inside the TrustNode repository, follow 
 - Always inspect the source files before making statements about system capabilities or adding new features.
 
 ### 2. Core Repository Map
+- `cli/bin/trustnode`: TrustNode CLI executable (`php cli/bin/trustnode list` for command discovery).
+- `local_scan.ps1`: Local project packaging and scan dispatch script.
 - `app/Services/Scan/Scanners/`: Scanner implementations (`SastScanner.php`, `SecretScanner.php`, `ScaScanner.php`, `ContainerScanner.php`, `KubernetesScanner.php`).
 - `app/Services/Scan/Infrastructure/`: Active infrastructure scanning and SSRF validation (`NativeInfrastructureScanner.php`, `TargetValidator.php`).
 - `app/Services/Scan/Dependencies/`: Lockfile parsers for Composer, npm, Yarn Classic, and pnpm.
