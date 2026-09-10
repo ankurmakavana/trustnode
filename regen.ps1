@@ -1,10 +1,11 @@
-$installDir = 'C:\Users\Groot\trustnode-app'
-$cliWrapperPath = 'C:\Users\Groot\trustnode-app\trustnode.cmd'
+$installDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$cliWrapperPath = Join-Path $installDir 'trustnode.cmd'
     $cliWrapperContent = @"
 @echo off
 setlocal EnableDelayedExpansion
 
-set "INSTALL_DIR=$installDir"
+set "INSTALL_DIR=%~dp0"
+set "INSTALL_DIR=!INSTALL_DIR:~0,-1!"
 set "CMD=%~1"
 set "CMD_ARG2=%~2"
 
