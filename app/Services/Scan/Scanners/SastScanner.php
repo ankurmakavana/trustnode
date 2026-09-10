@@ -67,7 +67,8 @@ class SastScanner extends AbstractRegexScanner
                 $offset = $match[1];
                 $lineNumber = substr_count(substr($content, 0, $offset), "\n") + 1;
                 $lineContent = $lines[$lineNumber - 1] ?? '';
-                $decision = $this->evaluateContext($matchedText, $signals);
+                $scopeKey = $this->detectScopeKeyForOffset($content, $offset);
+                $decision = $this->evaluateContext($matchedText, $signals, $scopeKey);
 
                 if (!$decision['emit']) {
                     continue;
@@ -106,86 +107,224 @@ class SastScanner extends AbstractRegexScanner
 
     private function collectContextSignals(string $content): array
     {
-        $signals = ['sources' => [], 'sanitizers' => []];
-        if (!preg_match_all('/\$(\w+)\s*=\s*(.+?);/s', $content, $assignments, PREG_SET_ORDER)) {
-            return $signals;
-        }
+        $signals = [
+            'sources' => [],
+            'sanitizers' => [],
+            'scopeState' => ['global' => []],
+        ];
 
-        $state = [];
-        $maxHops = 5;
+        $scopes = $this->extractFunctionScopes($content);
+        $scopes = ['global' => $this->stripFunctionBodies($content)] + $scopes;
 
-        foreach ($assignments as $assignment) {
-            $variable = $assignment[1];
-            $expression = trim($assignment[2]);
-            $variables = $this->extractVariableNames($expression);
-            $source = false;
-            $sanitizer = null;
-            $hop = null;
+        foreach ($scopes as $scopeKey => $scopeContent) {
+            $scopeBody = is_array($scopeContent) ? ($scopeContent['content'] ?? '') : $scopeContent;
+            $state = [];
+            if (preg_match_all('/\$(\w+)\s*=\s*(.+?);/s', $scopeBody, $assignments, PREG_SET_ORDER)) {
+                $maxHops = 5;
 
-            $detectedSanitizer = $this->detectSanitizer($expression);
-            if ($detectedSanitizer !== null) {
-                $sanitizer = $detectedSanitizer;
-                foreach ($variables as $sourceVariable) {
-                    if (($state[$sourceVariable]['source'] ?? false) && ($state[$sourceVariable]['hop'] ?? 99) < $maxHops) {
+                foreach ($assignments as $assignment) {
+                    $variable = $assignment[1];
+                    $expression = trim($assignment[2]);
+                    $variables = $this->extractVariableNames($expression);
+                    $source = false;
+                    $sanitizer = null;
+                    $hop = null;
+                    $safe = false;
+                    $unknownOrigin = false;
+
+                    $detectedSanitizer = $this->detectSanitizer($expression);
+                    if ($detectedSanitizer !== null) {
+                        $sanitizer = $detectedSanitizer;
+                        foreach ($variables as $sourceVariable) {
+                            if (($state[$sourceVariable]['source'] ?? false) && ($state[$sourceVariable]['hop'] ?? 99) < $maxHops) {
+                                $source = true;
+                                $hop = ($state[$sourceVariable]['hop'] ?? 0) + 1;
+                                break;
+                            }
+                        }
+                        if (!$source && $this->isUserControlledSource($expression)) {
+                            $source = true;
+                            $hop = 0;
+                        }
+                    } elseif ($this->isUserControlledSource($expression)) {
                         $source = true;
-                        $hop = ($state[$sourceVariable]['hop'] ?? 0) + 1;
-                        break;
+                        $hop = 0;
+                    } elseif (count($variables) === 1 && preg_match('/^\$(\w+)$/', $expression, $copy)) {
+                        $sourceState = $state[$copy[1]] ?? null;
+                        if ($sourceState !== null && $sourceState['source'] && $sourceState['hop'] < $maxHops) {
+                            $source = true;
+                            $hop = $sourceState['hop'] + 1;
+                            $sanitizer = $sourceState['sanitizer'];
+                        }
                     }
-                }
-                if (!$source && $this->isUserControlledSource($expression)) {
-                    $source = true;
-                    $hop = 0;
-                }
-            } elseif ($this->isUserControlledSource($expression)) {
-                $source = true;
-                $hop = 0;
-            } elseif (count($variables) === 1 && preg_match('/^\$(\w+)$/', $expression, $copy)) {
-                $sourceState = $state[$copy[1]] ?? null;
-                if ($sourceState !== null && $sourceState['source'] && $sourceState['hop'] < $maxHops) {
-                    $source = true;
-                    $hop = $sourceState['hop'] + 1;
-                    $sanitizer = $sourceState['sanitizer'];
+
+                    if (!$source && $this->isConstantExpression($expression)) {
+                        $safe = true;
+                    } elseif (!$source && !empty($variables) && !$this->isUserControlledSource($expression)) {
+                        $unknownOrigin = true;
+                    }
+
+                    $state[$variable] = [
+                        'source' => $source,
+                        'sanitizer' => $sanitizer,
+                        'hop' => $hop,
+                        'safe' => $safe,
+                        'unknownOrigin' => $unknownOrigin,
+                    ];
                 }
             }
 
-            $state[$variable] = [
-                'source' => $source,
-                'sanitizer' => $sanitizer,
-                'hop' => $hop,
-            ];
-        }
-
-        foreach ($state as $variable => $variableState) {
-            if ($variableState['source']) {
-                $signals['sources'][$variable] = 'user-controlled input';
-            }
-            if ($variableState['sanitizer'] !== null) {
-                $signals['sanitizers'][$variable] = $variableState['sanitizer'];
+            $signals['scopeState'][$scopeKey] = $state;
+            foreach ($state as $variable => $variableState) {
+                if ($variableState['source']) {
+                    $signals['sources'][$scopeKey][$variable] = 'user-controlled input';
+                }
+                if ($variableState['sanitizer'] !== null) {
+                    $signals['sanitizers'][$scopeKey][$variable] = $variableState['sanitizer'];
+                }
             }
         }
 
         return $signals;
     }
 
-    private function evaluateContext(string $matchedText, array $signals): array
+    private function evaluateContext(string $matchedText, array $signals, string $scopeKey = 'global'): array
     {
         $variableNames = $this->extractVariableNames($matchedText);
         if (empty($variableNames)) {
             return ['emit' => false, 'context' => 'constant expression without user-controlled source'];
         }
 
-        $sourceMatches = array_values(array_intersect($variableNames, array_keys($signals['sources'])));
-        $sanitizerMatches = array_values(array_intersect($variableNames, array_keys($signals['sanitizers'])));
+        $scopeState = $signals['scopeState'][$scopeKey] ?? [];
+        $sourceMatches = [];
+        $sanitizerMatches = [];
 
-        if (empty($sourceMatches)) {
-            return ['emit' => true, 'context' => 'fallback pattern match kept because source origin could not be safely established'];
+        foreach ($variableNames as $variableName) {
+            if (!isset($scopeState[$variableName])) {
+                return ['emit' => false, 'context' => 'variable not defined in current function scope'];
+            }
+
+            if (($scopeState[$variableName]['source'] ?? false)) {
+                $sourceMatches[] = $variableName;
+            }
+            if (($scopeState[$variableName]['sanitizer'] ?? null) !== null) {
+                $sanitizerMatches[] = $variableName;
+            }
         }
 
-        if (!empty($sanitizerMatches)) {
-            return ['emit' => true, 'context' => 'source -> sink with sanitizer detected (' . $signals['sanitizers'][$sanitizerMatches[0]] . ')'];
+        if (!empty($sourceMatches)) {
+            if (!empty($sanitizerMatches)) {
+                return ['emit' => true, 'context' => 'source -> sink with sanitizer detected (' . ($signals['sanitizers'][$scopeKey][$sanitizerMatches[0]] ?? 'sanitizer') . ')'];
+            }
+
+            return ['emit' => true, 'context' => 'source -> sink without sanitizer (' . ($signals['sources'][$scopeKey][$sourceMatches[0]] ?? 'user-controlled input') . ')'];
         }
 
-        return ['emit' => true, 'context' => 'source -> sink without sanitizer (' . $signals['sources'][$sourceMatches[0]] . ')'];
+        return ['emit' => true, 'context' => 'fallback pattern match kept because source origin could not be safely established'];
+    }
+
+    private function detectScopeKeyForOffset(string $content, int $offset): string
+    {
+        $functionScopes = $this->extractFunctionScopes($content);
+        foreach ($functionScopes as $scopeKey => $scope) {
+            $start = $scope['start'];
+            $end = $scope['end'];
+            if ($offset >= $start && $offset <= $end) {
+                return $scopeKey;
+            }
+        }
+
+        return 'global';
+    }
+
+    private function extractFunctionScopes(string $content): array
+    {
+        preg_match_all('/function\s+(\w+)\s*\([^)]*\)\s*\{/i', $content, $matches, PREG_SET_ORDER);
+        if (empty($matches)) {
+            return [];
+        }
+
+        $scopes = [];
+        $length = strlen($content);
+        $cursor = 0;
+
+        foreach ($matches as $match) {
+            $functionName = $match[1];
+            $openPos = strpos($content, '{', $cursor);
+            if ($openPos === false) {
+                break;
+            }
+
+            $braceDepth = 0;
+            $bodyStart = $openPos;
+            $bodyEnd = null;
+            for ($i = $openPos; $i < $length; $i++) {
+                $char = $content[$i];
+                if ($char === '{') {
+                    $braceDepth++;
+                } elseif ($char === '}') {
+                    $braceDepth--;
+                    if ($braceDepth === 0) {
+                        $bodyEnd = $i;
+                        break;
+                    }
+                }
+            }
+
+            if ($bodyEnd === null) {
+                continue;
+            }
+
+            $scopeKey = 'function:' . strtolower($functionName);
+            $scopes[$scopeKey] = [
+                'start' => $bodyStart,
+                'end' => $bodyEnd,
+                'content' => substr($content, $bodyStart + 1, $bodyEnd - $bodyStart - 1),
+            ];
+            $cursor = $bodyEnd + 1;
+        }
+
+        return $scopes;
+    }
+
+    private function stripFunctionBodies(string $content): string
+    {
+        $offsets = [];
+        $matches = $this->extractFunctionScopes($content);
+        foreach ($matches as $scope) {
+            $offsets[] = [$scope['start'], $scope['end']];
+        }
+
+        if (empty($offsets)) {
+            return $content;
+        }
+
+        usort($offsets, static fn ($left, $right) => $left[0] <=> $right[0]);
+        $parts = [];
+        $lastPos = 0;
+
+        foreach ($offsets as [$start, $end]) {
+            $parts[] = substr($content, $lastPos, $start - $lastPos);
+            $lastPos = $end + 1;
+        }
+        $parts[] = substr($content, $lastPos);
+
+        return implode('', $parts);
+    }
+
+    private function isConstantExpression(string $expression): bool
+    {
+        $trimmed = trim($expression);
+        if ($trimmed === '') {
+            return false;
+        }
+
+        $containsVariable = preg_match('/\$\w+/', $trimmed) === 1;
+        if ($containsVariable) {
+            return false;
+        }
+
+        return !preg_match('/\$_(?:GET|POST|REQUEST|COOKIE|SERVER)/', $trimmed);
     }
 
     private function extractVariableNames(string $text): array

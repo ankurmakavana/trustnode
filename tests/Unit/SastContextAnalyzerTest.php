@@ -158,6 +158,59 @@ PHP;
         $this->assertContains('SEC-SAST-SQLI', array_map(fn ($f) => $f->scannerRuleId, $findings));
     }
 
+    public function test_function_scope_isolation_blocks_taint_leak_between_unrelated_functions(): void
+    {
+        $content = <<<'PHP'
+<?php
+function first() {
+    $id = $_GET['id'];
+}
+
+function second() {
+    $query = "SELECT * FROM users WHERE id = " . $id;
+}
+PHP;
+
+        $findings = $this->scanner->scan($content, explode("\n", $content), 'app/TestController.php', 'https://example.com/repo');
+
+        $this->assertEmpty($findings);
+    }
+
+    public function test_same_function_propagation_remains_active(): void
+    {
+        $content = <<<'PHP'
+<?php
+function first() {
+    $id = $_GET['id'];
+    $query = "SELECT * FROM users WHERE id = " . $id;
+}
+PHP;
+
+        $findings = $this->scanner->scan($content, explode("\n", $content), 'app/TestController.php', 'https://example.com/repo');
+
+        $this->assertNotEmpty($findings);
+        $this->assertContains('SEC-SAST-SQLI', array_map(fn ($f) => $f->scannerRuleId, $findings));
+    }
+
+    public function test_same_variable_name_in_different_functions_is_isolated(): void
+    {
+        $content = <<<'PHP'
+<?php
+function first() {
+    $id = $_GET['id'];
+}
+
+function second() {
+    $id = 42;
+    $query = "SELECT * FROM users WHERE id = " . $id;
+}
+PHP;
+
+        $findings = $this->scanner->scan($content, explode("\n", $content), 'app/TestController.php', 'https://example.com/repo');
+
+        $this->assertEmpty($findings);
+    }
+
     // P0.2 Implementation Tests
 
     public function test_two_hop_source_flow(): void
