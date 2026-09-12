@@ -24,9 +24,17 @@ class RepositoryFactory extends Factory
             'visibility' => $this->faker->randomElement(['public', 'private']),
             'default_branch' => $this->faker->randomElement(['main', 'master']),
             'integration_credential_id' => null,
+            'organization_id' => \App\Models\Organization::factory(),
             'status' => 'Connected',
             'last_scan_at' => null,
-            'created_by' => null,
+            'created_by' => function () {
+                $user = \App\Models\User::first();
+                if (!$user) {
+                    $role = \App\Models\Role::where('slug', \App\Enums\UserRole::ADMINISTRATOR->value)->first();
+                    $user = \App\Models\User::factory()->create(['role_id' => $role?->id]);
+                }
+                return $user->id;
+            },
         ];
     }
 

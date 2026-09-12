@@ -18,6 +18,8 @@ class Target extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $with = ['organization'];
+
     protected $fillable = [
         'uuid',
         'name',
@@ -28,6 +30,7 @@ class Target extends Model
         'criticality',
         'status',
         'scope_notes',
+        'organization_id',
         'created_by',
         'updated_by',
     ];
@@ -40,6 +43,11 @@ class Target extends Model
                 $target->uuid = (string) Str::uuid();
             }
         });
+    }
+
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     protected function casts(): array

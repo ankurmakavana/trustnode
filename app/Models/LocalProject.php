@@ -11,10 +11,13 @@ class LocalProject extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $with = ['organization'];
+
     protected $fillable = [
         'uuid',
         'name',
         'path',
+        'organization_id',
         'created_by',
         'updated_by',
     ];
@@ -37,6 +40,11 @@ class LocalProject extends Model
     public function findingIdentities(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(FindingIdentity::class);
+    }
+
+    public function organization(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     public function creator(): \Illuminate\Database\Eloquent\Relations\BelongsTo

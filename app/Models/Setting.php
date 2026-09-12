@@ -7,9 +7,12 @@ use Illuminate\Support\Facades\Crypt;
 
 class Setting extends Model
 {
+    protected $with = ['organization'];
+
     protected $fillable = [
         'key',
         'value',
+        'organization_id',
         'is_encrypted',
     ];
 
@@ -42,6 +45,14 @@ class Setting extends Model
             return $default;
         }
         return $setting->decrypted_value;
+    }
+
+    /**
+     * Get the organization this setting belongs to.
+     */
+    public function organization(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     /**

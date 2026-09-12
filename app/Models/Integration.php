@@ -4,12 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 class Integration extends Model
 {
     use HasFactory;
+
+    protected $with = ['organization'];
 
     protected $fillable = [
         'uuid',
@@ -18,6 +21,7 @@ class Integration extends Model
         'type',
         'environment',
         'description',
+        'organization_id',
         'status',
         'host',
         'port',
@@ -45,6 +49,11 @@ class Integration extends Model
                 $integration->uuid = (string) Str::uuid();
             }
         });
+    }
+
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     public function credentials(): HasMany

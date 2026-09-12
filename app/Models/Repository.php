@@ -12,6 +12,8 @@ class Repository extends Model
 {
     use HasFactory;
 
+    protected $with = ['organization'];
+
     protected $fillable = [
         'uuid',
         'provider',
@@ -21,6 +23,7 @@ class Repository extends Model
         'visibility',
         'default_branch',
         'integration_credential_id',
+        'organization_id',
         'status',
         'last_scan_at',
         'created_by',
@@ -41,6 +44,11 @@ class Repository extends Model
                 $repository->uuid = (string) Str::uuid();
             }
         });
+    }
+
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     public function creator(): BelongsTo

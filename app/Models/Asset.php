@@ -17,6 +17,8 @@ class Asset extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $with = ['organization'];
+
     protected $fillable = [
         'uuid',
         'name',
@@ -29,6 +31,7 @@ class Asset extends Model
         'owner',
         'notes',
         'asset_group_id',
+        'organization_id',
         'created_by',
         'updated_by',
         'import_job_id',
@@ -42,6 +45,11 @@ class Asset extends Model
                 $asset->uuid = (string) Str::uuid();
             }
         });
+    }
+
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     protected function casts(): array

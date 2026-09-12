@@ -16,6 +16,8 @@ class Scan extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $with = ['organization'];
+
     protected $fillable = [
         'uuid',
         'repository_id',
@@ -25,6 +27,7 @@ class Scan extends Model
         'engine',
         'target',
         'local_project_id',
+        'organization_id',
         'schedule',
         'status',
         'progress',
@@ -57,6 +60,11 @@ class Scan extends Model
                 $scan->uuid = (string) Str::uuid();
             }
         });
+    }
+
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     public function creator(): BelongsTo
