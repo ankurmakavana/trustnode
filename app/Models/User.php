@@ -80,6 +80,45 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the teams this user belongs to.
+     */
+    public function teams(): BelongsToMany
+    {
+        return $this->belongsToMany(Team::class, 'team_user');
+    }
+
+    /**
+     * Check if the user belongs to a team.
+     */
+    public function belongsToTeam(Team $team): bool
+    {
+        return $this->teams()->where('teams.id', $team->id)->exists();
+    }
+
+    /**
+     * Check if the user belongs to any teams in an organization.
+     */
+    public function hasAccessToOrganization(Organization $organization): bool
+    {
+        return $this->teams()
+            ->where('organization_id', $organization->id)
+            ->exists();
+    }
+
+    /**
+     * Get all organizations this user has access to via team membership.
+     */
+    public function organizations(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Organization::class,
+            'team_user',
+            'user_id',
+            'organization_id'
+        )->through('teams')->distinct();
+    }
+
+    /**
      * Get invitations sent by this user.
      */
     public function sentInvitations(): HasMany

@@ -51,9 +51,23 @@ class RolePermissionSeeder extends Seeder
 
         // 2. Define Roles
         $roles = [
+            UserRole::OWNER->value => [
+                'name' => UserRole::OWNER->label(),
+                'permissions' => array_keys($permissions), // Gets all permissions
+            ],
             UserRole::ADMINISTRATOR->value => [
                 'name' => UserRole::ADMINISTRATOR->label(),
                 'permissions' => array_keys($permissions), // Gets all permissions
+            ],
+            UserRole::SECURITY_MANAGER->value => [
+                'name' => UserRole::SECURITY_MANAGER->label(),
+                'permissions' => [
+                    'assets.view',
+                    'targets.view',
+                    'scans.execute', 'scans.view',
+                    'reports.export', 'reports.view',
+                    'findings.view', 'findings.update',
+                ],
             ],
             UserRole::MANAGER->value => [
                 'name' => UserRole::MANAGER->label(),
@@ -66,6 +80,16 @@ class RolePermissionSeeder extends Seeder
                     'users.view',
                 ],
             ],
+            UserRole::DEVELOPER->value => [
+                'name' => UserRole::DEVELOPER->label(),
+                'permissions' => [
+                    'assets.view',
+                    'targets.view',
+                    'scans.view',
+                    'reports.view',
+                    'findings.view', 'findings.update',
+                ],
+            ],
             UserRole::OPERATOR->value => [
                 'name' => UserRole::OPERATOR->label(),
                 'permissions' => [
@@ -74,6 +98,16 @@ class RolePermissionSeeder extends Seeder
                     'scans.view',
                     'reports.view',
                     'findings.view', 'findings.update',
+                ],
+            ],
+            UserRole::VIEWER->value => [
+                'name' => UserRole::VIEWER->label(),
+                'permissions' => [
+                    'assets.view',
+                    'targets.view',
+                    'scans.view',
+                    'reports.view',
+                    'findings.view',
                 ],
             ],
         ];
