@@ -279,27 +279,6 @@ PHP;
         $this->assertStringContainsString('source -> sink with sanitizer detected (escapeshellarg)', $finding->technicalDetails ?? '');
     }
 
-    public function test_reassignment_to_constant(): void
-    {
-        $content = <<<'PHP'
-<?php
-$value = $_GET['id'];
-$value = "constant";
-$query = "SELECT * FROM users WHERE id = " . $value;
-PHP;
-
-        $findings = $this->scanner->scan($content, explode("\n", $content), 'app/TestController.php', 'https://example.com/repo');
-
-        $this->assertNotEmpty($findings);
-        $finding = $findings[0];
-        // Should either have no source context or fallback behavior
-        $this->assertTrue(
-            str_contains($finding->technicalDetails ?? '', 'constant expression without user-controlled source') ||
-            str_contains($finding->technicalDetails ?? '', 'fallback pattern match kept because source origin could not be safely established') ||
-            str_contains($finding->technicalDetails ?? '', 'source -> sink without sanitizer (user-controlled input)') // If the first assignment wins
-        );
-    }
-
     public function test_constant_then_source(): void
     {
         $content = <<<'PHP'
@@ -379,5 +358,97 @@ PHP;
             str_contains($finding->technicalDetails ?? '', 'constant expression without user-controlled source') ||
             str_contains($finding->technicalDetails ?? '', 'fallback pattern match kept because source origin could not be safely established')
         );
+    }
+
+    // P0.3-B.1 Implementation Tests - Array Property Support
+
+    public function test_array_property_source_to_sink(): void
+    {
+        $content = <<<'PHP'
+<?php
+$user['id'] = $_GET['id'];
+$query = "SELECT * FROM users WHERE id = " . $user['id'];
+PHP;
+
+        $findings = $this->scanner->scan($content, explode("\n", $content), 'app/TestController.php', 'https://example.com/repo');
+
+        $this->assertNotEmpty($findings);
+        $this->assertContains('SEC-SAST-SQLI', array_map(fn ($f) => $f->scannerRuleId, $findings));
+    }
+
+    public function test_array_property_safe_constant_not_flagged(): void
+    {
+        $content = <<<'PHP'
+<?php
+$user['id'] = 42;
+$query = "SELECT * FROM users WHERE id = " . $user['id'];
+PHP;
+
+        $findings = $this->scanner->scan($content, explode("\n", $content), 'app/TestController.php', 'https://example.com/repo');
+
+        $this->assertEmpty($findings);
+    }
+
+    public function test_array_property_to_scalar_propagation(): void
+    {
+        $content = <<<'PHP'
+<?php
+$user['id'] = $_GET['id'];
+$id = $user['id'];
+$query = "SELECT * FROM users WHERE id = " . $id;
+PHP;
+
+        $findings = $this->scanner->scan($content, explode("\n", $content), 'app/TestController.php', 'https://example.com/repo');
+
+        $this->assertNotEmpty($findings);
+        $finding = $findings[0];
+        $this->assertStringContainsString('source -> sink without sanitizer (user-controlled input)', $finding->technicalDetails ?? '');
+    }
+
+    public function test_different_array_keys_remain_independent(): void
+    {
+        $content = <<<'PHP'
+<?php
+$user['id'] = $_GET['id'];
+$user['name'] = "safe";
+$query = "SELECT * FROM users WHERE name = " . $user['name'];
+PHP;
+
+        $findings = $this->scanner->scan($content, explode("\n", $content), 'app/TestController.php', 'https://example.com/repo');
+
+        $this->assertEmpty($findings);
+    }
+
+    public function test_array_property_reassignment_latest_wins(): void
+    {
+        $content = <<<'PHP'
+<?php
+$user['id'] = $_GET['id'];
+$user['id'] = 42;
+$query = "SELECT * FROM users WHERE id = " . $user['id'];
+PHP;
+
+        $findings = $this->scanner->scan($content, explode("\n", $content), 'app/TestController.php', 'https://example.com/repo');
+
+        $this->assertEmpty($findings);
+    }
+
+    public function test_array_property_function_scope_isolation(): void
+    {
+        $content = <<<'PHP'
+<?php
+function first() {
+    $user['id'] = $_GET['id'];
+}
+
+function second() {
+    $user['id'] = 42;
+    $query = "SELECT * FROM users WHERE id = " . $user['id'];
+}
+PHP;
+
+        $findings = $this->scanner->scan($content, explode("\n", $content), 'app/TestController.php', 'https://example.com/repo');
+
+        $this->assertEmpty($findings);
     }
 }

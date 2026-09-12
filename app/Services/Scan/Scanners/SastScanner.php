@@ -15,7 +15,7 @@ class SastScanner extends AbstractRegexScanner
                 'severity' => 'high',
                 'category' => 'SAST',
                 'cwe' => 'CWE-89',
-                'regex' => '/(?:select|insert|update|delete|where|orderBy|DB::raw)\s*\(.*[\$].*\)|["\']\s*(?:select|insert|update|delete|where)\b.*\.?\s*\$[a-zA-Z_][a-zA-Z0-9_]*|["\']\s*(?:select|insert|update|delete|where)\b[^"\']*\.?\s*\$[a-zA-Z_][a-zA-Z0-9_]*/is',
+                'regex' => '/(?:select|insert|update|delete|where|orderBy|DB::raw)\s*\(.*[\$].*\)|["\']\s*(?:select|insert|update|delete|where)\b.*\.?\s*\$[a-zA-Z_][a-zA-Z0-9_]*(?:\[[\'"][a-zA-Z_][a-zA-Z0-9_]*[\'"]\])?|["\']\s*(?:select|insert|update|delete|where)\b[^"\']*\.?\s*\$[a-zA-Z_][a-zA-Z0-9_]*(?:\[[\'"][a-zA-Z_][a-zA-Z0-9_]*[\'"]\])?/is',
                 'description' => 'A raw SQL query concatenates/interpolates variables directly. This makes the application vulnerable to SQL Injection.',
                 'remediation' => 'Use parameterized queries or prepared statements instead of directly concatenating user input.',
             ],
@@ -119,12 +119,15 @@ class SastScanner extends AbstractRegexScanner
         foreach ($scopes as $scopeKey => $scopeContent) {
             $scopeBody = is_array($scopeContent) ? ($scopeContent['content'] ?? '') : $scopeContent;
             $state = [];
-            if (preg_match_all('/\$(\w+)\s*=\s*(.+?);/s', $scopeBody, $assignments, PREG_SET_ORDER)) {
+            if (preg_match_all('/\$(\w+)(?:\[[\'"](\w+)[\'"]\])?\s*=\s*(.+?);/s', $scopeBody, $assignments, PREG_SET_ORDER)) {
                 $maxHops = 5;
 
                 foreach ($assignments as $assignment) {
                     $variable = $assignment[1];
-                    $expression = trim($assignment[2]);
+                    $arrayKey = $assignment[2] !== '' ? $assignment[2] : null;
+                    $expression = trim($assignment[3]);
+
+                    $stateKey = $arrayKey !== null ? "{$variable}__{$arrayKey}" : $variable;
                     $variables = $this->extractVariableNames($expression);
                     $source = false;
                     $sanitizer = null;
@@ -156,6 +159,16 @@ class SastScanner extends AbstractRegexScanner
                             $hop = $sourceState['hop'] + 1;
                             $sanitizer = $sourceState['sanitizer'];
                         }
+                    } elseif (count($variables) === 1 && preg_match('/^\$(\w+)\[[\'"](\w+)[\'"]\]$/', $expression, $arrayAccess)) {
+                        $sourceVariable = $arrayAccess[1];
+                        $sourceKey = $arrayAccess[2];
+                        $sourceStateKey = "{$sourceVariable}__{$sourceKey}";
+                        $sourceState = $state[$sourceStateKey] ?? null;
+                        if ($sourceState !== null && $sourceState['source'] && $sourceState['hop'] < $maxHops) {
+                            $source = true;
+                            $hop = $sourceState['hop'] + 1;
+                            $sanitizer = $sourceState['sanitizer'];
+                        }
                     }
 
                     if (!$source && $this->isConstantExpression($expression)) {
@@ -164,7 +177,7 @@ class SastScanner extends AbstractRegexScanner
                         $unknownOrigin = true;
                     }
 
-                    $state[$variable] = [
+                    $state[$stateKey] = [
                         'source' => $source,
                         'sanitizer' => $sanitizer,
                         'hop' => $hop,
@@ -188,27 +201,56 @@ class SastScanner extends AbstractRegexScanner
         return $signals;
     }
 
-    private function evaluateContext(string $matchedText, array $signals, string $scopeKey = 'global'): array
+    private function evaluateContext(string $matchedText, array $signals, string $scopeKey = 'global', string $lineContent = ''): array
     {
         $variableNames = $this->extractVariableNames($matchedText);
-        if (empty($variableNames)) {
+        $arrayProperties = $this->extractArrayProperties($matchedText);
+
+        if (empty($variableNames) && empty($arrayProperties)) {
             return ['emit' => false, 'context' => 'constant expression without user-controlled source'];
         }
 
         $scopeState = $signals['scopeState'][$scopeKey] ?? [];
         $sourceMatches = [];
         $sanitizerMatches = [];
+        $undefinedVars = 0;
+        $safeMatches = 0;
+        $unknownMatches = 0;
 
         foreach ($variableNames as $variableName) {
             if (!isset($scopeState[$variableName])) {
-                return ['emit' => false, 'context' => 'variable not defined in current function scope'];
+                $undefinedVars++;
+                continue;
             }
 
             if (($scopeState[$variableName]['source'] ?? false)) {
                 $sourceMatches[] = $variableName;
+            } elseif (($scopeState[$variableName]['safe'] ?? false)) {
+                $safeMatches++;
+            } elseif (($scopeState[$variableName]['unknownOrigin'] ?? false)) {
+                $unknownMatches++;
             }
+
             if (($scopeState[$variableName]['sanitizer'] ?? null) !== null) {
                 $sanitizerMatches[] = $variableName;
+            }
+        }
+
+        foreach ($arrayProperties as $arrayProperty) {
+            if (!isset($scopeState[$arrayProperty])) {
+                continue;
+            }
+
+            if (($scopeState[$arrayProperty]['source'] ?? false)) {
+                $sourceMatches[] = $arrayProperty;
+            } elseif (($scopeState[$arrayProperty]['safe'] ?? false)) {
+                $safeMatches++;
+            } elseif (($scopeState[$arrayProperty]['unknownOrigin'] ?? false)) {
+                $unknownMatches++;
+            }
+
+            if (($scopeState[$arrayProperty]['sanitizer'] ?? null) !== null) {
+                $sanitizerMatches[] = $arrayProperty;
             }
         }
 
@@ -220,7 +262,31 @@ class SastScanner extends AbstractRegexScanner
             return ['emit' => true, 'context' => 'source -> sink without sanitizer (' . ($signals['sources'][$scopeKey][$sourceMatches[0]] ?? 'user-controlled input') . ')'];
         }
 
+        if ($undefinedVars > 0 && empty($arrayProperties)) {
+            return ['emit' => false, 'context' => 'variable not defined in current function scope'];
+        }
+
+        if (($safeMatches > 0 || !empty($arrayProperties)) && $undefinedVars === 0) {
+            return ['emit' => false, 'context' => 'constant expression without user-controlled source'];
+        }
+
+        if ($undefinedVars > 0 && !empty($arrayProperties)) {
+            return ['emit' => false, 'context' => 'variable not defined in current function scope'];
+        }
+
         return ['emit' => true, 'context' => 'fallback pattern match kept because source origin could not be safely established'];
+    }
+
+    private function findArrayPropertiesForVariable(string $variableName, array $scopeState): array
+    {
+        $matching = [];
+        $prefix = $variableName . '__';
+        foreach ($scopeState as $stateKey => $stateValue) {
+            if (strpos($stateKey, $prefix) === 0) {
+                $matching[] = $stateKey;
+            }
+        }
+        return $matching;
     }
 
     private function detectScopeKeyForOffset(string $content, int $offset): string
@@ -331,6 +397,18 @@ class SastScanner extends AbstractRegexScanner
     {
         preg_match_all('/\$(\w+)/', $text, $matches);
         return array_values(array_unique($matches[1] ?? []));
+    }
+
+    private function extractArrayProperties(string $text): array
+    {
+        preg_match_all('/\$(\w+)\[[\'"](\w+)[\'"]\]/', $text, $matches, PREG_SET_ORDER);
+        $properties = [];
+        foreach ($matches as $match) {
+            $variable = $match[1];
+            $key = $match[2];
+            $properties[] = "{$variable}__{$key}";
+        }
+        return array_values(array_unique($properties));
     }
 
     private function isUserControlledSource(string $expression): bool
