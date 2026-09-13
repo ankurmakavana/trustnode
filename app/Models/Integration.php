@@ -44,6 +44,8 @@ class Integration extends Model
     {
         parent::boot();
 
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
+
         static::creating(function (Integration $integration) {
             if (empty($integration->uuid)) {
                 $integration->uuid = (string) Str::uuid();

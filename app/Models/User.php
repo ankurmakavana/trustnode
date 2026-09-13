@@ -108,15 +108,14 @@ class User extends Authenticatable
 
     /**
      * Get all organizations this user has access to via team membership.
+     * Returns a Builder that can be used to query organizations.
      */
-    public function organizations(): BelongsToMany
+    public function organizations()
     {
-        return $this->belongsToMany(
-            Organization::class,
-            'team_user',
-            'user_id',
-            'organization_id'
-        )->through('teams')->distinct();
+        return Organization::whereIn(
+            'id',
+            $this->teams()->pluck('teams.organization_id')->unique()
+        );
     }
 
     /**

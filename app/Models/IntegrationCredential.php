@@ -19,6 +19,8 @@ class IntegrationCredential extends Model
     {
         parent::boot();
 
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
+
         static::creating(function (IntegrationCredential $credential) {
             if (empty($credential->uuid)) {
                 $credential->uuid = (string) Str::uuid();

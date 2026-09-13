@@ -20,6 +20,12 @@ class Setting extends Model
         'is_encrypted' => 'boolean',
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
+        static::addGlobalScope(new \App\Models\Scopes\TenantScope);
+    }
+
     /**
      * Get the decrypted value if the setting is encrypted.
      */

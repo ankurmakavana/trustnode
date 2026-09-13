@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\Finding;
+use App\Models\Organization;
 use App\Models\Repository;
 use App\Models\Scan;
 use App\Models\ScanReport;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -16,6 +18,9 @@ class TenantIsolationTest extends TestCase
 
     private User $orgAUser;
     private User $orgBUser;
+
+    private Organization $orgA;
+    private Organization $orgB;
 
     private Repository $orgBRepo;
     private Scan $orgBScan;
@@ -32,15 +37,30 @@ class TenantIsolationTest extends TestCase
         $this->orgAUser = User::factory()->create(['role_id' => $adminRole->id]);
         $this->orgBUser = User::factory()->create(['role_id' => $adminRole->id]);
 
+        $this->orgA = Organization::create(['name' => 'Org A', 'slug' => 'tenant-test-org-a']);
+        $this->orgB = Organization::create(['name' => 'Org B', 'slug' => 'tenant-test-org-b']);
+        $this->orgAUser->teams()->attach(Team::create([
+            'name' => 'Org A Team',
+            'slug' => 'tenant-test-team-a',
+            'organization_id' => $this->orgA->id,
+        ]));
+        $this->orgBUser->teams()->attach(Team::create([
+            'name' => 'Org B Team',
+            'slug' => 'tenant-test-team-b',
+            'organization_id' => $this->orgB->id,
+        ]));
+
         // Create Org B Data
         $this->orgBRepo = Repository::factory()->create([
             'created_by' => $this->orgBUser->id,
+            'organization_id' => $this->orgB->id,
             'repository_url' => 'https://github.com/org-b/repo',
             'name' => 'Org B Repo',
         ]);
 
         $this->orgBScan = Scan::create([
             'repository_id' => $this->orgBRepo->id,
+            'organization_id' => $this->orgB->id,
             'created_by' => $this->orgBUser->id,
             'name' => 'Org B Scan',
             'type' => \App\Enums\Scan\ScanType::REPOSITORY,
@@ -112,12 +132,14 @@ class TenantIsolationTest extends TestCase
     {
         $orgARepo = Repository::factory()->create([
             'created_by' => $this->orgAUser->id,
+            'organization_id' => $this->orgA->id,
             'repository_url' => 'https://github.com/org-a/repo',
             'name' => 'Org A Repo',
         ]);
 
         $orgAScan = Scan::create([
             'repository_id' => $orgARepo->id,
+            'organization_id' => $this->orgA->id,
             'created_by' => $this->orgAUser->id,
             'name' => 'Org A Scan',
             'type' => \App\Enums\Scan\ScanType::REPOSITORY,
