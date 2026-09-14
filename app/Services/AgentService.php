@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use LogicException;
 
 class AgentService
 {
@@ -19,13 +20,22 @@ class AgentService
     const C_STATE = 'trustnode_agent_state';
     const C_HEARTBEAT = 'trustnode_agent_heartbeat';
 
+    protected $allowedTransitions = [
+        self::S_STOPPED => [self::S_STARTING],
+        self::S_STARTING => [self::S_RUNNING],
+        self::S_RUNNING => [self::S_STOPPING],
+        self::S_STOPPING => [self::S_STOPPED],
+    ];
+
     protected $config;
     protected $state;
+    protected $instanceId;
 
     public function __construct()
     {
         $this->config = config('agent');
         $this->state = $this->loadState();
+        $this->instanceId = (string) Str::uuid();
     }
 
     public function getState()
@@ -35,6 +45,16 @@ class AgentService
 
     public function setState($state)
     {
+        $current = $this->state['state'] ?? self::S_STOPPED;
+
+        if ($current !== $state) {
+            $allowed = $this->allowedTransitions[$current] ?? [];
+
+            if (!in_array($state, $allowed, true)) {
+                throw new LogicException("Invalid transition from {$current} to {$state}");
+            }
+        }
+
         $this->state['state'] = $state;
         $this->persistState($this->state);
         return $this;
@@ -135,6 +155,7 @@ class AgentService
             'last_heartbeat_at' => $this->getLastHeartbeatAt(),
             'stopped_at' => $this->getStoppedAt(),
             'heartbeat_stale' => $isStale,
+            'instance_id' => $this->instanceId,
             'timestamp' => now()->toISOString()
         ];
     }
@@ -174,6 +195,8 @@ class AgentService
 
     protected function persistState($state)
     {
+        unset($state['instance_id']);
+
         $driver = $this->config['state']['driver'];
         $table = $this->config['state']['table'];
         $agentId = $this->getAgentId();
@@ -209,6 +232,11 @@ class AgentService
         }
 
         return $this->config['id'];
+    }
+
+    public function getInstanceId()
+    {
+        return $this->instanceId;
     }
 
     protected function ensureAgentId()
