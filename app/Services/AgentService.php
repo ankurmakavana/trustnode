@@ -91,6 +91,11 @@ class AgentService
             return;
         }
 
+        if ($this->isStopping()) {
+            Log::warning('Agent already stopping, skipping stop');
+            return;
+        }
+
         Log::info('Stopping TrustNode Agent');
         $this->setState(self::S_STOPPING);
         $this->setState(self::S_STOPPED);

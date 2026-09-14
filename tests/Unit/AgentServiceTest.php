@@ -210,4 +210,155 @@ class AgentServiceTest extends TestCase
         $agent->setState('stopped');
         $this->assertEquals($initialId, $agent->getInstanceId());
     }
+
+    // Shutdown tests
+
+    public function test_running_agent_can_be_stopped()
+    {
+        $agent = new AgentService();
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+
+        $this->assertTrue($agent->isRunning());
+
+        $agent->stop();
+
+        $this->assertTrue($agent->isStopped());
+        $this->assertFalse($agent->isStopping());
+        $this->assertFalse($agent->isRunning());
+        $this->assertEquals('stopped', $agent->getState());
+    }
+
+    public function test_stop_sets_stopped_at()
+    {
+        $agent = new AgentService();
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+
+        $this->assertNull($agent->getStoppedAt());
+
+        $agent->stop();
+
+        $this->assertNotNull($agent->getStoppedAt());
+    }
+
+    public function test_stop_preserves_started_at()
+    {
+        $agent = new AgentService();
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+
+        $startedAt = $agent->getStartedAt();
+
+        $agent->stop();
+
+        $this->assertEquals($startedAt, $agent->getStartedAt());
+    }
+
+    public function test_stop_preserves_last_heartbeat_at()
+    {
+        $agent = new AgentService();
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agent->heartbeat();
+
+        $lastHeartbeatAt = $agent->getLastHeartbeatAt();
+
+        $agent->stop();
+
+        $this->assertEquals($lastHeartbeatAt, $agent->getLastHeartbeatAt());
+    }
+
+    public function test_stop_preserves_instance_id()
+    {
+        $agent = new AgentService();
+        $initialId = $agent->getInstanceId();
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+
+        $agent->stop();
+
+        $this->assertEquals($initialId, $agent->getInstanceId());
+    }
+
+    public function test_stop_preserves_agent_id()
+    {
+        $agent = new AgentService();
+        $initialAgentId = $agent->getAgentId();
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+
+        $agent->stop();
+
+        $this->assertEquals($initialAgentId, $agent->getAgentId());
+    }
+
+    public function test_stop_persists_final_state()
+    {
+        $agent = new AgentService();
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agentId = $agent->getAgentId();
+
+        $agent->stop();
+
+        $cached = Cache::get('trustnode_agent_state_' . $agentId);
+        $this->assertNotNull($cached);
+        $this->assertEquals('stopped', $cached['state']);
+        $this->assertNotNull($cached['stopped_at']);
+    }
+
+    public function test_stopped_state_observable_by_new_instance()
+    {
+        $agent = new AgentService();
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+
+        $agentId = $agent->getAgentId();
+        $agent->stop();
+
+        // Ensure new instance uses same agent_id to find persisted state
+        config(['agent.id' => $agentId]);
+        $newAgent = new AgentService();
+
+        $this->assertTrue($newAgent->isStopped());
+        $this->assertNotNull($newAgent->getStoppedAt());
+    }
+
+    public function test_stop_while_stopping_is_idempotent()
+    {
+        $agent = new AgentService();
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agent->setState('stopping');
+
+        $agent->stop();
+
+        $this->assertTrue($agent->isStopping());
+        $this->assertNull($agent->getStoppedAt());
+    }
+
+    public function test_start_works_after_stop()
+    {
+        $agent = new AgentService();
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+
+        $agent->stop();
+        $this->assertTrue($agent->isStopped());
+
+        $agent->start();
+        $this->assertTrue($agent->isRunning());
+        $this->assertEquals('running', $agent->getState());
+    }
 }
