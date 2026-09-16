@@ -28,27 +28,49 @@ class AgentQueue implements AgentQueueInterface
 
     public function enqueue(string $agentId, string $type, array $payload): string
     {
-        if ($this->isFull($agentId)) {
-            throw new QueueFullException("Agent queue for [{$agentId}] has reached its capacity of {$this->maxSize}.");
-        }
-
         $this->validatePayload($payload);
 
         $id = (string) Str::orderedUuid();
 
-        DB::table($this->table)->insert([
-            'id' => $id,
-            'agent_id' => $agentId,
-            'type' => $type,
-            'payload' => json_encode($payload),
-            'status' => self::STATUS_PENDING,
-            'attempts' => 0,
-            'available_at' => now(),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        return DB::transaction(function () use ($agentId, $type, $payload, $id) {
+            $stateTable = config('agent.state.table', 'agent_states');
 
-        return $id;
+            // Ensure coordination row exists for locking without modifying active lifecycle state
+            DB::table($stateTable)->insertOrIgnore([
+                'agent_id' => $agentId,
+                'state' => json_encode(['state' => 'stopped']),
+                'updated_at' => now()
+            ]);
+
+            // Lock the agent_states row to serialize enqueue capacity checks per agent
+            $stateRow = DB::table($stateTable)
+                ->where('agent_id', $agentId)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$stateRow) {
+                // Fallback in case insertOrIgnore failed and row doesn't exist
+                throw new LogicException("Cannot enqueue task: Agent state row for [{$agentId}] is missing.");
+            }
+
+            if ($this->isFull($agentId)) {
+                throw new QueueFullException("Agent queue for [{$agentId}] has reached its capacity of {$this->maxSize}.");
+            }
+
+            DB::table($this->table)->insert([
+                'id' => $id,
+                'agent_id' => $agentId,
+                'type' => $type,
+                'payload' => json_encode($payload),
+                'status' => self::STATUS_PENDING,
+                'attempts' => 0,
+                'available_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            return $id;
+        });
     }
 
     public function dequeue(string $agentId): ?array
