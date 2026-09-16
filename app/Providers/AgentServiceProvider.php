@@ -58,32 +58,43 @@ class AgentServiceProvider extends ServiceProvider
         $this->handleShutdownSignals($agent);
     }
     
-    /**
-     * Handle shutdown signals for graceful termination.
-     *
-     * @param AgentService $agent
-     * @return void
-     */
     protected function handleShutdownSignals(AgentService $agent)
     {
         // Register shutdown function for clean exit
         register_shutdown_function(function () use ($agent) {
             if ($agent->isRunning()) {
                 $agent->stop();
+            } elseif ($agent->isStopping()) {
+                $agent->setState(\App\Services\AgentService::S_STOPPED);
+                $agent->setStoppedAt(now());
             }
         });
         
         // Handle SIGTERM and SIGINT if pcntl is available
-        if (function_exists('pcntl_signal')) {
-            pcntl_signal(SIGTERM, function () use ($agent) {
-                $agent->stop();
-                exit(0);
-            });
+        if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
+            pcntl_async_signals(true);
             
-            pcntl_signal(SIGINT, function () use ($agent) {
-                $agent->stop();
-                exit(0);
-            });
+            $handler = function () use ($agent) {
+                if ($agent->isRunning()) {
+                    Log::info('Shutdown signal received. Initiating graceful drain.');
+                    $agent->drain();
+                    
+                    $timeout = config('agent.queue.drain_timeout', 15);
+                    if (function_exists('pcntl_alarm') && $timeout > 0) {
+                        pcntl_alarm($timeout);
+                    }
+                }
+            };
+            
+            pcntl_signal(SIGTERM, $handler);
+            pcntl_signal(SIGINT, $handler);
+            
+            if (function_exists('pcntl_alarm')) {
+                pcntl_signal(SIGALRM, function () {
+                    Log::warning('Drain timeout exceeded. Exiting forcefully.');
+                    exit(1);
+                });
+            }
         }
     }
 }

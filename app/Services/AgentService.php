@@ -169,6 +169,14 @@ class AgentService
         return false;
     }
 
+    public function drain()
+    {
+        if ($this->isRunning()) {
+            Log::info('Agent draining initiated.');
+            $this->setState(self::S_STOPPING);
+        }
+    }
+
     public function stop()
     {
         if ($this->isStopped()) {
