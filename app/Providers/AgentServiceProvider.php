@@ -22,6 +22,7 @@ class AgentServiceProvider extends ServiceProvider
         });
         
         $this->app->bind(AgentQueueInterface::class, AgentQueue::class);
+        $this->app->singleton(\App\Contracts\AgentTaskHandlerRegistryInterface::class, \App\Services\AgentTaskHandlerRegistry::class);
     }
 
     /**
