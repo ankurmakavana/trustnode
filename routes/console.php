@@ -15,6 +15,20 @@ Schedule::call(function () {
     $agent->heartbeat();
 })->everyThirtySeconds()->name('agent.heartbeat');
 
+// Periodic agent security observation
+Schedule::call(function () {
+    $agent = app(AgentService::class);
+    if ($agent->isRunning()) {
+        try {
+            app(\App\Contracts\AgentQueueInterface::class)->enqueue($agent->getAgentId(), 'agent.observe_env', [
+                'target' => base_path('.env')
+            ]);
+        } catch (\App\Exceptions\QueueFullException $e) {
+            // Ignore if queue is full, bounded operation
+        }
+    }
+})->everyMinute()->name('agent.observe_env');
+
 Artisan::command('agent:run', function (\App\Services\AgentService $agent, \App\Services\AgentWorker $worker) {
     // Apply memory guardrail (process-level enforcement)
     $memoryMb = config('agent.guardrails.memory_mb', 256);

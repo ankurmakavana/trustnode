@@ -117,7 +117,9 @@ class AgentServiceTakeoverTest extends TestCase
         $app = \Mockery::mock($this->app);
         $app->shouldReceive('runningInConsole')->andReturn(true);
         $app->shouldReceive('environment')->with('testing')->andReturn(false);
-        $app->shouldReceive('make')->andReturn($this->app->make(AgentService::class));
+        $app->shouldReceive('make')->andReturnUsing(function($class) {
+            return $this->app->make($class);
+        });
         $app->shouldReceive('singleton')->andReturnNull();
         
         $provider = new AgentServiceProvider($app);
@@ -133,7 +135,9 @@ class AgentServiceTakeoverTest extends TestCase
         $app = \Mockery::mock($this->app);
         $app->shouldReceive('runningInConsole')->andReturn(true);
         $app->shouldReceive('environment')->with('testing')->andReturn(false);
-        $app->shouldReceive('make')->andReturn($this->app->make(AgentService::class));
+        $app->shouldReceive('make')->andReturnUsing(function($class) {
+            return $this->app->make($class);
+        });
         $app->shouldReceive('singleton')->andReturnNull();
         
         $provider = new AgentServiceProvider($app);

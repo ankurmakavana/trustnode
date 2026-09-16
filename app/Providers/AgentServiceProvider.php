@@ -24,13 +24,31 @@ class AgentServiceProvider extends ServiceProvider
         });
         
         $this->app->singleton(\App\Contracts\AgentQueueInterface::class, \App\Services\AgentQueue::class);
+        $this->app->singleton(\App\Contracts\AgentCapabilityRegistryInterface::class, function ($app) {
+            $registry = new \App\Services\AgentCapabilityRegistry();
+
+            // Task 19.1 - Harness
+            $registry->registerOperation('deepseek.harness.execute', 'agent:execute_harness');
+            $registry->setCapabilityMode('agent:execute_harness', \App\Contracts\AgentCapabilityRegistryInterface::MODE_READ_ONLY);
+
+            // Task 19.4 - Reporting
+            $registry->registerOperation('agent.report_finding', 'agent:report');
+            $registry->setCapabilityMode('agent:report', \App\Contracts\AgentCapabilityRegistryInterface::MODE_READ_ONLY);
+
+            // Task 19.5 - Observation
+            $registry->registerOperation('agent.observe_env', 'agent:observe');
+            $registry->setCapabilityMode('agent:observe', \App\Contracts\AgentCapabilityRegistryInterface::MODE_READ_ONLY);
+
+            return $registry;
+        });
+
         $this->app->singleton(\App\Contracts\AgentTaskHandlerRegistryInterface::class, function ($app) {
             $registry = new \App\Services\AgentTaskHandlerRegistry();
             $registry->register($app->make(\App\Handlers\DeepSeekHarnessTaskHandler::class));
             $registry->register($app->make(\App\Handlers\AgentReportFindingTaskHandler::class));
+            $registry->register($app->make(\App\Handlers\AgentObserveEnvTaskHandler::class));
             return $registry;
         });
-        $this->app->singleton(\App\Contracts\AgentCapabilityRegistryInterface::class, \App\Services\AgentCapabilityRegistry::class);
         $this->app->singleton(\App\Contracts\AgentApprovalServiceInterface::class, \App\Services\AgentApprovalService::class);
         $this->app->singleton(\App\Contracts\AgentSecurityBoundaryInterface::class, \App\Services\AgentSecurityBoundary::class);
         $this->app->singleton(\App\Contracts\DeepSeekHarnessAdapterInterface::class, \App\Services\DeepSeekHarnessAdapter::class);
@@ -65,6 +83,13 @@ class AgentServiceProvider extends ServiceProvider
         // Start the agent
         $agent->start();
         
+        // Grant read-only capabilities to the starting agent
+        $registry = $this->app->make(\App\Contracts\AgentCapabilityRegistryInterface::class);
+        $agentId = $agent->getAgentId();
+        $registry->addGrant($agentId, 'agent:execute_harness');
+        $registry->addGrant($agentId, 'agent:report');
+        $registry->addGrant($agentId, 'agent:observe');
+
         // Handle shutdown signals for graceful termination
         $this->handleShutdownSignals($agent);
     }
