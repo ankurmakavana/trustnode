@@ -16,11 +16,21 @@ Schedule::call(function () {
 })->everyThirtySeconds()->name('agent.heartbeat');
 
 Artisan::command('agent:run', function (\App\Services\AgentService $agent, \App\Services\AgentWorker $worker) {
+    // Apply memory guardrail (process-level enforcement)
+    $memoryMb = config('agent.guardrails.memory_mb', 256);
+    if ($memoryMb > 0) {
+        ini_set('memory_limit', $memoryMb . 'M');
+    }
+
     $this->info('TrustNode Agent is running.');
+    
+    // Ensure safe polling interval (minimum 1 second to prevent CPU busy loops)
+    $pollInterval = max(1, (int) config('agent.guardrails.poll_interval', 1));
+
     while ($agent->isRunning()) {
         $processed = $worker->runOnce();
         if (!$processed) {
-            sleep(1);
+            sleep($pollInterval);
         }
     }
     $this->info('TrustNode Agent stopped.');

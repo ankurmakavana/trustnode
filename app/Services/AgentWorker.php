@@ -37,10 +37,22 @@ class AgentWorker
         $task = $this->queue->dequeue($agentId);
         
         if (!$task) {
+            // Reset execution time limit when idle to prevent cumulative timeouts
+            if (function_exists('set_time_limit')) {
+                set_time_limit(0);
+            }
             return false;
         }
 
         try {
+            $timeout = config('agent.guardrails.max_execution_time', 30);
+            if ($timeout > 0 && function_exists('set_time_limit')) {
+                // Apply execution timeout guardrail. 
+                // Limitation: If triggered, this will cause a fatal error and kill the process, 
+                // leaving the task in 'processing' state.
+                set_time_limit($timeout);
+            }
+
             $type = $task['type'] ?? '';
             
             $handler = $this->registry->resolve($type);
