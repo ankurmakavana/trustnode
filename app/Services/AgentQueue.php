@@ -69,6 +69,8 @@ class AgentQueue implements AgentQueueInterface
     public function dequeue(string $agentId): ?array
     {
         return DB::transaction(function () use ($agentId) {
+            $this->recoverAbandonedTasks($agentId);
+
             $task = DB::table($this->table)
                 ->where('agent_id', $agentId)
                 ->where('status', self::STATUS_PENDING)
@@ -213,6 +215,23 @@ class AgentQueue implements AgentQueueInterface
             if (is_array($value)) {
                 $this->checkForbiddenKeys($value);
             }
+        }
+    }
+
+    protected function recoverAbandonedTasks(string $agentId): void
+    {
+        $leaseTimeout = config('agent.guardrails.max_execution_time', 30) + 15;
+        $staleThreshold = now()->subSeconds($leaseTimeout);
+
+        $abandonedTasks = DB::table($this->table)
+            ->where('agent_id', $agentId)
+            ->where('status', self::STATUS_PROCESSING)
+            ->where('updated_at', '<=', $staleThreshold)
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($abandonedTasks as $task) {
+            $this->fail($task->id, new \RuntimeException('Task abandoned due to process crash or timeout'));
         }
     }
 }

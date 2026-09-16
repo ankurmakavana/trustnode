@@ -447,4 +447,52 @@ class AgentQueueTest extends TestCase
         
         // As a result, T2 would throw QueueFullException in application code.
     }
+
+    public function test_abandoned_processing_task_is_recovered_after_lease_expiry()
+    {
+        $taskId = $this->queue->enqueue($this->agentId, 't', []);
+        $task = $this->queue->dequeue($this->agentId);
+        
+        $this->assertEquals(AgentQueue::STATUS_PROCESSING, $task['status']);
+        
+        // Fast forward past the lease expiry (30 + 15 = 45s)
+        $leaseTimeout = config('agent.guardrails.max_execution_time', 30) + 15;
+        \Carbon\Carbon::setTestNow(now()->addSeconds($leaseTimeout + 1));
+        
+        // Dequeue should trigger recovery. The recovered task is failed, which increments
+        // attempts and sets available_at to now + backoff. (Base delay is 5s)
+        $result = $this->queue->dequeue($this->agentId);
+        $this->assertNull($result, 'Task should be in backoff period and not immediately returned');
+        
+        $dbTask = DB::table('agent_tasks')->where('id', $taskId)->first();
+        $this->assertEquals(AgentQueue::STATUS_PENDING, $dbTask->status);
+        $this->assertEquals(1, $dbTask->attempts);
+        
+        // Fast forward past backoff
+        \Carbon\Carbon::setTestNow(now()->addSeconds(6));
+        
+        $recoveredTask = $this->queue->dequeue($this->agentId);
+        $this->assertNotNull($recoveredTask);
+        $this->assertEquals($taskId, $recoveredTask['id']);
+        
+        \Carbon\Carbon::setTestNow();
+    }
+
+    public function test_non_expired_processing_task_is_not_recovered()
+    {
+        $taskId = $this->queue->enqueue($this->agentId, 't', []);
+        $this->queue->dequeue($this->agentId);
+        
+        // Fast forward but NOT past the lease expiry
+        $leaseTimeout = config('agent.guardrails.max_execution_time', 30) + 15;
+        \Carbon\Carbon::setTestNow(now()->addSeconds($leaseTimeout - 10));
+        
+        $result = $this->queue->dequeue($this->agentId);
+        $this->assertNull($result, 'Non-expired processing task should not be recovered');
+        
+        $dbTask = DB::table('agent_tasks')->where('id', $taskId)->first();
+        $this->assertEquals(AgentQueue::STATUS_PROCESSING, $dbTask->status);
+        
+        \Carbon\Carbon::setTestNow();
+    }
 }
