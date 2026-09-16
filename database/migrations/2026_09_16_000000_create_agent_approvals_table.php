@@ -13,14 +13,14 @@ return new class extends Migration
             $table->string('agent_id')->index();
             $table->string('operation');
             $table->string('capability');
-            $table->json('scope')->nullable();
-            $table->json('constraints')->nullable();
             $table->string('request_fingerprint')->index();
             $table->string('status')->default('pending'); // pending, approved, rejected, revoked, expired
             $table->unsignedBigInteger('requested_by')->nullable();
             $table->unsignedBigInteger('approved_by')->nullable();
             $table->timestamp('expires_at')->nullable();
             $table->timestamps();
+
+            $table->unique(['agent_id', 'request_fingerprint']);
         });
     }
 

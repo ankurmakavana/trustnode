@@ -7,6 +7,9 @@ use App\Contracts\AgentCapabilityRegistryInterface;
 use App\Models\AgentApproval;
 use App\Exceptions\AgentSecurityException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Database\QueryException;
 
 class AgentApprovalService implements AgentApprovalServiceInterface
 {
@@ -19,6 +22,10 @@ class AgentApprovalService implements AgentApprovalServiceInterface
 
     public function authorizeRequest(string $agentId, string $operation, string $capability, array $arguments): void
     {
+        if ($this->capabilityRegistry->isRevoked($agentId, $capability)) {
+            throw new AgentSecurityException("Execution denied: Capability [{$capability}] is revoked.");
+        }
+
         $fingerprint = $this->calculateFingerprint($agentId, $operation, $capability, $arguments);
 
         $approval = AgentApproval::where('agent_id', $agentId)
@@ -27,20 +34,26 @@ class AgentApprovalService implements AgentApprovalServiceInterface
             ->first();
 
         if (!$approval) {
-            AgentApproval::create([
-                'agent_id' => $agentId,
-                'operation' => $operation,
-                'capability' => $capability,
-                'scope' => $arguments,
-                'request_fingerprint' => $fingerprint,
-                'status' => 'pending',
-            ]);
-            
-            Log::info('AgentApprovalService: Created new pending approval request.', [
-                'agent_id' => $agentId,
-                'operation' => $operation,
-                'capability' => $capability
-            ]);
+            try {
+                AgentApproval::create([
+                    'agent_id' => $agentId,
+                    'operation' => $operation,
+                    'capability' => $capability,
+                    'request_fingerprint' => $fingerprint,
+                    'status' => 'pending',
+                ]);
+                
+                Log::info('AgentApprovalService: Created new pending approval request.', [
+                    'agent_id' => $agentId,
+                    'operation' => $operation,
+                    'capability' => $capability
+                ]);
+            } catch (QueryException $e) {
+                // If it's a unique constraint violation (23000), another worker already created it.
+                if ($e->getCode() !== '23000') {
+                    throw $e;
+                }
+            }
 
             throw new AgentSecurityException("Execution denied: Approval pending for operation [{$operation}].");
         }
@@ -54,17 +67,18 @@ class AgentApprovalService implements AgentApprovalServiceInterface
             throw new AgentSecurityException("Execution denied: Approval has expired.");
         }
 
-        // Convert approval into a runtime capability grant
+        // Convert approval into a runtime capability grant using strictly runtime arguments.
         $this->capabilityRegistry->addGrant(
             $approval->agent_id,
             $approval->capability,
-            $approval->scope ?? [],
-            $approval->constraints ?? []
+            $arguments,
+            []
         );
     }
 
-    public function approve(int $approvalId, int $userId, ?int $durationMinutes = null): void
+    public function approve(int $approvalId, ?int $durationMinutes = null): void
     {
+        Gate::authorize('agent.approve');
         $approval = AgentApproval::findOrFail($approvalId);
         
         if ($approval->status !== 'pending') {
@@ -73,32 +87,38 @@ class AgentApprovalService implements AgentApprovalServiceInterface
 
         $approval->update([
             'status' => 'approved',
-            'approved_by' => $userId,
+            'approved_by' => Auth::id(),
             'expires_at' => $durationMinutes ? now()->addMinutes($durationMinutes) : null,
         ]);
     }
 
-    public function reject(int $approvalId, int $userId): void
+    public function reject(int $approvalId): void
     {
+        Gate::authorize('agent.approve');
         $approval = AgentApproval::findOrFail($approvalId);
+        
         if ($approval->status !== 'pending') {
             throw new \InvalidArgumentException("Only pending requests can be rejected.");
         }
+        
         $approval->update([
             'status' => 'rejected',
-            'approved_by' => $userId,
+            'approved_by' => Auth::id(),
         ]);
     }
 
-    public function revoke(int $approvalId, int $userId): void
+    public function revoke(int $approvalId): void
     {
+        Gate::authorize('agent.approve');
         $approval = AgentApproval::findOrFail($approvalId);
+        
         if ($approval->status !== 'approved') {
             throw new \InvalidArgumentException("Only approved requests can be revoked.");
         }
+        
         $approval->update([
             'status' => 'revoked',
-            'approved_by' => $userId,
+            'approved_by' => Auth::id(),
         ]);
     }
 

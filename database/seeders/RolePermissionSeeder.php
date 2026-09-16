@@ -39,6 +39,8 @@ class RolePermissionSeeder extends Seeder
 
             'findings.view' => 'Access vulnerability lists',
             'findings.update' => 'Triage findings and track remediation status',
+
+            'agent.approve' => 'Approve or revoke Agent execution capabilities',
         ];
 
         $permissionModels = [];

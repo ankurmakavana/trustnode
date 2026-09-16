@@ -8,6 +8,7 @@ class AgentCapabilityRegistry implements AgentCapabilityRegistryInterface
 {
     protected array $operationMap = [];
     protected array $grants = [];
+    protected array $revoked = [];
 
     public function registerOperation(string $operation, string $capability): void
     {
@@ -30,11 +31,17 @@ class AgentCapabilityRegistry implements AgentCapabilityRegistryInterface
 
     public function revokeCapability(string $agentId, string $capability): void
     {
+        $this->revoked[$agentId][$capability] = true;
         if (isset($this->grants[$agentId][$capability])) {
             foreach ($this->grants[$agentId][$capability] as &$grant) {
                 $grant['enabled'] = false;
             }
         }
+    }
+
+    public function isRevoked(string $agentId, string $capability): bool
+    {
+        return $this->revoked[$agentId][$capability] ?? false;
     }
 
     public function getGrants(string $agentId, string $capability): array

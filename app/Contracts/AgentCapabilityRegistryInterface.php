@@ -25,6 +25,11 @@ interface AgentCapabilityRegistryInterface
     public function revokeCapability(string $agentId, string $capability): void;
 
     /**
+     * Check if a capability is explicitly revoked.
+     */
+    public function isRevoked(string $agentId, string $capability): bool;
+
+    /**
      * Get all active grants for an agent's capability.
      */
     public function getGrants(string $agentId, string $capability): array;

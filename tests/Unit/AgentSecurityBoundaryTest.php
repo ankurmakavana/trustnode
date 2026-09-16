@@ -13,8 +13,11 @@ use App\Exceptions\AgentSecurityException;
 use App\Services\AgentSecurityBoundary;
 use Illuminate\Support\Facades\Log;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
 class AgentSecurityBoundaryTest extends TestCase
 {
+    use RefreshDatabase;
     public function test_security_boundary_denies_execution_by_default()
     {
         $registry = new \App\Services\AgentCapabilityRegistry();
@@ -32,6 +35,10 @@ class AgentSecurityBoundaryTest extends TestCase
         $registry->registerOperation('test.op', 'agent.test');
         $registry->addGrant('agent-123', 'agent.test', ['path' => '/approved']);
         
+        $approvalService = $this->createMock(\App\Contracts\AgentApprovalServiceInterface::class);
+        $approvalService->expects($this->once())->method('authorizeRequest');
+        $this->app->instance(\App\Contracts\AgentApprovalServiceInterface::class, $approvalService);
+
         $boundary = new AgentSecurityBoundary($registry);
         
         // Should throw because argument doesn't match scope
@@ -47,6 +54,10 @@ class AgentSecurityBoundaryTest extends TestCase
         $registry->registerOperation('test.op', 'agent.test');
         $registry->addGrant('agent-123', 'agent.test', ['path' => '/approved']);
         
+        $approvalService = $this->createMock(\App\Contracts\AgentApprovalServiceInterface::class);
+        $approvalService->expects($this->once())->method('authorizeRequest');
+        $this->app->instance(\App\Contracts\AgentApprovalServiceInterface::class, $approvalService);
+
         $boundary = new AgentSecurityBoundary($registry);
         
         // Should pass
