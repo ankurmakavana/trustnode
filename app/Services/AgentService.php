@@ -64,19 +64,29 @@ class AgentService
     {
         if ($this->isRunning()) {
             if (!$this->isHeartbeatStale()) {
-                Log::warning('Active Agent already running. Aborting start.');
+                Log::warning('Active Agent already running locally. Aborting start.');
                 $currentState = $this->loadState();
                 if (isset($currentState['instance_id']) && $currentState['instance_id'] !== $this->instanceId) {
                     $this->state['state'] = self::S_STOPPED;
                 }
                 return;
             }
-            Log::warning('Previous Agent crashed (stale heartbeat). Taking over.');
+        }
+        
+        Log::info('Attempting to start TrustNode Agent');
+        $this->ensureAgentId();
+
+        if (!$this->acquireOwnership()) {
+            Log::warning('Active Agent already running or ownership race lost. Aborting start.');
+            $this->state['state'] = self::S_STOPPED;
+            return;
         }
 
-        Log::info('Starting TrustNode Agent');
-        $this->setState(self::S_STARTING);
-        $this->ensureAgentId();
+        Log::info('TrustNode Agent ownership acquired, proceeding with startup');
+        
+        // Sync local state to what was persisted in acquireOwnership
+        $this->state['state'] = self::S_STARTING;
+        $this->state['instance_id'] = $this->instanceId;
         
         if (!$this->getStartedAt()) {
             $this->setStartedAt(now());
@@ -89,6 +99,74 @@ class AgentService
             'agent_id' => $this->getAgentId(),
             'state' => $this->getState()
         ]);
+    }
+    
+    protected function acquireOwnership()
+    {
+        $driver = $this->config['state']['driver'];
+        $table = $this->config['state']['table'];
+        $agentId = $this->getAgentId();
+        
+        $targetState = array_merge($this->state, [
+            'state' => self::S_STARTING,
+            'instance_id' => $this->instanceId
+        ]);
+        
+        if ($driver === 'database') {
+            $record = DB::table($table)->where('agent_id', $agentId)->first();
+            
+            if (!$record) {
+                try {
+                    $inserted = DB::table($table)->insert([
+                        'agent_id' => $agentId,
+                        'state' => json_encode($targetState),
+                        'updated_at' => now()
+                    ]);
+                    if ($inserted) {
+                        return true;
+                    }
+                } catch (\Exception $e) {
+                    $record = DB::table($table)->where('agent_id', $agentId)->first();
+                }
+            }
+            
+            if ($record) {
+                $currentState = json_decode($record->state, true) ?? [];
+                $status = $currentState['state'] ?? self::S_STOPPED;
+                
+                if ($status !== self::S_STOPPED && !$this->isHeartbeatStale()) {
+                    return false;
+                }
+                
+                // Compare-and-Swap (CAS) ensures atomicity
+                $affected = DB::table($table)
+                    ->where('agent_id', $agentId)
+                    ->where('state', $record->state)
+                    ->update([
+                        'state' => json_encode($targetState),
+                        'updated_at' => now()
+                    ]);
+                    
+                return $affected > 0;
+            }
+        } elseif ($driver === 'cache') {
+            $lockKey = "trustnode_agent_lock_{$agentId}";
+            if (Cache::add($lockKey, $this->instanceId, 10)) {
+                $cached = Cache::get($this->getStateCacheKey($agentId));
+                $status = $cached['state'] ?? self::S_STOPPED;
+                
+                if ($status !== self::S_STOPPED && !$this->isHeartbeatStale()) {
+                    Cache::forget($lockKey);
+                    return false;
+                }
+                
+                Cache::forever($this->getStateCacheKey($agentId), $targetState);
+                Cache::forget($lockKey);
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     public function stop()

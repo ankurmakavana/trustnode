@@ -143,4 +143,43 @@ class AgentServiceTakeoverTest extends TestCase
         $this->assertTrue($agent->isRunning());
         $agent->stop();
     }
+
+    public function test_true_concurrency_race_condition_using_db_cas()
+    {
+        // Switch to database driver to test CAS logic
+        config(['agent.state.driver' => 'database']);
+        
+        // Mock DB table
+        $tableMock = \Mockery::mock('Illuminate\Database\Query\Builder');
+        \Illuminate\Support\Facades\DB::shouldReceive('table')->with('agent_states')->andReturn($tableMock);
+        
+        $agentId = 'test-takeover-agent';
+        $initialState = json_encode(['state' => AgentService::S_STOPPED, 'instance_id' => null]);
+        
+        // Setup initial record read
+        $record = (object)['state' => $initialState];
+        
+        // Both A and B will read this exact same record initially
+        $tableMock->shouldReceive('where')->with('agent_id', $agentId)->andReturnSelf();
+        $tableMock->shouldReceive('first')->andReturn($record);
+        
+        // Agent A attempts CAS
+        // Agent B attempts CAS
+        // We mock update so that it succeeds for A (1 affected) and fails for B (0 affected) because state changed
+        $tableMock->shouldReceive('where')->with('state', $initialState)->andReturnSelf();
+        $tableMock->shouldReceive('update')->andReturn(1, 0); // First call returns 1, second returns 0
+        $tableMock->shouldReceive('updateOrInsert')->andReturn(true);
+        
+        $agentA = new AgentService();
+        $agentB = new AgentService();
+        
+        $agentA->start(); // Wins race
+        $agentB->start(); // Loses race
+        
+        $this->assertTrue($agentA->isRunning());
+        $this->assertTrue($agentB->isStopped());
+        
+        // Clear mock for other tests
+        \Mockery::close();
+    }
 }
