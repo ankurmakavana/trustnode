@@ -27,6 +27,7 @@ class AgentServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Contracts\AgentTaskHandlerRegistryInterface::class, function ($app) {
             $registry = new \App\Services\AgentTaskHandlerRegistry();
             $registry->register($app->make(\App\Handlers\DeepSeekHarnessTaskHandler::class));
+            $registry->register($app->make(\App\Handlers\AgentReportFindingTaskHandler::class));
             return $registry;
         });
         $this->app->singleton(\App\Contracts\AgentCapabilityRegistryInterface::class, \App\Services\AgentCapabilityRegistry::class);
