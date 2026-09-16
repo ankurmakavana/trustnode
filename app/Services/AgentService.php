@@ -419,4 +419,9 @@ class AgentService
     {
         return $this->getState() === self::S_UNHEALTHY;
     }
+
+    public function getQueue(): \App\Contracts\AgentQueueInterface
+    {
+        return app(\App\Contracts\AgentQueueInterface::class);
+    }
 }

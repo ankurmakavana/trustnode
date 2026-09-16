@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use App\Services\AgentService;
+use App\Contracts\AgentQueueInterface;
+use App\Services\AgentQueue;
 
 class AgentServiceProvider extends ServiceProvider
 {
@@ -14,7 +16,12 @@ class AgentServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        //
+        // Register the AgentService as a singleton
+        $this->app->singleton(AgentService::class, function ($app) {
+            return new AgentService();
+        });
+        
+        $this->app->bind(AgentQueueInterface::class, AgentQueue::class);
     }
 
     /**
@@ -24,11 +31,6 @@ class AgentServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        // Register the AgentService as a singleton
-        $this->app->singleton(AgentService::class, function ($app) {
-            return new AgentService();
-        });
-        
         // Start the agent when the application boots (but not during testing)
         // ONLY start if running the designated agent command
         if ($this->app->runningInConsole() && !$this->app->environment('testing')) {
