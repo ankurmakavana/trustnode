@@ -24,10 +24,15 @@ class AgentServiceProvider extends ServiceProvider
         });
         
         $this->app->singleton(\App\Contracts\AgentQueueInterface::class, \App\Services\AgentQueue::class);
-        $this->app->singleton(\App\Contracts\AgentTaskHandlerRegistryInterface::class, \App\Services\AgentTaskHandlerRegistry::class);
+        $this->app->singleton(\App\Contracts\AgentTaskHandlerRegistryInterface::class, function ($app) {
+            $registry = new \App\Services\AgentTaskHandlerRegistry();
+            $registry->register($app->make(\App\Handlers\DeepSeekHarnessTaskHandler::class));
+            return $registry;
+        });
         $this->app->singleton(\App\Contracts\AgentCapabilityRegistryInterface::class, \App\Services\AgentCapabilityRegistry::class);
         $this->app->singleton(\App\Contracts\AgentApprovalServiceInterface::class, \App\Services\AgentApprovalService::class);
         $this->app->singleton(\App\Contracts\AgentSecurityBoundaryInterface::class, \App\Services\AgentSecurityBoundary::class);
+        $this->app->singleton(\App\Contracts\DeepSeekHarnessAdapterInterface::class, \App\Services\DeepSeekHarnessAdapter::class);
     }
 
     /**
