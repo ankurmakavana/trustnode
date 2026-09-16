@@ -86,7 +86,6 @@ class AgentServiceProvider extends ServiceProvider
         // Grant read-only capabilities to the starting agent
         $registry = $this->app->make(\App\Contracts\AgentCapabilityRegistryInterface::class);
         $agentId = $agent->getAgentId();
-        $registry->addGrant($agentId, 'agent:execute_harness');
         $registry->addGrant($agentId, 'agent:report');
         $registry->addGrant($agentId, 'agent:observe');
 

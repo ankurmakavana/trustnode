@@ -29,13 +29,36 @@ class AgentObserveEnvTaskHandler implements AgentTaskHandlerInterface
 
     public function handle(array $task): void
     {
-        $target = $task['payload']['target'] ?? base_path('.env');
-        if (!file_exists($target) || !is_readable($target)) {
-            Log::info("AgentObserveEnvTaskHandler: Target file not found or not readable.", ['target' => $target]);
+        $payloadTarget = $task['payload']['target'] ?? null;
+        if ($payloadTarget !== null && !is_string($payloadTarget)) {
+            Log::warning("AgentObserveEnvTaskHandler: Malformed target payload.");
+            return;
+        }
+        
+        $expectedPath = base_path('.env');
+        
+        $target = $payloadTarget !== null ? (string)$payloadTarget : $expectedPath;
+        
+        $canonicalTarget = realpath($target);
+        
+        if ($canonicalTarget === false) {
+            Log::info("AgentObserveEnvTaskHandler: Target file does not exist or is unreachable.", ['target' => $target]);
             return;
         }
 
-        $content = file_get_contents($target);
+        $canonicalExpected = realpath($expectedPath);
+        
+        if ($canonicalExpected === false || $canonicalTarget !== $canonicalExpected) {
+            Log::warning("AgentObserveEnvTaskHandler: Invalid or unauthorized target path.", ['target' => $target]);
+            return;
+        }
+
+        if (!is_readable($canonicalTarget)) {
+            Log::info("AgentObserveEnvTaskHandler: Target file is not readable.", ['target' => $canonicalTarget]);
+            return;
+        }
+
+        $content = file_get_contents($canonicalTarget);
         if ($content === false) {
             return;
         }
