@@ -574,4 +574,284 @@ class AgentServiceTest extends TestCase
         $this->assertNotNull($afterCache, 'Heartbeat cache was not updated by schedule');
         $this->assertNotEquals($beforeCache, $afterCache, 'Heartbeat cache should change after schedule run');
     }
+    // TASK 8 — Stale heartbeat detection and health status evaluation
+
+    /**
+     * A. running + fresh heartbeat → status running
+     */
+    public function test_running_with_fresh_heartbeat_returns_running_status()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agent->heartbeat();
+
+        $health = $agent->getHealthStatus();
+
+        $this->assertEquals('running', $health['status']);
+    }
+
+    /**
+     * B. running + stale heartbeat → status unhealthy
+     */
+    public function test_running_with_stale_heartbeat_returns_unhealthy_status()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agent->heartbeat();
+
+        \Illuminate\Support\Carbon::setTestNow(now()->addSeconds(config('agent.heartbeat.timeout') + 1));
+
+        $health = $agent->getHealthStatus();
+
+        $this->assertEquals('unhealthy', $health['status']);
+    }
+
+    /**
+     * C. running + missing heartbeat → status unhealthy
+     */
+    public function test_running_with_missing_heartbeat_returns_unhealthy_status()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        Cache::forget('trustnode_agent_heartbeat');
+
+        $health = $agent->getHealthStatus();
+
+        $this->assertEquals('unhealthy', $health['status']);
+    }
+
+    /**
+     * D. starting → status starting
+     */
+    public function test_starting_state_returns_starting_status()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+
+        $health = $agent->getHealthStatus();
+
+        $this->assertEquals('starting', $health['status']);
+    }
+
+    /**
+     * E. stopping → status stopping
+     */
+    public function test_stopping_state_returns_stopping_status()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agent->setState('stopping');
+
+        $health = $agent->getHealthStatus();
+
+        $this->assertEquals('stopping', $health['status']);
+    }
+
+    /**
+     * F. stopped → status stopped
+     */
+    public function test_stopped_state_returns_stopped_status()
+    {
+        $agent = $this->app->make(AgentService::class);
+
+        $health = $agent->getHealthStatus();
+
+        $this->assertEquals('stopped', $health['status']);
+    }
+
+    /**
+     * G. fresh heartbeat → heartbeat_stale false
+     */
+    public function test_fresh_heartbeat_is_not_stale()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agent->heartbeat();
+
+        $health = $agent->getHealthStatus();
+
+        $this->assertFalse($health['heartbeat_stale']);
+    }
+
+    /**
+     * H. stale heartbeat → heartbeat_stale true
+     */
+    public function test_stale_heartbeat_is_stale()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agent->heartbeat();
+
+        \Illuminate\Support\Carbon::setTestNow(now()->addSeconds(config('agent.heartbeat.timeout') + 1));
+
+        $health = $agent->getHealthStatus();
+
+        $this->assertTrue($health['heartbeat_stale']);
+    }
+
+    /**
+     * I. health status does not mutate lifecycle state
+     */
+    public function test_health_status_does_not_mutate_lifecycle_state()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agent->heartbeat();
+
+        $stateBefore = $agent->getState();
+        $agent->getHealthStatus();
+        $stateAfter = $agent->getState();
+
+        $this->assertEquals($stateBefore, $stateAfter);
+    }
+
+    /**
+     * J. health status does not update last_heartbeat_at
+     */
+    public function test_health_status_does_not_update_last_heartbeat_at()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agent->heartbeat();
+
+        $heartbeatBefore = $agent->getLastHeartbeatAt();
+        \Illuminate\Support\Carbon::setTestNow(now()->addSeconds(10));
+        $agent->getHealthStatus();
+        $heartbeatAfter = $agent->getLastHeartbeatAt();
+
+        $this->assertEquals($heartbeatBefore, $heartbeatAfter);
+    }
+
+    /**
+     * K. health status does not create a heartbeat
+     */
+    public function test_health_status_does_not_create_heartbeat()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        Cache::forget('trustnode_agent_heartbeat');
+
+        $agent->getHealthStatus();
+
+        $this->assertNull(Cache::get('trustnode_agent_heartbeat'));
+    }
+
+    /**
+     * L. health status does not change instance_id
+     */
+    public function test_health_status_does_not_change_instance_id()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agent->heartbeat();
+
+        $idBefore = $agent->getInstanceId();
+        $agent->getHealthStatus();
+        $idAfter = $agent->getInstanceId();
+
+        $this->assertEquals($idBefore, $idAfter);
+    }
+
+    /**
+     * M. health status does not change agent_id
+     */
+    public function test_health_status_does_not_change_agent_id()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agent->heartbeat();
+
+        $idBefore = $agent->getAgentId();
+        $agent->getHealthStatus();
+        $idAfter = $agent->getAgentId();
+
+        $this->assertEquals($idBefore, $idAfter);
+    }
+
+    /**
+     * N. configured timeout is respected
+     */
+    public function test_configured_timeout_is_respected()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+        $agent->heartbeat();
+
+        $timeout = config('agent.heartbeat.timeout');
+
+        \Illuminate\Support\Carbon::setTestNow(now()->addSeconds($timeout - 1));
+        $healthFresh = $agent->getHealthStatus();
+        $this->assertFalse($healthFresh['heartbeat_stale']);
+
+        \Illuminate\Support\Carbon::setTestNow(now()->addSeconds(2));
+        $healthStale = $agent->getHealthStatus();
+        $this->assertTrue($healthStale['heartbeat_stale']);
+    }
+
+    /**
+     * O. boundary just inside timeout
+     */
+    public function test_boundary_just_inside_timeout_is_fresh()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+
+        \Illuminate\Support\Carbon::setTestNow(now());
+        $agent->heartbeat();
+
+        \Illuminate\Support\Carbon::setTestNow(now()->addSeconds(config('agent.heartbeat.timeout') - 1));
+
+        $health = $agent->getHealthStatus();
+
+        $this->assertFalse($health['heartbeat_stale']);
+        $this->assertEquals('running', $health['status']);
+    }
+
+    /**
+     * P. boundary beyond timeout
+     */
+    public function test_boundary_beyond_timeout_is_stale()
+    {
+        $agent = $this->app->make(AgentService::class);
+        $agent->setState('stopped');
+        $agent->setState('starting');
+        $agent->setState('running');
+
+        \Illuminate\Support\Carbon::setTestNow(now());
+        $agent->heartbeat();
+
+        \Illuminate\Support\Carbon::setTestNow(now()->addSeconds(config('agent.heartbeat.timeout') + 1));
+
+        $health = $agent->getHealthStatus();
+
+        $this->assertTrue($health['heartbeat_stale']);
+        $this->assertEquals('unhealthy', $health['status']);
+    }
 }
