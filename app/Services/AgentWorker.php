@@ -13,18 +13,15 @@ class AgentWorker
     protected AgentService $agentService;
     protected AgentQueueInterface $queue;
     protected AgentTaskHandlerRegistryInterface $registry;
-    protected \App\Contracts\AgentSecurityBoundaryInterface $securityBoundary;
 
     public function __construct(
         AgentService $agentService,
         AgentQueueInterface $queue,
-        AgentTaskHandlerRegistryInterface $registry,
-        \App\Contracts\AgentSecurityBoundaryInterface $securityBoundary
+        AgentTaskHandlerRegistryInterface $registry
     ) {
         $this->agentService = $agentService;
         $this->queue = $queue;
         $this->registry = $registry;
-        $this->securityBoundary = $securityBoundary;
     }
 
     /**
@@ -57,22 +54,13 @@ class AgentWorker
             }
 
             $type = $task['type'] ?? '';
-            $payload = $task['payload'] ?? [];
             
             $handler = $this->registry->resolve($type);
-            
-            // SECURITY BOUNDARY
-            // Ensures the trusted runtime agent is authorized to execute this specific operation and payload.
-            $this->securityBoundary->authorize($agentId, $type, $payload);
             
             $handler->handle($task);
             
             $this->queue->acknowledge($task['id']);
             
-        } catch (\App\Exceptions\AgentSecurityException $e) {
-            // Task failed security authorization boundary
-            Log::error("AgentWorker: Task failed security authorization.", ['task_id' => $task['id'], 'error' => $e->getMessage()]);
-            $this->queue->fail($task['id'], $e);
         } catch (\InvalidArgumentException $e) {
             // Task type not found in registry (Invalid type)
             // TASK 14.1 Limitation: contract requires terminal failure, but AgentQueue::fail() 

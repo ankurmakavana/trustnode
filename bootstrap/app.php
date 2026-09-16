@@ -24,7 +24,6 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withProviders([
         AuthServiceProvider::class,
-        App\Providers\AgentServiceProvider::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([

@@ -8,7 +8,6 @@ use App\Services\AgentService;
 use App\Contracts\AgentQueueInterface;
 use App\Contracts\AgentTaskHandlerRegistryInterface;
 use App\Contracts\AgentTaskHandlerInterface;
-use App\Contracts\AgentSecurityBoundaryInterface;
 
 class AgentWorkerTest extends TestCase
 {
@@ -25,15 +24,13 @@ class AgentWorkerTest extends TestCase
         $this->agentService = $this->createMock(AgentService::class);
         $this->queue = $this->createMock(AgentQueueInterface::class);
         $this->registry = $this->createMock(AgentTaskHandlerRegistryInterface::class);
-        $this->boundary = $this->createMock(AgentSecurityBoundaryInterface::class);
 
         $this->agentService->method('getAgentId')->willReturn('agent-123');
 
         $this->worker = new AgentWorker(
             $this->agentService,
             $this->queue,
-            $this->registry,
-            $this->boundary
+            $this->registry
         );
     }
 

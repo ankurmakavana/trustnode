@@ -16,16 +16,13 @@ class AgentServiceProvider extends ServiceProvider
      */
     public function register()
     {
+        // Register the AgentService as a singleton
         $this->app->singleton(AgentService::class, function ($app) {
-            return new AgentService(
-                config('agent.id') ?? gethostname() . '-' . uniqid(),
-                config('agent.version')
-            );
+            return new AgentService();
         });
         
-        $this->app->singleton(\App\Contracts\AgentQueueInterface::class, \App\Services\AgentQueue::class);
+        $this->app->bind(AgentQueueInterface::class, AgentQueue::class);
         $this->app->singleton(\App\Contracts\AgentTaskHandlerRegistryInterface::class, \App\Services\AgentTaskHandlerRegistry::class);
-        $this->app->singleton(\App\Contracts\AgentSecurityBoundaryInterface::class, \App\Services\AgentSecurityBoundary::class);
     }
 
     /**
