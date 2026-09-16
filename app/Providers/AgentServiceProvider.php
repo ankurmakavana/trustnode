@@ -25,6 +25,7 @@ class AgentServiceProvider extends ServiceProvider
         
         $this->app->singleton(\App\Contracts\AgentQueueInterface::class, \App\Services\AgentQueue::class);
         $this->app->singleton(\App\Contracts\AgentTaskHandlerRegistryInterface::class, \App\Services\AgentTaskHandlerRegistry::class);
+        $this->app->singleton(\App\Contracts\AgentCapabilityRegistryInterface::class, \App\Services\AgentCapabilityRegistry::class);
         $this->app->singleton(\App\Contracts\AgentSecurityBoundaryInterface::class, \App\Services\AgentSecurityBoundary::class);
     }
 

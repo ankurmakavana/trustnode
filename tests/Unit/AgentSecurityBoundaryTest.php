@@ -17,12 +17,41 @@ class AgentSecurityBoundaryTest extends TestCase
 {
     public function test_security_boundary_denies_execution_by_default()
     {
-        $boundary = new AgentSecurityBoundary();
+        $registry = new \App\Services\AgentCapabilityRegistry();
+        $boundary = new AgentSecurityBoundary($registry);
         
         $this->expectException(AgentSecurityException::class);
-        $this->expectExceptionMessage("Execution denied: operation [test.op] is not authorized.");
+        $this->expectExceptionMessage("Execution denied: operation [test.op] is unknown or has no required capability.");
         
         $boundary->authorize('agent-123', 'test.op', ['arg1' => 'val1']);
+    }
+
+    public function test_security_boundary_enforces_scope()
+    {
+        $registry = new \App\Services\AgentCapabilityRegistry();
+        $registry->registerOperation('test.op', 'agent.test');
+        $registry->addGrant('agent-123', 'agent.test', ['path' => '/approved']);
+        
+        $boundary = new AgentSecurityBoundary($registry);
+        
+        // Should throw because argument doesn't match scope
+        $this->expectException(AgentSecurityException::class);
+        $this->expectExceptionMessage("Execution denied: out of scope or constraint mismatch for capability [agent.test].");
+        
+        $boundary->authorize('agent-123', 'test.op', ['path' => '/unapproved']);
+    }
+
+    public function test_security_boundary_allows_in_scope()
+    {
+        $registry = new \App\Services\AgentCapabilityRegistry();
+        $registry->registerOperation('test.op', 'agent.test');
+        $registry->addGrant('agent-123', 'agent.test', ['path' => '/approved']);
+        
+        $boundary = new AgentSecurityBoundary($registry);
+        
+        // Should pass
+        $boundary->authorize('agent-123', 'test.op', ['path' => '/approved']);
+        $this->assertTrue(true);
     }
 
     public function test_worker_fails_task_if_security_boundary_denies()

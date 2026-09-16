@@ -32,7 +32,6 @@ class AgentGracefulShutdownTest extends TestCase
         
         $boundary = $this->createMock(\App\Contracts\AgentSecurityBoundaryInterface::class);
         // Allow all operations for this test
-        $boundary->method('authorize')->willReturn(null);
         $this->app->instance(\App\Contracts\AgentSecurityBoundaryInterface::class, $boundary);
         
         $this->worker = app(AgentWorker::class);
