@@ -105,23 +105,195 @@ class AgentQueueTest extends TestCase
         $this->queue->acknowledge($taskId); // Still pending
     }
 
-    public function test_fail_changes_processing_to_failed_and_increments_attempts()
+    public function test_fail_transitions_to_pending_and_sets_backoff()
     {
         $taskId = $this->queue->enqueue($this->agentId, 't', []);
         $this->queue->dequeue($this->agentId);
         
+        $now = \Carbon\Carbon::now();
+        \Carbon\Carbon::setTestNow($now);
+
+        $this->queue->fail($taskId);
+        
+        $this->assertDatabaseHas('agent_tasks', [
+            'id' => $taskId,
+            'status' => AgentQueue::STATUS_PENDING,
+            'attempts' => 1,
+            'available_at' => $now->copy()->addSeconds(5)->format('Y-m-d H:i:s')
+        ]);
+        
+        \Carbon\Carbon::setTestNow();
+    }
+
+    public function test_fail_applies_exponential_backoff_across_retries()
+    {
+        config(['agent.queue.retry.base_delay' => 5]);
+        config(['agent.queue.retry.multiplier' => 2]);
+        config(['agent.queue.retry.max_attempts' => 5]);
+        
+        $taskId = $this->queue->enqueue($this->agentId, 't', []);
+        
+        $now = \Carbon\Carbon::now();
+        \Carbon\Carbon::setTestNow($now);
+        
+        $delays = [5, 10, 20, 40];
+
+        foreach ($delays as $delay) {
+            $this->queue->dequeue($this->agentId);
+            $this->queue->fail($taskId);
+            
+            $this->assertDatabaseHas('agent_tasks', [
+                'id' => $taskId,
+                'status' => AgentQueue::STATUS_PENDING,
+                'available_at' => $now->copy()->addSeconds($delay)->format('Y-m-d H:i:s')
+            ]);
+            
+            $now->addSeconds($delay);
+            \Carbon\Carbon::setTestNow($now);
+        }
+        
+        \Carbon\Carbon::setTestNow();
+    }
+
+    public function test_fail_transitions_to_failed_at_max_attempts()
+    {
+        config(['agent.queue.retry.max_attempts' => 2]);
+        
+        $taskId = $this->queue->enqueue($this->agentId, 't', []);
+        
+        // Attempt 1 -> fails -> retry
+        $this->queue->dequeue($this->agentId);
+        $this->queue->fail($taskId);
+        
+        // Attempt 2 -> fails -> terminal
+        \Carbon\Carbon::setTestNow(now()->addDays(1)); // skip backoff
+        $this->queue->dequeue($this->agentId);
         $this->queue->fail($taskId);
         
         $this->assertDatabaseHas('agent_tasks', [
             'id' => $taskId,
             'status' => AgentQueue::STATUS_FAILED,
-            'attempts' => 1
+            'attempts' => 2,
         ]);
         
-        // Failed tasks DO NOT count towards size (they are no longer pending or processing)
-        // Wait, does the size() include failed? 
-        // The implementation counts PENDING and PROCESSING. So it will be 0.
+        \Carbon\Carbon::setTestNow();
+    }
+
+    public function test_retry_does_not_create_new_queue_task()
+    {
+        $taskId = $this->queue->enqueue($this->agentId, 't', []);
+        $this->queue->dequeue($this->agentId);
+        
+        $this->assertEquals(1, DB::table('agent_tasks')->count());
+        $this->queue->fail($taskId);
+        $this->assertEquals(1, DB::table('agent_tasks')->count());
+        
+        $task = DB::table('agent_tasks')->first();
+        $this->assertEquals($taskId, $task->id);
+    }
+
+    public function test_retry_preserves_active_capacity_slot()
+    {
+        $taskId = $this->queue->enqueue($this->agentId, 't', []);
+        $this->queue->dequeue($this->agentId);
+        
+        $this->assertEquals(1, $this->queue->size($this->agentId));
+        $this->queue->fail($taskId);
+        $this->assertEquals(1, $this->queue->size($this->agentId));
+    }
+
+    public function test_terminal_failure_releases_capacity_slot()
+    {
+        config(['agent.queue.retry.max_attempts' => 1]);
+        $taskId = $this->queue->enqueue($this->agentId, 't', []);
+        $this->queue->dequeue($this->agentId);
+        
+        $this->assertEquals(1, $this->queue->size($this->agentId));
+        $this->queue->fail($taskId);
         $this->assertEquals(0, $this->queue->size($this->agentId));
+    }
+
+    public function test_dequeue_ignores_task_until_available_at()
+    {
+        $taskId = $this->queue->enqueue($this->agentId, 't', []);
+        $this->queue->dequeue($this->agentId);
+        
+        \Carbon\Carbon::setTestNow('2023-01-01 10:00:00');
+        $this->queue->fail($taskId);
+        
+        \Carbon\Carbon::setTestNow('2023-01-01 10:00:01'); // Backoff is 5
+        $this->assertNull($this->queue->dequeue($this->agentId));
+        
+        \Carbon\Carbon::setTestNow();
+    }
+
+    public function test_dequeue_accepts_retry_after_available_at()
+    {
+        $taskId = $this->queue->enqueue($this->agentId, 't', []);
+        $this->queue->dequeue($this->agentId);
+        
+        \Carbon\Carbon::setTestNow('2023-01-01 10:00:00');
+        $this->queue->fail($taskId);
+        
+        \Carbon\Carbon::setTestNow('2023-01-01 10:00:05');
+        $task = $this->queue->dequeue($this->agentId);
+        $this->assertNotNull($task);
+        $this->assertEquals($taskId, $task['id']);
+        
+        \Carbon\Carbon::setTestNow();
+    }
+
+    public function test_repeated_fail_on_non_processing_task_is_idempotent_or_rejected()
+    {
+        $taskId = $this->queue->enqueue($this->agentId, 't', []);
+        $this->queue->dequeue($this->agentId);
+        $this->queue->fail($taskId);
+        
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('It is either missing or not processing');
+        $this->queue->fail($taskId);
+    }
+
+    public function test_concurrent_fail_cannot_double_increment_attempts()
+    {
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            $this->markTestSkipped('MySQL concurrency infrastructure is unavailable.');
+        }
+
+        $taskId = $this->queue->enqueue($this->agentId, 't', []);
+        $this->queue->dequeue($this->agentId);
+
+        try {
+            $pdo1 = DB::connection()->getPdo();
+            $pdo2 = new \PDO(
+                config('database.connections.mysql.driver') . ':host=' . config('database.connections.mysql.host') . ';dbname=' . config('database.connections.mysql.database'),
+                config('database.connections.mysql.username'),
+                config('database.connections.mysql.password')
+            );
+            $pdo2->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        } catch (\Exception $e) {
+            $this->markTestSkipped('Could not establish secondary MySQL connection for concurrency test.');
+        }
+
+        $pdo1->beginTransaction();
+        $stmt1 = $pdo1->prepare("SELECT * FROM agent_tasks WHERE id = :id FOR UPDATE");
+        $stmt1->execute(['id' => $taskId]);
+
+        $pdo2->exec("SET SESSION innodb_lock_wait_timeout = 1");
+        
+        $exceptionCaught = false;
+        try {
+            $stmt2 = $pdo2->prepare("SELECT * FROM agent_tasks WHERE id = :id FOR UPDATE");
+            $stmt2->execute(['id' => $taskId]);
+        } catch (\PDOException $e) {
+            if (strpos($e->getMessage(), '1205') !== false) {
+                $exceptionCaught = true;
+            }
+        }
+        
+        $this->assertTrue($exceptionCaught, 'T2 did not block on T1s row lock.');
+
+        $pdo1->commit();
     }
 
     public function test_queue_full_throws_exception_and_completed_tasks_do_not_consume_capacity()

@@ -118,18 +118,53 @@ class AgentQueue implements AgentQueueInterface
 
     public function fail(string $taskId, ?Throwable $exception = null): void
     {
-        $affected = DB::table($this->table)
-            ->where('id', $taskId)
-            ->where('status', self::STATUS_PROCESSING)
-            ->update([
-                'status' => self::STATUS_FAILED,
-                'attempts' => DB::raw('attempts + 1'),
-                'updated_at' => now(),
-            ]);
+        DB::transaction(function () use ($taskId) {
+            $task = DB::table($this->table)
+                ->where('id', $taskId)
+                ->lockForUpdate()
+                ->first();
 
-        if ($affected === 0) {
-            throw new LogicException("Cannot fail task [{$taskId}]. It is either missing or not processing.");
-        }
+            if (!$task || $task->status !== self::STATUS_PROCESSING) {
+                throw new LogicException("Cannot fail task [{$taskId}]. It is either missing or not processing.");
+            }
+
+            $maxAttempts = config('agent.queue.retry.max_attempts', 5);
+            $baseDelay = config('agent.queue.retry.base_delay', 5);
+            $multiplier = config('agent.queue.retry.multiplier', 2);
+
+            if (!is_numeric($maxAttempts) || $maxAttempts < 1) {
+                throw new LogicException('agent.queue.retry.max_attempts must be a positive integer.');
+            }
+            if (!is_numeric($baseDelay) || $baseDelay < 0) {
+                throw new LogicException('agent.queue.retry.base_delay must be non-negative.');
+            }
+            if (!is_numeric($multiplier) || $multiplier < 1) {
+                throw new LogicException('agent.queue.retry.multiplier must be >= 1.');
+            }
+
+            $newAttempts = $task->attempts + 1;
+
+            if ($newAttempts < $maxAttempts) {
+                $delaySeconds = $baseDelay * pow($multiplier, $newAttempts - 1);
+                
+                DB::table($this->table)
+                    ->where('id', $taskId)
+                    ->update([
+                        'status' => self::STATUS_PENDING,
+                        'attempts' => $newAttempts,
+                        'available_at' => now()->addSeconds($delaySeconds),
+                        'updated_at' => now(),
+                    ]);
+            } else {
+                DB::table($this->table)
+                    ->where('id', $taskId)
+                    ->update([
+                        'status' => self::STATUS_FAILED,
+                        'attempts' => $newAttempts,
+                        'updated_at' => now(),
+                    ]);
+            }
+        });
     }
 
     public function size(string $agentId): int
