@@ -44,8 +44,10 @@ class AgentResourceGuardrailTest extends TestCase
 
         $registry = $this->createMock(AgentTaskHandlerRegistryInterface::class);
         $registry->method('resolve')->willReturn($handler);
+        
+        $boundary = $this->createMock(\App\Contracts\AgentSecurityBoundaryInterface::class);
 
-        $worker = new AgentWorker($agentService, $queue, $registry);
+        $worker = new AgentWorker($agentService, $queue, $registry, $boundary);
 
         // Execute task
         $worker->runOnce();
