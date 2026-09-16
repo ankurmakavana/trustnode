@@ -7,6 +7,7 @@ use App\Contracts\AgentCapabilityRegistryInterface;
 class AgentCapabilityRegistry implements AgentCapabilityRegistryInterface
 {
     protected array $operationMap = [];
+    protected array $capabilityModes = [];
     protected array $grants = [];
     protected array $revoked = [];
 
@@ -18,6 +19,16 @@ class AgentCapabilityRegistry implements AgentCapabilityRegistryInterface
     public function getRequiredCapability(string $operation): ?string
     {
         return $this->operationMap[$operation] ?? null;
+    }
+
+    public function setCapabilityMode(string $capability, string $mode): void
+    {
+        $this->capabilityModes[$capability] = $mode;
+    }
+
+    public function getCapabilityMode(string $capability): string
+    {
+        return $this->capabilityModes[$capability] ?? 'UNKNOWN';
     }
 
     public function addGrant(string $agentId, string $capability, array $scope = [], array $constraints = []): void

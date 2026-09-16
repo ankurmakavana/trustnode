@@ -27,6 +27,17 @@ class AgentSecurityBoundary implements AgentSecurityBoundaryInterface
             throw new AgentSecurityException("Execution denied: operation [{$operation}] is unknown or has no required capability.");
         }
 
+        $mode = $this->registry->getCapabilityMode($capability);
+        if ($mode !== \App\Contracts\AgentCapabilityRegistryInterface::MODE_READ_ONLY) {
+            Log::warning('AgentSecurityBoundary: Denied operation. Capability is not read-only.', [
+                'agent_id' => $agentId,
+                'operation' => $operation,
+                'capability' => $capability,
+                'mode' => $mode
+            ]);
+            throw new AgentSecurityException("Execution denied: capability [{$capability}] is not explicitly classified as READ_ONLY.");
+        }
+
         $approvalService = app(\App\Contracts\AgentApprovalServiceInterface::class);
         $approvalService->authorizeRequest($agentId, $operation, $capability, $arguments);
 

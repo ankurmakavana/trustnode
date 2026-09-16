@@ -4,6 +4,8 @@ namespace App\Contracts;
 
 interface AgentCapabilityRegistryInterface
 {
+    public const MODE_READ_ONLY = 'READ_ONLY';
+
     /**
      * Map an operation to a required capability.
      */
@@ -14,6 +16,16 @@ interface AgentCapabilityRegistryInterface
      */
     public function getRequiredCapability(string $operation): ?string;
     
+    /**
+     * Set the operating mode for a capability.
+     */
+    public function setCapabilityMode(string $capability, string $mode): void;
+
+    /**
+     * Get the operating mode for a capability.
+     */
+    public function getCapabilityMode(string $capability): string;
+
     /**
      * Grant a capability to an agent.
      */

@@ -33,6 +33,7 @@ class AgentSecurityBoundaryTest extends TestCase
     {
         $registry = new \App\Services\AgentCapabilityRegistry();
         $registry->registerOperation('test.op', 'agent.test');
+        $registry->setCapabilityMode('agent.test', \App\Contracts\AgentCapabilityRegistryInterface::MODE_READ_ONLY);
         $registry->addGrant('agent-123', 'agent.test', ['path' => '/approved']);
         
         $approvalService = $this->createMock(\App\Contracts\AgentApprovalServiceInterface::class);
@@ -52,6 +53,7 @@ class AgentSecurityBoundaryTest extends TestCase
     {
         $registry = new \App\Services\AgentCapabilityRegistry();
         $registry->registerOperation('test.op', 'agent.test');
+        $registry->setCapabilityMode('agent.test', \App\Contracts\AgentCapabilityRegistryInterface::MODE_READ_ONLY);
         $registry->addGrant('agent-123', 'agent.test', ['path' => '/approved']);
         
         $approvalService = $this->createMock(\App\Contracts\AgentApprovalServiceInterface::class);
@@ -63,6 +65,38 @@ class AgentSecurityBoundaryTest extends TestCase
         // Should pass
         $boundary->authorize('agent-123', 'test.op', ['path' => '/approved']);
         $this->assertTrue(true);
+    }
+
+    public function test_security_boundary_denies_non_read_only_operations()
+    {
+        $registry = new \App\Services\AgentCapabilityRegistry();
+        $boundary = new AgentSecurityBoundary($registry);
+
+        $deniedModes = [
+            'WRITE',
+            'EXECUTE',
+            'DELETE',
+            'INSTALL',
+            'PROCESS',
+            'GIT',
+            'NETWORK',
+            'CREDENTIAL',
+            'REMEDIATION',
+            'UNKNOWN'
+        ];
+
+        foreach ($deniedModes as $mode) {
+            $registry->registerOperation('test.' . strtolower($mode), 'agent.' . strtolower($mode));
+            $registry->setCapabilityMode('agent.' . strtolower($mode), $mode);
+            $registry->addGrant('agent-123', 'agent.' . strtolower($mode), []);
+
+            try {
+                $boundary->authorize('agent-123', 'test.' . strtolower($mode), []);
+                $this->fail("Boundary failed to deny operation with mode [{$mode}]");
+            } catch (AgentSecurityException $e) {
+                $this->assertStringContainsString("is not explicitly classified as READ_ONLY", $e->getMessage());
+            }
+        }
     }
 
     public function test_worker_fails_task_if_security_boundary_denies()
