@@ -311,18 +311,44 @@ class AgentService
         $agentId = $this->getAgentId();
 
         if ($driver === 'database') {
-            DB::table($table)->updateOrInsert(
-                ['agent_id' => $agentId],
-                [
+            $record = DB::table($table)->where('agent_id', $agentId)->first();
+            
+            if ($record) {
+                $currentState = json_decode($record->state, true) ?? [];
+                if (isset($currentState['instance_id']) && $currentState['instance_id'] !== $this->instanceId && $currentState['instance_id'] !== null) {
+                    Log::warning('Refusing to persist state: instance usurped by another runtime.', [
+                        'our_id' => $this->instanceId,
+                        'db_id' => $currentState['instance_id']
+                    ]);
+                    return;
+                }
+                
+                DB::table($table)
+                    ->where('agent_id', $agentId)
+                    ->where('state', $record->state)
+                    ->update([
+                        'state' => json_encode($state),
+                        'updated_at' => now(),
+                    ]);
+            } else {
+                DB::table($table)->insert([
+                    'agent_id' => $agentId,
                     'state' => json_encode($state),
                     'updated_at' => now(),
-                ]
-            );
+                ]);
+            }
         } elseif ($driver === 'cache') {
-            Cache::forever(
-                $this->getStateCacheKey($agentId),
-                $state
-            );
+            $lockKey = "trustnode_agent_persist_lock_{$agentId}";
+            if (Cache::add($lockKey, $this->instanceId, 5)) {
+                $cached = Cache::get($this->getStateCacheKey($agentId));
+                if ($cached && isset($cached['instance_id']) && $cached['instance_id'] !== $this->instanceId && $cached['instance_id'] !== null) {
+                    Log::warning('Refusing to persist state: instance usurped by another runtime (cache).');
+                    Cache::forget($lockKey);
+                    return;
+                }
+                Cache::forever($this->getStateCacheKey($agentId), $state);
+                Cache::forget($lockKey);
+            }
         }
     }
 

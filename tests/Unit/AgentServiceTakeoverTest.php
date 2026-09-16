@@ -94,8 +94,13 @@ class AgentServiceTakeoverTest extends TestCase
         // A tries to heartbeat
         $agentA->heartbeat();
 
-        // A should detect usurpation and stop itself
+        // A should detect usurpation and stop itself locally
         $this->assertTrue($agentA->isStopped());
+        
+        // But A MUST NOT have overwritten B's state in the cache
+        $cachedState = Cache::get('trustnode_agent_state_test-takeover-agent');
+        $this->assertEquals($agentB->getInstanceId(), $cachedState['instance_id'], 'Stale agent overwrote the active agent state!');
+        $this->assertEquals(AgentService::S_RUNNING, $cachedState['state']);
     }
 
     public function test_duplicate_startup_does_not_create_two_authoritative_runtimes()
