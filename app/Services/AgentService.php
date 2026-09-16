@@ -23,7 +23,7 @@ class AgentService
     protected $allowedTransitions = [
         self::S_STOPPED => [self::S_STARTING],
         self::S_STARTING => [self::S_RUNNING],
-        self::S_RUNNING => [self::S_STOPPING],
+        self::S_RUNNING => [self::S_STOPPING, self::S_STARTING, self::S_STOPPED],
         self::S_STOPPING => [self::S_STOPPED],
     ];
 
@@ -63,8 +63,15 @@ class AgentService
     public function start()
     {
         if ($this->isRunning()) {
-            Log::warning('Agent already running, skipping start');
-            return;
+            if (!$this->isHeartbeatStale()) {
+                Log::warning('Active Agent already running. Aborting start.');
+                $currentState = $this->loadState();
+                if (isset($currentState['instance_id']) && $currentState['instance_id'] !== $this->instanceId) {
+                    $this->state['state'] = self::S_STOPPED;
+                }
+                return;
+            }
+            Log::warning('Previous Agent crashed (stale heartbeat). Taking over.');
         }
 
         Log::info('Starting TrustNode Agent');
@@ -114,8 +121,19 @@ class AgentService
             return;
         }
         
+        $currentState = $this->loadState();
+        if (isset($currentState['instance_id']) && $currentState['instance_id'] !== $this->instanceId) {
+            Log::warning('Agent instance usurped by another runtime. Stopping heartbeat.', [
+                'agent_id' => $this->getAgentId(),
+                'this_instance' => $this->instanceId,
+                'active_instance' => $currentState['instance_id']
+            ]);
+            $this->setState(self::S_STOPPED);
+            return;
+        }
+        
         Cache::put(
-            self::C_HEARTBEAT,
+            $this->getHeartbeatCacheKey(),
             now()->timestamp,
             $this->config['heartbeat']['timeout']
         );
@@ -125,7 +143,7 @@ class AgentService
 
     public function isHeartbeatStale()
     {
-        $lastHeartbeat = Cache::get(self::C_HEARTBEAT);
+        $lastHeartbeat = Cache::get($this->getHeartbeatCacheKey());
         
         if (!$lastHeartbeat) {
             return true;
@@ -200,7 +218,7 @@ class AgentService
 
     protected function persistState($state)
     {
-        unset($state['instance_id']);
+        $state['instance_id'] = $this->instanceId;
 
         $driver = $this->config['state']['driver'];
         $table = $this->config['state']['table'];
@@ -225,6 +243,11 @@ class AgentService
     protected function getStateCacheKey($agentId)
     {
         return "trustnode_agent_state_{$agentId}";
+    }
+
+    protected function getHeartbeatCacheKey()
+    {
+        return self::C_HEARTBEAT . '_' . $this->getAgentId();
     }
 // Agent ID methods
     public function getAgentId()

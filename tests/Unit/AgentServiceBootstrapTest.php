@@ -84,7 +84,7 @@ class AgentServiceBootstrapTest extends TestCase
         $agent->start();
 
         $this->assertNotNull($agent->getLastHeartbeatAt());
-        $this->assertNotNull(Cache::get('trustnode_agent_heartbeat'));
+        $this->assertNotNull(Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId()));
     }
 
     /**

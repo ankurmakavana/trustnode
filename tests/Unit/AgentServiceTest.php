@@ -138,14 +138,14 @@ class AgentServiceTest extends TestCase
         $agent->setState('running');
     }
 
-    public function test_running_to_stopped_rejected()
+    public function test_running_to_stopped_allowed()
     {
         $agent = new AgentService();
         $agent->setState('stopped');
         $agent->setState('starting');
         $agent->setState('running');
-        $this->expectException(\LogicException::class);
         $agent->setState('stopped');
+        $this->assertEquals('stopped', $agent->getState());
     }
 
     public function test_starting_to_stopped_rejected()
@@ -387,7 +387,7 @@ class AgentServiceTest extends TestCase
 
         $agent->heartbeat();
 
-        $cached = Cache::get('trustnode_agent_heartbeat');
+        $cached = Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId());
         $this->assertNotNull($cached);
         $this->assertIsInt($cached);
         $this->assertGreaterThan(0, $cached);
@@ -448,7 +448,7 @@ class AgentServiceTest extends TestCase
         $agent->heartbeat();
 
         $this->assertNull($agent->getLastHeartbeatAt());
-        $this->assertNull(Cache::get('trustnode_agent_heartbeat'));
+        $this->assertNull(Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId()));
         $this->assertTrue($agent->isStopped());
     }
 
@@ -464,7 +464,7 @@ class AgentServiceTest extends TestCase
 
         $this->assertTrue($agent->isStopping());
         $this->assertNull($agent->getLastHeartbeatAt());
-        $this->assertNull(Cache::get('trustnode_agent_heartbeat'));
+        $this->assertNull(Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId()));
     }
 
     public function test_heartbeat_on_starting_agent_does_not_mark_running()
@@ -478,7 +478,7 @@ class AgentServiceTest extends TestCase
         $this->assertTrue($agent->isStarting());
         $this->assertFalse($agent->isRunning());
         $this->assertNull($agent->getLastHeartbeatAt());
-        $this->assertNull(Cache::get('trustnode_agent_heartbeat'));
+        $this->assertNull(Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId()));
     }
 
     public function test_repeated_heartbeat_updates_latest_timestamp_and_cache()
@@ -491,12 +491,12 @@ class AgentServiceTest extends TestCase
         \Illuminate\Support\Carbon::setTestNow(now());
         $agent->heartbeat();
         $firstHeartbeat = $agent->getLastHeartbeatAt();
-        $firstCache = Cache::get('trustnode_agent_heartbeat');
+        $firstCache = Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId());
 
         \Illuminate\Support\Carbon::setTestNow(now()->addSecond());
         $agent->heartbeat();
         $secondHeartbeat = $agent->getLastHeartbeatAt();
-        $secondCache = Cache::get('trustnode_agent_heartbeat');
+        $secondCache = Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId());
 
         $this->assertNotNull($firstHeartbeat);
         $this->assertNotNull($secondHeartbeat);
@@ -513,7 +513,7 @@ class AgentServiceTest extends TestCase
 
         $agent->heartbeat();
 
-        $cached = Cache::get('trustnode_agent_heartbeat');
+        $cached = Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId());
         $this->assertNotNull($cached);
 
         $timeout = config('agent.heartbeat.timeout');
@@ -551,7 +551,7 @@ class AgentServiceTest extends TestCase
 
         // Ensure agent is in running state and heartbeat has been set
         $agent->heartbeat();
-        $beforeCache = Cache::get('trustnode_agent_heartbeat');
+        $beforeCache = Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId());
 
         // Advance time for distinct timestamp
         \Illuminate\Support\Carbon::setTestNow(now()->addSecond());
@@ -570,7 +570,7 @@ class AgentServiceTest extends TestCase
         $this->assertTrue($ran, 'Heartbeat schedule event did not run');
 
         // The schedule callback should have updated the cache
-        $afterCache = Cache::get('trustnode_agent_heartbeat');
+        $afterCache = Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId());
         $this->assertNotNull($afterCache, 'Heartbeat cache was not updated by schedule');
         $this->assertNotEquals($beforeCache, $afterCache, 'Heartbeat cache should change after schedule run');
     }
@@ -619,7 +619,7 @@ class AgentServiceTest extends TestCase
         $agent->setState('stopped');
         $agent->setState('starting');
         $agent->setState('running');
-        Cache::forget('trustnode_agent_heartbeat');
+        Cache::forget('trustnode_agent_heartbeat_' . $agent->getAgentId());
 
         $health = $agent->getHealthStatus();
 
@@ -748,11 +748,11 @@ class AgentServiceTest extends TestCase
         $agent->setState('stopped');
         $agent->setState('starting');
         $agent->setState('running');
-        Cache::forget('trustnode_agent_heartbeat');
+        Cache::forget('trustnode_agent_heartbeat_' . $agent->getAgentId());
 
         $agent->getHealthStatus();
 
-        $this->assertNull(Cache::get('trustnode_agent_heartbeat'));
+        $this->assertNull(Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId()));
     }
 
     /**

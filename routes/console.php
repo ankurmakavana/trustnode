@@ -14,3 +14,11 @@ Schedule::call(function () {
     $agent = app(AgentService::class);
     $agent->heartbeat();
 })->everyThirtySeconds()->name('agent.heartbeat');
+
+Artisan::command('agent:run', function (AgentService $agent) {
+    $this->info('TrustNode Agent is running.');
+    while ($agent->isRunning()) {
+        sleep(1);
+    }
+    $this->info('TrustNode Agent stopped.');
+})->purpose('Run the TrustNode Agent process');

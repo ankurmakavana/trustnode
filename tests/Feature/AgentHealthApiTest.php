@@ -133,11 +133,11 @@ class AgentHealthApiTest extends TestCase
         $agent = $this->app->make(AgentService::class);
         $agent->setState('starting');
         $agent->setState('running');
-        Cache::forget('trustnode_agent_heartbeat');
+        Cache::forget('trustnode_agent_heartbeat_' . $agent->getAgentId());
         
         $this->actingAs($this->developer)->getJson('/api/agent/health');
         
-        $this->assertNull(Cache::get('trustnode_agent_heartbeat'));
+        $this->assertNull(Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId()));
     }
 
     public function test_stopping_state_returns_stopping()
