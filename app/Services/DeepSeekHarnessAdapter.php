@@ -28,104 +28,137 @@ class DeepSeekHarnessAdapter implements DeepSeekHarnessAdapterInterface
         array $arguments,
         array $executionContext = []
     ): DeepSeekHarnessExecutionResultInterface {
+        $input = new \Symfony\Component\Process\InputStream();
+        $process = $this->createProcess([
+            'pnpm', 'dsh', '--profile', 'sdk-minimal'
+        ], $this->workingDir);
+
+        $process->setTimeout($this->timeout);
+        $process->setInput($input);
+
         try {
-            $payload = json_encode([
+            $process->start();
+
+            $input->write(json_encode([
                 'jsonrpc' => '2.0',
-                'id' => $executionId,
-                'method' => $operation,
+                'id' => "init_{$executionId}",
+                'method' => 'initialize',
                 'params' => [
-                    'agent_id' => $agentId,
-                    'arguments' => $arguments,
-                    'context' => $executionContext
+                    'cwd' => $this->workingDir,
+                    'provider' => $executionContext['provider'] ?? 'default',
+                    'model' => $executionContext['model'] ?? 'default'
                 ]
-            ], JSON_THROW_ON_ERROR);
+            ], JSON_THROW_ON_ERROR) . "\n");
 
-            $process = $this->createProcess([
-                'pnpm', 'dsh', '--profile', 'sdk-minimal'
-            ], $this->workingDir);
-            
-            $process->setTimeout($this->timeout);
-            $process->setInput($payload . "\n");
+            $buffer = '';
+            $state = 'wait_init';
+            $assistantMessages = [];
+            $finalError = null;
 
-            $process->run();
+            while ($process->isRunning() && $state !== 'done') {
+                $process->checkTimeout();
+                
+                $out = $process->getIncrementalOutput();
+                if ($out !== '') {
+                    $buffer .= $out;
+                    while (($pos = strpos($buffer, "\n")) !== false) {
+                        $line = substr($buffer, 0, $pos);
+                        $buffer = substr($buffer, $pos + 1);
 
-            if ($process->isSuccessful()) {
-                $output = $process->getOutput();
-                return $this->parseResponse($output, $executionId);
+                        $line = trim($line);
+                        if ($line === '') continue;
+
+                        try {
+                            $data = json_decode($line, true, 512, JSON_THROW_ON_ERROR);
+                        } catch (JsonException $e) {
+                            $finalError = "Malformed JSON-RPC response";
+                            $state = 'done';
+                            break;
+                        }
+
+                        if (isset($data['id'])) {
+                            if ($data['id'] === "init_{$executionId}") {
+                                if (isset($data['error'])) {
+                                    $finalError = is_array($data['error']) ? json_encode($data['error']) : (string)$data['error'];
+                                    $state = 'done';
+                                    break;
+                                }
+                                $input->write(json_encode([
+                                    'jsonrpc' => '2.0',
+                                    'id' => "prompt_{$executionId}",
+                                    'method' => 'session/prompt',
+                                    'params' => [
+                                        'sessionId' => $executionId,
+                                        'contentBlocks' => [
+                                            [
+                                                'type' => 'text',
+                                                'text' => json_encode([
+                                                    'operation' => $operation,
+                                                    'arguments' => $arguments,
+                                                    'context' => $executionContext
+                                                ])
+                                            ]
+                                        ]
+                                    ]
+                                ], JSON_THROW_ON_ERROR) . "\n");
+                                $state = 'wait_prompt_receipt';
+                            } elseif ($data['id'] === "prompt_{$executionId}") {
+                                if (isset($data['error'])) {
+                                    $finalError = is_array($data['error']) ? json_encode($data['error']) : (string)$data['error'];
+                                    $state = 'done';
+                                    break;
+                                }
+                                $state = 'wait_idle';
+                            }
+                        } elseif (isset($data['method'])) {
+                            if ($data['method'] === 'session.event' && isset($data['params']['event'])) {
+                                $event = $data['params']['event'];
+                                if (($event['type'] ?? '') === 'assistant/message') {
+                                    $assistantMessages[] = $event['data']['message'] ?? [];
+                                }
+                            } elseif ($data['method'] === 'session.status') {
+                                if (($data['params']['sessionId'] ?? '') === $executionId && ($data['params']['status'] ?? '') === 'idle') {
+                                    $state = 'done';
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if ($state !== 'done') {
+                    usleep(10000);
+                }
             }
 
-            return new DeepSeekHarnessExecutionResult(
-                false,
-                false,
-                $executionId,
-                [],
-                "Harness process failed: " . $process->getErrorOutput()
-            );
+            $input->write(json_encode([
+                'jsonrpc' => '2.0',
+                'id' => "shutdown_{$executionId}",
+                'method' => 'shutdown'
+            ]) . "\n");
+            $input->close();
+            $process->stop(1);
+
+            if ($state !== 'done') {
+                $finalError = $finalError ?? "Harness process terminated prematurely in state: {$state}";
+            }
+
+            if ($finalError) {
+                return new DeepSeekHarnessExecutionResult(false, false, $executionId, [], $finalError);
+            }
+
+            return new DeepSeekHarnessExecutionResult(true, false, $executionId, $assistantMessages, null);
 
         } catch (ProcessTimedOutException $e) {
-            return new DeepSeekHarnessExecutionResult(
-                false,
-                true,
-                $executionId,
-                [],
-                "Execution timed out after {$this->timeout} seconds."
-            );
-        } catch (Throwable $e) {
+            if (isset($input)) $input->close();
+            if (isset($process)) $process->stop(0);
+            return new DeepSeekHarnessExecutionResult(false, true, $executionId, [], "Execution timed out after {$this->timeout} seconds.");
+        } catch (\Throwable $e) {
+            if (isset($input)) $input->close();
+            if (isset($process) && $process->isRunning()) $process->stop(0);
             Log::error('DeepSeekHarnessAdapter: Execution error', ['error' => $e->getMessage()]);
-            return new DeepSeekHarnessExecutionResult(
-                false,
-                false,
-                $executionId,
-                [],
-                "Internal adapter error: " . $e->getMessage()
-            );
+            return new DeepSeekHarnessExecutionResult(false, false, $executionId, [], "Internal adapter error: " . $e->getMessage());
         }
-    }
-
-    protected function parseResponse(string $output, string $executionId): DeepSeekHarnessExecutionResultInterface
-    {
-        $lines = explode("\n", trim($output));
-        foreach (array_reverse($lines) as $line) {
-            $line = trim($line);
-            if (empty($line)) continue;
-
-            try {
-                $data = json_decode($line, true, 512, JSON_THROW_ON_ERROR);
-                
-                if (!isset($data['id']) || (string)$data['id'] !== $executionId) {
-                    continue;
-                }
-
-                if (isset($data['error'])) {
-                    return new DeepSeekHarnessExecutionResult(
-                        false,
-                        false,
-                        $executionId,
-                        [],
-                        is_array($data['error']) ? json_encode($data['error']) : (string)$data['error']
-                    );
-                }
-
-                return new DeepSeekHarnessExecutionResult(
-                    true,
-                    false,
-                    $executionId,
-                    $data['result'] ?? [],
-                    null
-                );
-
-            } catch (JsonException $e) {
-                continue;
-            }
-        }
-
-        return new DeepSeekHarnessExecutionResult(
-            false,
-            false,
-            $executionId,
-            [],
-            "No valid JSON-RPC response found in Harness output."
-        );
     }
 
     protected function createProcess(array $command, string $cwd): Process
