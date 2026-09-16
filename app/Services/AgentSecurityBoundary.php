@@ -27,6 +27,9 @@ class AgentSecurityBoundary implements AgentSecurityBoundaryInterface
             throw new AgentSecurityException("Execution denied: operation [{$operation}] is unknown or has no required capability.");
         }
 
+        $approvalService = app(\App\Contracts\AgentApprovalServiceInterface::class);
+        $approvalService->authorizeRequest($agentId, $operation, $capability, $arguments);
+
         $grants = $this->registry->getGrants($agentId, $capability);
         
         if (empty($grants)) {
