@@ -30,7 +30,8 @@ class DeepSeekHarnessAdapter implements DeepSeekHarnessAdapterInterface
     ): DeepSeekHarnessExecutionResultInterface {
         $input = new \Symfony\Component\Process\InputStream();
         $process = $this->createProcess([
-            'pnpm', 'dsh', '--profile', 'sdk-minimal'
+            'pnpm', '--silent', 'dsh', '--profile', 'sdk-minimal',
+            '--patch', resource_path('deepseek-harness-security.yml')
         ], $this->workingDir);
 
         $process->setTimeout($this->timeout);

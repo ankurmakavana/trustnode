@@ -1,0 +1,5 @@
+- update:
+    - id: persistent-bash
+      disabled: true
+    - id: persistent-pwsh
+      disabled: true
