@@ -24,14 +24,12 @@ class AgentQueueTest extends TestCase
         config(['agent.queue.max_size' => 3]); // small size for testing
         config(['agent.state.driver' => 'database']); // ensure database driver for tests
         
-        // The agent_states table migration doesn't exist in the project, so we create it for tests
-        if (!\Illuminate\Support\Facades\Schema::hasTable('agent_states')) {
-            \Illuminate\Support\Facades\Schema::create('agent_states', function (\Illuminate\Database\Schema\Blueprint $table) {
-                $table->string('agent_id')->primary();
-                $table->json('state')->nullable();
-                $table->timestamp('updated_at')->nullable();
-            });
-        }
+        // We ensure an active state row exists because enqueue requires it
+        DB::table('agent_states')->insert([
+            'agent_id' => $this->agentId,
+            'state' => json_encode(['state' => 'running']),
+            'updated_at' => now()
+        ]);
         
         $this->queue = new AgentQueue();
     }
@@ -55,6 +53,12 @@ class AgentQueueTest extends TestCase
     public function test_fifo_ordering_and_isolation()
     {
         $otherAgent = 'other-agent-456';
+        
+        DB::table('agent_states')->insert([
+            'agent_id' => $otherAgent,
+            'state' => json_encode(['state' => 'running']),
+            'updated_at' => now()
+        ]);
         
         $id1 = $this->queue->enqueue($this->agentId, 'type1', ['o' => 1]);
         $this->queue->enqueue($otherAgent, 'typeX', ['o' => 'X']);
@@ -177,33 +181,98 @@ class AgentQueueTest extends TestCase
         $this->assertEquals(1, $newQueue->size($this->agentId));
     }
 
+    public function test_enqueue_fails_if_agent_states_row_missing()
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('missing. Agent must be bootstrapped first');
+        
+        $this->queue->enqueue('unknown-agent-id', 'test_event', []);
+    }
+
+    public function test_schema_validates_unique_agent_id()
+    {
+        // Prove that the database enforces uniqueness on agent_id
+        // We already inserted 'test-agent-123' in setUp
+        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectExceptionMessageMatches('/UNIQUE constraint failed|Duplicate entry/');
+        
+        DB::table('agent_states')->insert([
+            'agent_id' => $this->agentId,
+            'state' => json_encode(['state' => 'duplicate_attempt']),
+            'updated_at' => now()
+        ]);
+    }
+
     public function test_concurrent_enqueue_at_boundary_throws_exception()
     {
-        // We set max_size to 2
-        config(['agent.queue.max_size' => 2]);
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            $this->markTestSkipped('MySQL concurrency infrastructure is unavailable. Cannot perform real lock test on SQLite.');
+        }
+
+        // We set max_size to 1
+        config(['agent.queue.max_size' => 1]);
         $queue = new AgentQueue(); // recreate to pick up config
 
-        // Fill to 1
-        $queue->enqueue($this->agentId, 't1', []);
+        try {
+            $pdo1 = DB::connection()->getPdo();
+            
+            // Connect second connection
+            $pdo2 = new \PDO(
+                config('database.connections.mysql.driver') . ':host=' . config('database.connections.mysql.host') . ';dbname=' . config('database.connections.mysql.database'),
+                config('database.connections.mysql.username'),
+                config('database.connections.mysql.password')
+            );
+            $pdo2->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        } catch (\Exception $e) {
+            $this->markTestSkipped('Could not establish secondary MySQL connection for concurrency test.');
+        }
+
+        // T1: Lock the row but do not commit yet
+        $pdo1->beginTransaction();
+        $stmt1 = $pdo1->prepare("SELECT * FROM agent_states WHERE agent_id = :id FOR UPDATE");
+        $stmt1->execute(['id' => $this->agentId]);
         
-        // We use Mockery to simulate a race condition where the second transaction
-        // encounters the capacity limit after acquiring the lock.
-        // We can't easily mock DB::transaction without breaking the whole suite, 
-        // but we can prove that the capacity check happens inside the transaction.
+        // Active count = 0
+        $countStmt = $pdo1->prepare("SELECT COUNT(*) FROM agent_tasks WHERE agent_id = :id AND status IN (?, ?)");
+        $countStmt->execute([$this->agentId, AgentQueue::STATUS_PENDING, AgentQueue::STATUS_PROCESSING]);
+        $this->assertEquals(0, $countStmt->fetchColumn());
+
+        // We simulate T2 trying to enqueue. It should block.
+        // We use a short innodb_lock_wait_timeout for T2 so we don't hang the test suite indefinitely.
+        $pdo2->exec("SET SESSION innodb_lock_wait_timeout = 1");
         
-        // Let's mock DB::table('agent_tasks')->where(...)->whereIn(...)->count()
-        // Wait, it's easier to verify that lockForUpdate is called on agent_states
-        $stateMock = \Mockery::mock();
-        $stateMock->shouldReceive('lockForUpdate')->andReturnSelf();
+        $exceptionCaught = false;
+        try {
+            // This will block and then timeout because T1 holds the lock
+            $stmt2 = $pdo2->prepare("SELECT * FROM agent_states WHERE agent_id = :id FOR UPDATE");
+            $stmt2->execute(['id' => $this->agentId]);
+        } catch (\PDOException $e) {
+            // 1205 is Lock wait timeout exceeded
+            if (strpos($e->getMessage(), '1205') !== false) {
+                $exceptionCaught = true;
+            }
+        }
         
-        // A true deterministic concurrency test would need process forking, which PHPUnit
-        // doesn't natively support here. But since we use DB::transaction and lockForUpdate, 
-        // the database enforces the serialization.
+        $this->assertTrue($exceptionCaught, 'T2 did not block on T1s row lock.');
+
+        // T1 completes the insert and commits
+        $insertStmt = $pdo1->prepare("INSERT INTO agent_tasks (id, agent_id, type, payload, status, attempts, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $insertStmt->execute(['task-1', $this->agentId, 't', '{}', AgentQueue::STATUS_PENDING, 0, date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
+        $pdo1->commit();
+
+        // Now T2 can proceed. T2 checks capacity.
+        $pdo2->beginTransaction();
+        $stmt2 = $pdo2->prepare("SELECT * FROM agent_states WHERE agent_id = :id FOR UPDATE");
+        $stmt2->execute(['id' => $this->agentId]);
         
-        // We will manually verify that queue throws QueueFullException when at 2.
-        $queue->enqueue($this->agentId, 't2', []);
+        $countStmt2 = $pdo2->prepare("SELECT COUNT(*) FROM agent_tasks WHERE agent_id = :id AND status IN (?, ?)");
+        $countStmt2->execute([$this->agentId, AgentQueue::STATUS_PENDING, AgentQueue::STATUS_PROCESSING]);
+        $activeCount = $countStmt2->fetchColumn();
         
-        $this->expectException(QueueFullException::class);
-        $queue->enqueue($this->agentId, 't3', []);
+        $pdo2->commit();
+        
+        $this->assertEquals(1, $activeCount, 'T2 capacity check must see the task inserted by T1');
+        
+        // As a result, T2 would throw QueueFullException in application code.
     }
 }

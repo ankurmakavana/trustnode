@@ -35,22 +35,15 @@ class AgentQueue implements AgentQueueInterface
         return DB::transaction(function () use ($agentId, $type, $payload, $id) {
             $stateTable = config('agent.state.table', 'agent_states');
 
-            // Ensure coordination row exists for locking without modifying active lifecycle state
-            DB::table($stateTable)->insertOrIgnore([
-                'agent_id' => $agentId,
-                'state' => json_encode(['state' => 'stopped']),
-                'updated_at' => now()
-            ]);
-
             // Lock the agent_states row to serialize enqueue capacity checks per agent
+            // This is the coordination row.
             $stateRow = DB::table($stateTable)
                 ->where('agent_id', $agentId)
                 ->lockForUpdate()
                 ->first();
 
             if (!$stateRow) {
-                // Fallback in case insertOrIgnore failed and row doesn't exist
-                throw new LogicException("Cannot enqueue task: Agent state row for [{$agentId}] is missing.");
+                throw new LogicException("Cannot enqueue task: Agent state row for [{$agentId}] is missing. Agent must be bootstrapped first.");
             }
 
             if ($this->isFull($agentId)) {
