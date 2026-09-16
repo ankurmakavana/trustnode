@@ -99,6 +99,24 @@ services:
     networks:
       - trustnode-network
 
+  # TrustNode Security Agent
+  agent:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    command: php artisan agent:run
+    restart: unless-stopped
+    environment:
+      DB_HOST: mysql
+      REDIS_HOST: redis
+      APP_ENV: production
+      APP_DEBUG: "false"
+    depends_on:
+      php:
+        condition: service_healthy
+    networks:
+      - trustnode-network
+
 networks:
   trustnode-network:
     name: trustnode-network
