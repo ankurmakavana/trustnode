@@ -26,6 +26,11 @@ WORKDIR /var/www/html
 # Copy custom configurations
 COPY ./docker/php/local.ini /usr/local/etc/php/conf.d/local.ini
 
+COPY ./docker/php/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
 # Expose PHP-FPM port
 EXPOSE 9000
 

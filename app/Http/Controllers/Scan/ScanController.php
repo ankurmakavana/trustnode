@@ -203,7 +203,10 @@ class ScanController extends Controller
 
         // 1. Create a LocalProject record for stable identity
         $localProject = \App\Models\LocalProject::firstOrCreate(
-            ['path' => $targetDir],
+            [
+                'path' => $targetDir,
+                'organization_id' => $request->user()->current_organization_id ?? $request->user()->teams()->first()?->organization_id
+            ],
             [
                 'name' => basename($targetDir),
                 'created_by' => $request->user()->id,
@@ -214,6 +217,7 @@ class ScanController extends Controller
         $scan = Scan::create([
             'repository_id' => null,
             'local_project_id' => $localProject->id,
+            'organization_id' => $request->user()->current_organization_id ?? $request->user()->teams()->first()?->organization_id,
             'name'          => 'Local Scan: ' . basename($targetDir),
             'target'        => $targetDir,
             'type'          => 'local',

@@ -22,7 +22,7 @@ class DatabaseSeeder extends Seeder
         $adminRole = Role::where('slug', UserRole::ADMINISTRATOR->value)->first();
 
         // 3. Seed default system administrator user
-        User::firstOrCreate(
+        $adminUser = User::firstOrCreate(
             ['email' => 'admin@trustnode.local'],
             [
                 'name' => 'TrustNode Admin',
@@ -34,6 +34,24 @@ class DatabaseSeeder extends Seeder
                 'email_verified_at' => now(),
             ]
         );
+
+        // 3.1. Seed Default Organization and Team
+        $org = \App\Models\Organization::firstOrCreate(
+            ['slug' => 'default-organization'],
+            ['name' => 'Default Organization']
+        );
+
+        $team = \App\Models\Team::firstOrCreate(
+            ['slug' => 'default-team'],
+            [
+                'name' => 'Default Team',
+                'organization_id' => $org->id,
+            ]
+        );
+
+        if (!$adminUser->teams()->where('team_id', $team->id)->exists()) {
+            $adminUser->teams()->attach($team->id);
+        }
 
         // 4. Seed Asset Management Data
         $this->call(AssetSeeder::class);

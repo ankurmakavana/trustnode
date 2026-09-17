@@ -174,4 +174,30 @@ class TenantIsolationTest extends TestCase
         $this->assertNull(Scan::find($this->orgBScan->id));
         $this->assertNull(Finding::find($this->orgBFinding->id));
     }
+
+    public function test_local_scan_creation_enforces_tenant_isolation()
+    {
+        // User A creates a local scan
+        \Illuminate\Support\Facades\Storage::fake('local');
+        $file = \Illuminate\Http\Testing\File::create('dummy.zip', 10);
+        
+        $response = $this->actingAs($this->orgAUser)->postJson('/api/scans/local', [
+            'target' => '/tmp/dummy_target',
+            'archive' => $file,
+        ]);
+
+        $response->assertStatus(201);
+        $scanId = $response->json('id');
+
+        $this->assertNotNull($scanId);
+
+        // User A can see it
+        $this->assertNotNull(Scan::find($scanId));
+        $response->assertJsonPath('status', 'queued');
+
+        // User B cannot see it
+        $this->actingAs($this->orgBUser);
+        $this->assertNull(Scan::find($scanId));
+        $this->getJson("/api/scans/{$scanId}")->assertStatus(404);
+    }
 }
