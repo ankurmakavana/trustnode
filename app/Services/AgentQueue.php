@@ -182,6 +182,15 @@ class AgentQueue implements AgentQueueInterface
         return $this->size($agentId) >= $this->maxSize;
     }
 
+    public function hasTaskType(string $agentId, string $type): bool
+    {
+        return DB::table($this->table)
+            ->where('agent_id', $agentId)
+            ->where('type', $type)
+            ->whereIn('status', [self::STATUS_PENDING, self::STATUS_PROCESSING])
+            ->exists();
+    }
+
     protected function validatePayload(array $payload): void
     {
         $json = json_encode($payload);
@@ -220,7 +229,9 @@ class AgentQueue implements AgentQueueInterface
 
     protected function recoverAbandonedTasks(string $agentId): void
     {
-        $leaseTimeout = config('agent.guardrails.max_execution_time', 30) + 15;
+        $maxExecution = config('agent.guardrails.max_execution_time', 30);
+        $drainTimeout = config('agent.queue.drain_timeout', 15);
+        $leaseTimeout = $maxExecution + $drainTimeout;
         $staleThreshold = now()->subSeconds($leaseTimeout);
 
         $abandonedTasks = DB::table($this->table)

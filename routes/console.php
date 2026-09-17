@@ -20,9 +20,12 @@ Schedule::call(function () {
     $agent = app(AgentService::class);
     if ($agent->isRunning()) {
         try {
-            app(\App\Contracts\AgentQueueInterface::class)->enqueue($agent->getAgentId(), 'agent.observe_env', [
-                'target' => base_path('.env')
-            ]);
+            $queue = app(\App\Contracts\AgentQueueInterface::class);
+            if (!$queue->hasTaskType($agent->getAgentId(), 'agent.observe_env')) {
+                $queue->enqueue($agent->getAgentId(), 'agent.observe_env', [
+                    'target' => base_path('.env')
+                ]);
+            }
         } catch (\App\Exceptions\QueueFullException $e) {
             // Ignore if queue is full, bounded operation
         }
@@ -32,9 +35,10 @@ Schedule::call(function () {
 Artisan::command('agent:run', function (\App\Services\AgentService $agent, \App\Services\AgentWorker $worker) {
     // Apply memory guardrail (process-level enforcement)
     $memoryMb = config('agent.guardrails.memory_mb', 256);
-    if ($memoryMb > 0) {
-        ini_set('memory_limit', $memoryMb . 'M');
+    if (!is_numeric($memoryMb) || $memoryMb <= 0) {
+        $memoryMb = 256; // Fallback to safe default to prevent unbounded memory
     }
+    ini_set('memory_limit', $memoryMb . 'M');
 
     $this->info('TrustNode Agent is running.');
     

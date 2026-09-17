@@ -60,4 +60,13 @@ interface AgentQueueInterface
      * @return bool
      */
     public function isFull(string $agentId): bool;
+
+    /**
+     * Check if a task of the given type is already pending or processing.
+     *
+     * @param string $agentId
+     * @param string $type
+     * @return bool
+     */
+    public function hasTaskType(string $agentId, string $type): bool;
 }
