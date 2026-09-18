@@ -30,6 +30,7 @@ function buildUser(data) {
 export function AuthProvider({ children }) {
     const [user,    setUser]    = useState(null);
     const [loading, setLoading] = useState(true);
+    const [setupRequired, setSetupRequired] = useState(false);
 
     /**
      * Check current session by calling the public /api/auth/me endpoint.
@@ -51,8 +52,10 @@ export function AuthProvider({ children }) {
                 const json = await res.json();
                 if (json.authenticated && json.data) {
                     setUser(buildUser(json.data));
+                    setSetupRequired(false);
                 } else {
                     setUser(null);
+                    await refreshSetupStatus();
                 }
             } else {
                 setUser(null);
@@ -61,6 +64,20 @@ export function AuthProvider({ children }) {
             setUser(null);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const refreshSetupStatus = async () => {
+        try {
+            const setupRes = await fetch('/api/setup/status', {
+                headers: { 'Accept': 'application/json' },
+            });
+            if (setupRes.ok) {
+                const setupJson = await setupRes.json();
+                setSetupRequired(!!setupJson.setup_required);
+            }
+        } catch (e) {
+            console.error('Failed to fetch setup status', e);
         }
     };
 
@@ -125,7 +142,7 @@ export function AuthProvider({ children }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout, checkAuthStatus }}>
+        <AuthContext.Provider value={{ user, loading, setupRequired, refreshSetupStatus, login, logout, checkAuthStatus }}>
             {children}
         </AuthContext.Provider>
     );

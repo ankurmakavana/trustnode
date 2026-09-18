@@ -22,6 +22,7 @@ import ScanReportPage from './pages/ScanReportPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
+import SetupPage from './pages/SetupPage';
 import FindingsPage from './pages/FindingsPage';
 import FindingFormPage from './pages/FindingFormPage';
 import FindingDetailPage from './pages/FindingDetailPage';
@@ -164,7 +165,7 @@ function IntegrationDetailRoute() {
 }
 
 function MainAppLayout() {
-    const { user, loading } = useAuth();
+    const { user, loading, setupRequired } = useAuth();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [darkMode, setDarkMode] = useState(false);
     const navigate = useNavigate();
@@ -206,6 +207,9 @@ function MainAppLayout() {
     }
 
     if (!user) {
+        if (setupRequired) {
+            return <SetupPage />;
+        }
         return <LoginPage />;
     }
 

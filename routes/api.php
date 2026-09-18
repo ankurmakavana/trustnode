@@ -59,6 +59,9 @@ Route::middleware('guest')->group(function (): void {
     Route::get('/invitation/{token}', [InvitationController::class, 'show']);
     Route::post('/invitation/{token}', [InvitationController::class, 'accept'])
         ->middleware('throttle:5,1');
+
+    Route::get('/setup/status', [\App\Http\Controllers\Auth\SetupController::class, 'status']);
+    Route::post('/setup', [\App\Http\Controllers\Auth\SetupController::class, 'setup']);
 });
 
 use App\Http\Controllers\Auth\TokenController;
