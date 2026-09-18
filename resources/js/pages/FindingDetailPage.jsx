@@ -391,7 +391,7 @@ export default function FindingDetailPage({ findingId, onBack, onEdit }) {
                             ) : (
                                 <div className="flex flex-col items-center justify-center py-6 text-slate-400">
                                     <ShieldAlert size={24} className="mb-2 opacity-50" />
-                                    <p>No remediation provided by scanner.</p>
+                                    <p>Remediation guidance is not available for this finding.</p>
                                 </div>
                             )}
                         </div>
