@@ -17,12 +17,15 @@ Schedule::call(function () {
 
 // Periodic agent security observation
 Schedule::call(function () {
-    $agent = app(AgentService::class);
-    if ($agent->isRunning()) {
+    $activeAgent = \Illuminate\Support\Facades\DB::table('agent_states')
+        ->where('state->state', 'running')
+        ->first();
+        
+    if ($activeAgent) {
         try {
             $queue = app(\App\Contracts\AgentQueueInterface::class);
-            if (!$queue->hasTaskType($agent->getAgentId(), 'agent.observe_env')) {
-                $queue->enqueue($agent->getAgentId(), 'agent.observe_env', [
+            if (!$queue->hasTaskType($activeAgent->agent_id, 'agent.observe_env')) {
+                $queue->enqueue($activeAgent->agent_id, 'agent.observe_env', [
                     'target' => base_path('.env')
                 ]);
             }
