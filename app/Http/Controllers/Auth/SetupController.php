@@ -50,16 +50,15 @@ class SetupController extends Controller
                 'email_verified_at' => now(),
             ]);
 
-            $org = Organization::create([
-                'slug' => 'default-organization',
-                'name' => 'Default Organization',
-            ]);
+            $org = Organization::firstOrCreate(
+                ['slug' => 'default-organization'],
+                ['name' => 'Default Organization']
+            );
 
-            $team = Team::create([
-                'slug' => 'default-team',
-                'name' => 'Default Team',
-                'organization_id' => $org->id,
-            ]);
+            $team = Team::firstOrCreate(
+                ['slug' => 'default-team', 'organization_id' => $org->id],
+                ['name' => 'Default Team']
+            );
 
             $user->teams()->attach($team->id);
 
