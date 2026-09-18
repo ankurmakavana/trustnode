@@ -39,6 +39,11 @@ export default function SetupPage() {
             });
 
             if (!res.ok) {
+                if (res.status === 403) {
+                    // Setup already completed by another process/user
+                    await refreshSetupStatus();
+                    return;
+                }
                 if (res.status === 422) {
                     const data = await res.json();
                     throw { validation: data.errors };
@@ -64,7 +69,7 @@ export default function SetupPage() {
 
     return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-100/50 overflow-hidden">
+            <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-100/50 overflow-hidden my-8">
                 <div className="px-8 pt-8 pb-6 flex flex-col items-center border-b border-slate-100 text-center">
                     <div className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center mb-4 shadow-sm">
                         <Shield className="text-white" size={20} strokeWidth={2.5} />
@@ -78,7 +83,7 @@ export default function SetupPage() {
                     <p className="text-xs text-slate-500 mt-1">Create your TrustNode developer account.</p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="px-8 pb-8 pt-6 flex flex-col gap-4">
+                <form onSubmit={handleSubmit} className="px-8 pb-8 pt-6 flex flex-col gap-5">
                     {generalError && (
                         <div className="flex items-start gap-2.5 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
                             <AlertCircle size={14} className="shrink-0 mt-0.5" />
@@ -88,12 +93,13 @@ export default function SetupPage() {
 
                     {/* Name */}
                     <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Name</label>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Full Name</label>
                         <div className="relative">
                             <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                             <input
                                 type="text"
                                 required
+                                autoComplete="name"
                                 value={name}
                                 onChange={e => setName(e.target.value)}
                                 placeholder="e.g. John Doe"
@@ -111,6 +117,7 @@ export default function SetupPage() {
                             <input
                                 type="email"
                                 required
+                                autoComplete="email"
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
                                 placeholder="e.g. admin@trustnode.internal"
@@ -128,6 +135,7 @@ export default function SetupPage() {
                             <input
                                 type="password"
                                 required
+                                autoComplete="new-password"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
                                 placeholder="••••••••"
@@ -145,6 +153,7 @@ export default function SetupPage() {
                             <input
                                 type="password"
                                 required
+                                autoComplete="new-password"
                                 value={passwordConfirmation}
                                 onChange={e => setPasswordConfirmation(e.target.value)}
                                 placeholder="••••••••"
@@ -175,9 +184,10 @@ export default function SetupPage() {
                 </form>
             </div>
             
-            <div className="fixed bottom-6 left-0 right-0 text-center text-[11px] text-slate-400 font-medium">
+            <div className="fixed bottom-6 left-0 right-0 text-center text-[11px] text-slate-400 font-medium hidden sm:block">
                 TrustNode <br /> Developer Security Console
             </div>
         </div>
     );
 }
+
