@@ -65,15 +65,20 @@ export default function SetupPage() {
     return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
             <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-100/50 overflow-hidden">
-                <div className="px-8 pt-8 pb-6 flex flex-col items-center border-b border-slate-100">
-                    <div className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center mb-4">
+                <div className="px-8 pt-8 pb-6 flex flex-col items-center border-b border-slate-100 text-center">
+                    <div className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center mb-4 shadow-sm">
                         <Shield className="text-white" size={20} strokeWidth={2.5} />
                     </div>
-                    <h2 className="text-lg font-bold text-slate-900">Welcome to TrustNode</h2>
-                    <p className="text-xs text-slate-500 mt-1.5 font-medium">Create your developer account</p>
+                    <h2 className="text-lg font-bold text-slate-900">TrustNode</h2>
+                    <p className="text-xs text-slate-500 mt-1.5 font-medium">Security is built from the smallest entities up.</p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-8 flex flex-col gap-4">
+                <div className="px-8 pt-6 text-center">
+                    <h3 className="text-base font-bold text-slate-800">Initial Setup</h3>
+                    <p className="text-xs text-slate-500 mt-1">Create your TrustNode developer account.</p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="px-8 pb-8 pt-6 flex flex-col gap-4">
                     {generalError && (
                         <div className="flex items-start gap-2.5 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
                             <AlertCircle size={14} className="shrink-0 mt-0.5" />
@@ -163,7 +168,15 @@ export default function SetupPage() {
                             'Create Account'
                         )}
                     </button>
+                    
+                    <p className="text-[11px] text-center text-slate-400 mt-2 font-medium">
+                        This account will be the local administrator for this TrustNode instance.
+                    </p>
                 </form>
+            </div>
+            
+            <div className="fixed bottom-6 left-0 right-0 text-center text-[11px] text-slate-400 font-medium">
+                TrustNode <br /> Developer Security Console
             </div>
         </div>
     );
