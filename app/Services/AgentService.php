@@ -139,10 +139,15 @@ class AgentService
                 }
                 
                 // Compare-and-Swap (CAS) ensures atomicity
-                $affected = DB::table($table)
-                    ->where('agent_id', $agentId)
-                    ->where('state', $record->state)
-                    ->update([
+                $query = DB::table($table)->where('agent_id', $agentId);
+                
+                if (isset($currentState['instance_id'])) {
+                    $query->where('state->instance_id', $currentState['instance_id']);
+                } else {
+                    $query->whereNull('state->instance_id');
+                }
+                
+                $affected = $query->update([
                         'state' => json_encode($targetState),
                         'updated_at' => now()
                     ]);
@@ -323,10 +328,15 @@ class AgentService
                     return;
                 }
                 
-                DB::table($table)
-                    ->where('agent_id', $agentId)
-                    ->where('state', $record->state)
-                    ->update([
+                $query = DB::table($table)->where('agent_id', $agentId);
+                
+                if (isset($currentState['instance_id'])) {
+                    $query->where('state->instance_id', $currentState['instance_id']);
+                } else {
+                    $query->whereNull('state->instance_id');
+                }
+                
+                $query->update([
                         'state' => json_encode($state),
                         'updated_at' => now(),
                     ]);

@@ -48,7 +48,8 @@ class AgentRunCommand extends Command
             }
 
             // Perform heartbeat if interval has passed
-            if (Carbon::now()->diffInSeconds($lastHeartbeat) >= $heartbeatInterval) {
+            $diff = Carbon::now()->timestamp - $lastHeartbeat->timestamp;
+            if ($diff >= $heartbeatInterval) {
                 $agentService->heartbeat();
                 $lastHeartbeat = Carbon::now();
                 

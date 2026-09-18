@@ -32,24 +32,3 @@ Schedule::call(function () {
     }
 })->everyMinute()->name('agent.observe_env');
 
-Artisan::command('agent:run', function (\App\Services\AgentService $agent, \App\Services\AgentWorker $worker) {
-    // Apply memory guardrail (process-level enforcement)
-    $memoryMb = config('agent.guardrails.memory_mb', 256);
-    if (!is_numeric($memoryMb) || $memoryMb <= 0) {
-        $memoryMb = 256; // Fallback to safe default to prevent unbounded memory
-    }
-    ini_set('memory_limit', $memoryMb . 'M');
-
-    $this->info('TrustNode Agent is running.');
-    
-    // Ensure safe polling interval (minimum 1 second to prevent CPU busy loops)
-    $pollInterval = max(1, (int) config('agent.guardrails.poll_interval', 1));
-
-    while ($agent->isRunning()) {
-        $processed = $worker->runOnce();
-        if (!$processed) {
-            sleep($pollInterval);
-        }
-    }
-    $this->info('TrustNode Agent stopped.');
-})->purpose('Run the TrustNode Agent process');
