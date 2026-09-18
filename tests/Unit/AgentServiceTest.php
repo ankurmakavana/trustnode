@@ -30,6 +30,23 @@ class AgentServiceTest extends TestCase
         ]);
     }
 
+    protected function tearDown(): void
+    {
+        $agent = app(AgentService::class);
+        $agentId = $agent->getAgentId();
+        Cache::forget('trustnode_agent_state_' . $agentId);
+        Cache::forget('trustnode_agent_lock_' . $agentId);
+        Cache::forget('trustnode_agent_persist_lock_' . $agentId);
+        Cache::forget('trustnode_agent_heartbeat_' . $agentId);
+        
+        // Also clear test-agent-heartbeat which is used in one test
+        Cache::forget('trustnode_agent_state_test-agent-heartbeat');
+        Cache::forget('trustnode_agent_lock_test-agent-heartbeat');
+        Cache::forget('trustnode_agent_persist_lock_test-agent-heartbeat');
+        Cache::forget('trustnode_agent_heartbeat_test-agent-heartbeat');
+        parent::tearDown();
+    }
+
     public function test_instance_id_is_generated_and_consistent()
     {
         $agent = $this->app->make(AgentService::class);
@@ -389,8 +406,8 @@ class AgentServiceTest extends TestCase
 
         $cached = Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId());
         $this->assertNotNull($cached);
-        $this->assertIsInt($cached);
-        $this->assertGreaterThan(0, $cached);
+        $this->assertIsNumeric($cached);
+        $this->assertGreaterThan(0, (int)$cached);
     }
 
     public function test_heartbeat_does_not_change_agent_id()

@@ -38,9 +38,28 @@ class AgentSecurityBoundary implements AgentSecurityBoundaryInterface
             throw new AgentSecurityException("Execution denied: capability [{$capability}] is not explicitly classified as READ_ONLY.");
         }
 
+        // If the capability is READ_ONLY, we first check if there is ALREADY a valid explicit grant
+        // that satisfies the scope. If so, we bypass the AgentApprovalService to prevent
+        // safe, recurring operations from creating a backlog of pending approvals.
+        $grants = $this->registry->getGrants($agentId, $capability);
+        $authorizedByExistingGrant = false;
+
+        foreach ($grants as $grant) {
+            if ($this->evaluateScopeAndConstraints($grant['scope'], $grant['constraints'], $arguments)) {
+                $authorizedByExistingGrant = true;
+                break;
+            }
+        }
+
+        if ($authorizedByExistingGrant) {
+            return;
+        }
+
+        // If no valid pre-existing grant covers this, fall back to explicit developer approval
         $approvalService = app(\App\Contracts\AgentApprovalServiceInterface::class);
         $approvalService->authorizeRequest($agentId, $operation, $capability, $arguments);
 
+        // Re-fetch grants as authorizeRequest may have added a runtime grant upon approval
         $grants = $this->registry->getGrants($agentId, $capability);
         
         if (empty($grants)) {

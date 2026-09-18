@@ -29,6 +29,15 @@ class AgentServiceTakeoverTest extends TestCase
         ]);
     }
 
+    protected function tearDown(): void
+    {
+        Cache::forget('trustnode_agent_state_test-takeover-agent');
+        Cache::forget('trustnode_agent_lock_test-takeover-agent');
+        Cache::forget('trustnode_agent_persist_lock_test-takeover-agent');
+        Cache::forget('trustnode_agent_heartbeat_test-takeover-agent');
+        parent::tearDown();
+    }
+
     public function test_startup_aborts_when_another_agent_runtime_has_fresh_heartbeat()
     {
         $agentA = new AgentService();
@@ -175,7 +184,8 @@ class AgentServiceTakeoverTest extends TestCase
         // Agent A attempts CAS
         // Agent B attempts CAS
         // We mock update so that it succeeds for A (1 affected) and fails for B (0 affected) because state changed
-        $tableMock->shouldReceive('where')->with('state', $initialState)->andReturnSelf();
+        $tableMock->shouldReceive('whereNull')->with('state->instance_id')->andReturnSelf();
+        $tableMock->shouldReceive('where')->with('state->instance_id', \Mockery::any())->andReturnSelf();
         $tableMock->shouldReceive('update')->andReturn(1, 0); // First call returns 1, second returns 0
         $tableMock->shouldReceive('updateOrInsert')->andReturn(true);
         

@@ -57,7 +57,7 @@ class AgentSecurityBoundaryTest extends TestCase
         $registry->addGrant('agent-123', 'agent.test', ['path' => '/approved']);
         
         $approvalService = $this->createMock(\App\Contracts\AgentApprovalServiceInterface::class);
-        $approvalService->expects($this->once())->method('authorizeRequest');
+        $approvalService->expects($this->never())->method('authorizeRequest');
         $this->app->instance(\App\Contracts\AgentApprovalServiceInterface::class, $approvalService);
 
         $boundary = new AgentSecurityBoundary($registry);
