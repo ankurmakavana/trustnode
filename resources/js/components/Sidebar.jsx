@@ -1,36 +1,31 @@
 import React from 'react';
 import {
-    LayoutDashboard, Server, Crosshair, ScanLine, ShieldAlert,
-    FileText, Sparkles, Users, Settings, ChevronLeft, Shield, CheckSquare, Blocks, GitBranch, Lock
+    LayoutDashboard, ScanLine, ShieldAlert,
+    FileText, Settings, ChevronLeft, Shield
 } from 'lucide-react';
 import { Avatar, Badge } from './ui/primitives';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard', group: 'main' },
-    { id: 'assets', label: 'Assets', icon: 'Server', group: 'main' },
-    { id: 'repositories', label: 'Repositories', icon: 'GitBranch', group: 'main' },
-    { id: 'targets', label: 'Targets', icon: 'Crosshair', group: 'main' },
-    { id: 'scans', label: 'Scans', icon: 'ScanLine', group: 'main' },
-    { id: 'findings', label: 'Findings', icon: 'ShieldAlert', group: 'main' },
-    { id: 'risks', label: 'Risk Register', icon: 'Shield', group: 'main' },
-    { id: 'reports', label: 'Reports', icon: 'FileText', group: 'main' },
-    { id: 'compliance', label: 'Compliance', icon: 'CheckSquare', group: 'main' },
-    { id: 'integrations', label: 'Integrations', icon: 'Blocks', group: 'main', locked: true },
-    { id: 'ai', label: 'AI Assistant', icon: 'Sparkles', group: 'tools', locked: true, badge: 'LOCKED', badgeColor: 'slate' },
-    { id: 'users', label: 'Users', icon: 'Users', group: 'admin', locked: true },
-    { id: 'settings', label: 'Settings', icon: 'Settings', group: 'admin' },
+    { id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard', group: 'overview' },
+    { id: 'scans', label: 'Scans', icon: 'ScanLine', group: 'security' },
+    { id: 'findings', label: 'Findings', icon: 'ShieldAlert', group: 'security' },
+    { id: 'reports', label: 'Reports', icon: 'FileText', group: 'security' },
+    { id: 'agent', label: 'Agent', icon: 'ScanLine', group: 'agent' },
+    { id: 'permissions', label: 'Permissions', icon: 'Shield', group: 'agent' },
+    { id: 'settings', label: 'Settings', icon: 'Settings', group: 'system' },
 ];
 
 const navGroups = [
-    { id: 'main', label: 'Workspace' },
-    { id: 'tools', label: 'Tools' },
-    { id: 'admin', label: 'Admin' },
+    { id: 'overview', label: 'Overview' },
+    { id: 'security', label: 'Security' },
+    { id: 'activity', label: 'Activity' },
+    { id: 'agent', label: 'Agent' },
+    { id: 'system', label: 'System' },
 ];
 
 const iconMap = {
-    LayoutDashboard, Server, Crosshair, ScanLine, ShieldAlert,
-    FileText, Sparkles, Users, Settings, Shield, CheckSquare, Blocks, GitBranch
+    LayoutDashboard, ScanLine, ShieldAlert, FileText, Settings, Shield
 };
 
 const badgeVariants = {
