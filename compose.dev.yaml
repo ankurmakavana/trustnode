@@ -32,7 +32,7 @@ services:
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_DATABASE: trustnode
+      DB_DATABASE: trustnode_fresh
       DB_USERNAME: root
       DB_PASSWORD: root
       REDIS_HOST: redis
@@ -115,7 +115,7 @@ services:
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_DATABASE: trustnode
+      DB_DATABASE: trustnode_fresh
       DB_USERNAME: root
       DB_PASSWORD: root
       REDIS_HOST: redis
@@ -144,7 +144,7 @@ services:
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_DATABASE: trustnode
+      DB_DATABASE: trustnode_fresh
       DB_USERNAME: root
       DB_PASSWORD: root
       REDIS_HOST: redis
@@ -163,7 +163,7 @@ services:
     build:
       context: .
       dockerfile: ./docker/php/Dockerfile
-    command: php artisan agent:run
+    command: ["php", "artisan", "agent:run"]
     restart: unless-stopped
     volumes:
       - .:/var/www/html
@@ -174,7 +174,7 @@ services:
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_DATABASE: trustnode
+      DB_DATABASE: trustnode_fresh
       DB_USERNAME: root
       DB_PASSWORD: root
       REDIS_HOST: redis
