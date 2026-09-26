@@ -21,12 +21,8 @@ import ScanDetailPage from './pages/ScanDetailPage';
 import ScanReportPage from './pages/ScanReportPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 import SettingsPage from './pages/SettingsPage';
-import TimelinePage from './pages/TimelinePage';
-import ActivityPage from './pages/ActivityPage';
 import AgentPage from './pages/AgentPage';
 import PermissionsPage from './pages/PermissionsPage';
-import WorkersPage from './pages/WorkersPage';
-import EventsPage from './pages/EventsPage';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import FindingsPage from './pages/FindingsPage';
@@ -50,12 +46,8 @@ const pageLabels = {
     scans:     'Scans',
     findings:  'Findings',
     reports:   'Reports',
-    timeline:  'Timeline',
-    activity:  'Activity',
     agent:     'Agent',
     permissions: 'Permissions',
-    workers:   'Workers',
-    events:    'Events',
     settings:  'Settings',
     // Legacy labels for backward compatibility
     repositories: 'Repositories',
@@ -191,12 +183,8 @@ function MainAppLayout() {
         if (path.startsWith('/scans')) return 'scans';
         if (path.startsWith('/findings')) return 'findings';
         if (path.startsWith('/reports')) return 'reports';
-        if (path.startsWith('/timeline')) return 'timeline';
-        if (path.startsWith('/activity')) return 'activity';
         if (path.startsWith('/agent')) return 'agent';
         if (path.startsWith('/permissions')) return 'permissions';
-        if (path.startsWith('/workers')) return 'workers';
-        if (path.startsWith('/events')) return 'events';
         if (path.startsWith('/settings')) return 'settings';
         // Legacy routes - map to closest new page or dashboard
         if (path.startsWith('/assets')) return 'dashboard';
