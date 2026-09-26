@@ -6,8 +6,9 @@ import ScansTable from '../components/ScansTable';
 import QuickActions from '../components/QuickActions';
 import { SkeletonCard, Skeleton } from '../components/ui/primitives';
 import { useAuth } from '../context/AuthContext';
-import { Filter, Layers } from 'lucide-react';
+import { Filter, Layers, Shield } from 'lucide-react';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
 
 export default function DashboardPage() {
     const { checkAuthStatus } = useAuth();
@@ -19,6 +20,7 @@ export default function DashboardPage() {
     const [lifecycleSummary, setLifecycleSummary] = useState({ new: 0, recurring: 0, resolved: 0, regression: 0 });
     const [postureTrend, setPostureTrend] = useState([]);
     const [postureAssessment, setPostureAssessment] = useState('initial_baseline');
+    const [agentHealth, setAgentHealth] = useState(null);
     const [loading, setLoading] = useState(true);
 
     // Target filters state
@@ -75,9 +77,19 @@ export default function DashboardPage() {
         }
     }, [selectedFilter, checkAuthStatus]);
 
+    const fetchAgentHealth = useCallback(async () => {
+        try {
+            const response = await axios.get('/api/agent/health');
+            setAgentHealth(response.data);
+        } catch (err) {
+            setAgentHealth(null);
+        }
+    }, []);
+
     useEffect(() => {
         fetchDashboardStats();
-    }, [fetchDashboardStats]);
+        fetchAgentHealth();
+    }, [fetchDashboardStats, fetchAgentHealth]);
 
     return (
         <div className="flex flex-col gap-6">
@@ -121,6 +133,27 @@ export default function DashboardPage() {
                     </select>
                 </div>
             </div>
+
+            {/* Section: Agent Status Widget */}
+            {agentHealth && (
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            agentHealth.status === 'running' ? 'bg-brand-100 text-brand-600' : 
+                            agentHealth.status === 'stopped' ? 'bg-slate-100 text-slate-600' : 'bg-red-100 text-red-600'
+                        }`}>
+                            <Shield size={20} />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-bold text-slate-900">Agent Status: <span className="uppercase">{agentHealth.status}</span></h3>
+                            <p className="text-xs text-slate-500 mt-0.5">Last Heartbeat: {agentHealth.last_heartbeat_at || 'Never'}</p>
+                        </div>
+                    </div>
+                    <Link to="/agent" className="text-xs font-semibold text-brand-600 hover:text-brand-700 px-3 py-1.5 bg-brand-50 rounded-lg transition-colors">
+                        View Agent Details
+                    </Link>
+                </div>
+            )}
 
             {/* Section: KPI Cards */}
             <section aria-label="Key metrics">

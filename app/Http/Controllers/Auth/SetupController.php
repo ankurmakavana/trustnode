@@ -19,14 +19,20 @@ class SetupController extends Controller
 {
     public function status(): JsonResponse
     {
+        $setupRequired = true;
+        
+        if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
+            $setupRequired = User::count() === 0;
+        }
+
         return response()->json([
-            'setup_required' => User::count() === 0
+            'setup_required' => $setupRequired
         ]);
     }
 
     public function setup(Request $request): JsonResponse
     {
-        if (User::count() > 0) {
+        if (\Illuminate\Support\Facades\Schema::hasTable('users') && User::count() > 0) {
             return response()->json(['message' => 'Setup has already been completed.'], 403);
         }
 

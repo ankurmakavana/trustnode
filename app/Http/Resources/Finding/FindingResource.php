@@ -13,6 +13,7 @@ class FindingResource extends JsonResource
             'id' => $this->id,
             'uuid' => $this->uuid,
             'finding_id' => $this->finding_id,
+            'agent_id' => $this->agent_id,
             'title' => $this->title,
             'cve' => $this->cve,
             'cvss_score' => $this->cvss_score !== null ? (float) $this->cvss_score : null,

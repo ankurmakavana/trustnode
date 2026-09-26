@@ -21,6 +21,12 @@ import ScanDetailPage from './pages/ScanDetailPage';
 import ScanReportPage from './pages/ScanReportPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 import SettingsPage from './pages/SettingsPage';
+import TimelinePage from './pages/TimelinePage';
+import ActivityPage from './pages/ActivityPage';
+import AgentPage from './pages/AgentPage';
+import PermissionsPage from './pages/PermissionsPage';
+import WorkersPage from './pages/WorkersPage';
+import EventsPage from './pages/EventsPage';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import FindingsPage from './pages/FindingsPage';
@@ -40,19 +46,26 @@ import RepositoriesPage from './pages/RepositoriesPage';
 import { Loader2 } from 'lucide-react';
 
 const pageLabels = {
-    repositories: 'Repositories',
     dashboard: 'Dashboard',
-    assets:    'Assets',
-    targets:   'Targets',
     scans:     'Scans',
     findings:  'Findings',
-    risks:     'Risk Register',
     reports:   'Reports',
+    timeline:  'Timeline',
+    activity:  'Activity',
+    agent:     'Agent',
+    permissions: 'Permissions',
+    workers:   'Workers',
+    events:    'Events',
+    settings:  'Settings',
+    // Legacy labels for backward compatibility
+    repositories: 'Repositories',
+    assets:    'Assets',
+    targets:   'Targets',
+    risks:     'Risk Register',
     compliance: 'Compliance',
     integrations: 'Integrations',
     ai:        'AI Assistant',
     users:     'Users',
-    settings:  'Settings',
 };
 
 // ─── Route Wrappers to map URL params to component props ─────────────────────
@@ -175,26 +188,29 @@ function MainAppLayout() {
     const getActivePage = () => {
         const path = location.pathname;
         if (path.startsWith('/dashboard')) return 'dashboard';
-        if (path.startsWith('/assets')) return 'assets';
-        if (path.startsWith('/repositories')) return 'repositories';
-        if (path.startsWith('/targets')) return 'targets';
         if (path.startsWith('/scans')) return 'scans';
         if (path.startsWith('/findings')) return 'findings';
-        if (path.startsWith('/risk-register')) return 'risks';
         if (path.startsWith('/reports')) return 'reports';
-        if (path.startsWith('/compliance')) return 'compliance';
-        if (path.startsWith('/integrations')) return 'integrations';
-        if (path.startsWith('/users')) return 'users';
+        if (path.startsWith('/timeline')) return 'timeline';
+        if (path.startsWith('/activity')) return 'activity';
+        if (path.startsWith('/agent')) return 'agent';
+        if (path.startsWith('/permissions')) return 'permissions';
+        if (path.startsWith('/workers')) return 'workers';
+        if (path.startsWith('/events')) return 'events';
         if (path.startsWith('/settings')) return 'settings';
+        // Legacy routes - map to closest new page or dashboard
+        if (path.startsWith('/assets')) return 'dashboard';
+        if (path.startsWith('/repositories')) return 'dashboard';
+        if (path.startsWith('/targets')) return 'dashboard';
+        if (path.startsWith('/risk-register')) return 'reports';
+        if (path.startsWith('/compliance')) return 'reports';
+        if (path.startsWith('/integrations')) return 'settings';
+        if (path.startsWith('/users')) return 'settings';
         return 'dashboard';
     };
 
     const handleNavigate = (page) => {
-        if (page === 'risks') {
-            navigate('/risk-register');
-        } else {
-            navigate(`/${page}`);
-        }
+        navigate(`/${page}`);
     };
 
     if (loading) {
@@ -298,10 +314,10 @@ function MainAppLayout() {
                 {/* Footer */}
                 <footer className="shrink-0 border-t border-slate-200 bg-white px-5 py-2.5 flex items-center justify-between">
                     <span className="text-xs text-slate-400">
-                        TrustNode Platform · v1.0.0-beta
+                        TrustNode · v1.0.0-foundation
                     </span>
                     <span className="text-xs text-slate-400">
-                        © 2026 TrustNode · Enterprise VAPT Platform
+                        © 2026 TrustNode · Developer Security Console
                     </span>
                 </footer>
             </div>

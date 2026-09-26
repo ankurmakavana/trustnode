@@ -59,6 +59,7 @@ class AgentReportFindingTaskHandlerTest extends TestCase
         $this->assertNotNull($finding);
         $this->assertEquals('Test Agent Finding', $finding->title);
         $this->assertEquals(\App\Enums\Finding\FindingSeverity::HIGH, $finding->severity);
+        $this->assertEquals('agent-123', $finding->agent_id);
         $this->assertNotNull($finding->finding_identity_id);
         
         // Assert truncation

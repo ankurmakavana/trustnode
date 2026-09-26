@@ -86,7 +86,10 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
             ->first();
 
         if ($existingFinding) {
-            $existingFinding->update(['updated_at' => now()]);
+            $existingFinding->update([
+                'updated_at' => now(),
+                'agent_id' => $task['agent_id'] ?? null
+            ]);
             $finding = $existingFinding;
         } else {
             $finding = $this->findingService->create($findingDto, $userId);
@@ -94,7 +97,8 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
             $finding->update([
                 'finding_identity_id' => $identity->id, 
                 'fingerprint' => $fingerprint, 
-                'scanner' => 'AgentObservation'
+                'scanner' => 'AgentObservation',
+                'agent_id' => $task['agent_id'] ?? null
             ]);
         }
 

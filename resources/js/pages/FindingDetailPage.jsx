@@ -475,6 +475,23 @@ export default function FindingDetailPage({ findingId, onBack, onEdit }) {
                                     </span>
                                 </div>
                             </div>
+
+                            {/* Scanner / Agent Origin */}
+                            <div className="flex gap-3 items-start border border-slate-100 rounded-lg p-3 bg-slate-50/50">
+                                <Search className="text-slate-400 shrink-0 mt-0.5" size={16} />
+                                <div>
+                                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Detection Source</span>
+                                    <span className="text-xs font-semibold text-slate-700 block mt-0.5">
+                                        {finding.scanner || 'Unknown Scanner'}
+                                    </span>
+                                    {finding.agent_id && (
+                                        <span className="text-[10px] text-brand-600 font-bold block mt-1 uppercase flex items-center gap-1">
+                                            <Shield size={10} />
+                                            Detected by Agent {finding.agent_id}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
 

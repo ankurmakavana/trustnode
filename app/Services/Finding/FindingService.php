@@ -51,6 +51,10 @@ class FindingService
             $query->where('scan_id', $filters['scan_id']);
         }
 
+        if (! empty($filters['agent_id'])) {
+            $query->where('agent_id', $filters['agent_id']);
+        }
+
         $perPage = ! empty($filters['per_page']) ? (int) $filters['per_page'] : 15;
 
         return $query->orderBy('cvss_score', 'desc')->orderBy('created_at', 'desc')->paginate($perPage);

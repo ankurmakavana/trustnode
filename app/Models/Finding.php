@@ -19,6 +19,7 @@ class Finding extends Model
     protected $fillable = [
         'uuid',
         'finding_id',
+        'agent_id',
         'title',
         'cve',
         'cvss_score',
