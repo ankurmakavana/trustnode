@@ -144,7 +144,7 @@ return [
         /*
         | Maximum execution time for agent operations in seconds
         */
-        'max_execution_time' => 30,
+        'max_execution_time' => 300,
 
     ],
 

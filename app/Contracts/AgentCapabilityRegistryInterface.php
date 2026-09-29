@@ -6,6 +6,8 @@ interface AgentCapabilityRegistryInterface
 {
     public const MODE_READ_ONLY = 'READ_ONLY';
 
+    public function register(AgentCapabilityInterface $capability): void;
+    public function resolve(string $id): ?AgentCapabilityInterface;
     /**
      * Map an operation to a required capability.
      */

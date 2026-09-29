@@ -17,13 +17,26 @@ class AgentService
     const S_STOPPED = 'stopped';
     const S_UNHEALTHY = 'unhealthy';
     
+    // Phase 5 States
+    const S_IDLE = 'idle';
+    const S_PLANNING = 'planning';
+    const S_EXECUTING = 'executing';
+    const S_WAITING_APPROVAL = 'waiting_approval';
+    const S_COMPLETED = 'completed';
+    const S_FAILED = 'failed';
     const C_STATE = 'trustnode_agent_state';
     const C_HEARTBEAT = 'trustnode_agent_heartbeat';
 
     protected $allowedTransitions = [
         self::S_STOPPED => [self::S_STARTING],
         self::S_STARTING => [self::S_RUNNING],
-        self::S_RUNNING => [self::S_STOPPING, self::S_STARTING, self::S_STOPPED],
+        self::S_RUNNING => [self::S_STOPPING, self::S_STARTING, self::S_STOPPED, self::S_WAITING_APPROVAL, self::S_IDLE, self::S_PLANNING, self::S_EXECUTING, self::S_COMPLETED, self::S_FAILED],
+        self::S_IDLE => [self::S_PLANNING, self::S_RUNNING, self::S_STOPPING],
+        self::S_PLANNING => [self::S_EXECUTING, self::S_RUNNING, self::S_STOPPING],
+        self::S_EXECUTING => [self::S_WAITING_APPROVAL, self::S_COMPLETED, self::S_FAILED, self::S_RUNNING, self::S_STOPPING],
+        self::S_WAITING_APPROVAL => [self::S_EXECUTING, self::S_FAILED, self::S_RUNNING, self::S_STOPPING],
+        self::S_COMPLETED => [self::S_IDLE, self::S_RUNNING, self::S_STOPPING],
+        self::S_FAILED => [self::S_IDLE, self::S_RUNNING, self::S_STOPPING],
         self::S_STOPPING => [self::S_STOPPED],
     ];
 

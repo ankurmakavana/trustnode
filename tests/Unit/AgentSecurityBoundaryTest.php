@@ -88,13 +88,13 @@ class AgentSecurityBoundaryTest extends TestCase
         foreach ($deniedModes as $mode) {
             $registry->registerOperation('test.' . strtolower($mode), 'agent.' . strtolower($mode));
             $registry->setCapabilityMode('agent.' . strtolower($mode), $mode);
-            $registry->addGrant('agent-123', 'agent.' . strtolower($mode), []);
+            // Do NOT add a grant so it falls back to requiring approval
 
             try {
                 $boundary->authorize('agent-123', 'test.' . strtolower($mode), []);
-                $this->fail("Boundary failed to deny operation with mode [{$mode}]");
+                $this->fail("Boundary failed to request approval for operation with mode [{$mode}]");
             } catch (AgentSecurityException $e) {
-                $this->assertStringContainsString("is not explicitly classified as READ_ONLY", $e->getMessage());
+                $this->assertStringContainsString("Approval pending", $e->getMessage());
             }
         }
     }

@@ -11,6 +11,18 @@ class AgentCapabilityRegistry implements AgentCapabilityRegistryInterface
     protected array $grants = [];
     protected array $revoked = [];
 
+    protected array $capabilities = [];
+
+    public function register(\App\Contracts\AgentCapabilityInterface $capability): void
+    {
+        $this->capabilities[$capability->getId()] = $capability;
+    }
+
+    public function resolve(string $id): ?\App\Contracts\AgentCapabilityInterface
+    {
+        return $this->capabilities[$id] ?? null;
+    }
+
     public function registerOperation(string $operation, string $capability): void
     {
         $this->operationMap[$operation] = $capability;

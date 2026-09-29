@@ -39,6 +39,14 @@ class AgentServiceProvider extends ServiceProvider
             $registry->registerOperation('agent.observe_env', 'agent:observe');
             $registry->setCapabilityMode('agent:observe', \App\Contracts\AgentCapabilityRegistryInterface::MODE_READ_ONLY);
 
+            // Phase 5 - Codebase Scan
+            $registry->register($app->make(\App\Capabilities\AgentScanCodebaseCapability::class));
+            $registry->registerOperation('agent:scan_codebase', 'agent:scan_codebase');
+
+            // Phase 5 - Restricted capability for testing approval flow
+            $registry->register($app->make(\App\Capabilities\AgentRestrictedCapability::class));
+            $registry->registerOperation('agent:restricted_action', 'agent:restricted_action');
+
             return $registry;
         });
 
@@ -47,6 +55,8 @@ class AgentServiceProvider extends ServiceProvider
             $registry->register($app->make(\App\Handlers\DeepSeekHarnessTaskHandler::class));
             $registry->register($app->make(\App\Handlers\AgentReportFindingTaskHandler::class));
             $registry->register($app->make(\App\Handlers\AgentObserveEnvTaskHandler::class));
+            $registry->register($app->make(\App\Handlers\AgentPlannerTaskHandler::class));
+            $registry->register($app->make(\App\Handlers\AgentCapabilityTaskHandler::class));
             return $registry;
         });
         $this->app->singleton(\App\Contracts\AgentApprovalServiceInterface::class, \App\Services\AgentApprovalService::class);
@@ -83,11 +93,11 @@ class AgentServiceProvider extends ServiceProvider
         // Start the agent
         $agent->start();
         
-        // Grant read-only capabilities to the starting agent
         $registry = $this->app->make(\App\Contracts\AgentCapabilityRegistryInterface::class);
         $agentId = $agent->getAgentId();
         $registry->addGrant($agentId, 'agent:report');
         $registry->addGrant($agentId, 'agent:observe');
+        $registry->addGrant($agentId, 'agent:scan_codebase');
 
         // Handle shutdown signals for graceful termination
         $this->handleShutdownSignals($agent);

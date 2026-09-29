@@ -62,17 +62,27 @@ class AgentWorker
             $handler = $this->registry->resolve($type);
             
             // SECURITY BOUNDARY
-            // Ensures the trusted runtime agent is authorized to execute this specific operation and payload.
-            $this->securityBoundary->authorize($agentId, $type, $payload);
+            $operation = $type;
+            if ($type === 'agent.capability.execute') {
+                $operation = $payload['capability_id'] ?? $type;
+            }
+            $this->securityBoundary->authorize($agentId, $operation, $payload);
             
             $handler->handle($task);
             
             $this->queue->acknowledge($task['id']);
             
         } catch (\App\Exceptions\AgentSecurityException $e) {
-            // Task failed security authorization boundary
-            Log::error("AgentWorker: Task failed security authorization.", ['task_id' => $task['id'], 'error' => $e->getMessage()]);
-            $this->queue->fail($task['id'], $e);
+            if (str_contains($e->getMessage(), 'Approval pending')) {
+                Log::info("AgentWorker: Task blocked pending approval.", ['task_id' => $task['id']]);
+                $this->agentService->setState(\App\Services\AgentService::S_WAITING_APPROVAL);
+                // In a robust implementation, the task should be paused.
+                // For this MVP, we let it fail in the queue, but it can be requeued later.
+                $this->queue->fail($task['id'], $e);
+            } else {
+                Log::error("AgentWorker: Task failed security authorization.", ['task_id' => $task['id'], 'error' => $e->getMessage()]);
+                $this->queue->fail($task['id'], $e);
+            }
         } catch (\InvalidArgumentException $e) {
             // Task type not found in registry (Invalid type)
             // TASK 14.1 Limitation: contract requires terminal failure, but AgentQueue::fail() 
