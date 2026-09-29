@@ -71,7 +71,11 @@ class AgentController extends Controller
             ->first();
 
         $obsTarget = $lastObservationTask ? (json_decode($lastObservationTask->payload, true)['target'] ?? null) : null;
-        $targetFile = $obsTarget ? base_path($obsTarget) : null;
+        $targetFile = null;
+        if ($obsTarget !== null) {
+            $isAbsolute = str_starts_with($obsTarget, '/') || str_starts_with($obsTarget, '\\') || preg_match('/^[a-zA-Z]:(\\\|\/)/', $obsTarget);
+            $targetFile = $isAbsolute ? (string)$obsTarget : base_path((string)$obsTarget);
+        }
         $targetExists = $targetFile ? file_exists($targetFile) : false;
         $targetLastChanged = $targetExists ? date('c', filemtime($targetFile)) : null;
         $targetCacheKey = $obsTarget ? 'agent_observe_env_hash_' . md5($targetFile) : null;
