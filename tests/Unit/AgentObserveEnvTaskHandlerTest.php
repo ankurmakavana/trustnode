@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 use Mockery;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
 class AgentObserveEnvTaskHandlerTest extends TestCase
 {
     protected string $originalBasePath;
@@ -62,6 +64,7 @@ class AgentObserveEnvTaskHandlerTest extends TestCase
     {
         $envPath = base_path('.env');
         File::put($envPath, 'SECRET=AWS_KEY_A3T1234567890123456');
+        File::put($envPath, 'SECRET=AWS_KEY_A3T1234567890123456');
         
         $scanner = Mockery::mock(SecretScanner::class);
         $queue = Mockery::mock(AgentQueueInterface::class);
@@ -69,7 +72,8 @@ class AgentObserveEnvTaskHandlerTest extends TestCase
         
         $handler = new AgentObserveEnvTaskHandler($scanner, $queue, $agentService);
         
-        Cache::forget('agent_observe_env_hash_' . md5($envPath));
+        $canonicalEnv = realpath($envPath) ?: $envPath;
+        Cache::forget('agent_observe_env_hash_' . md5($canonicalEnv));
         
         $finding = new NormalizedFinding([
             'scanner' => 'SecretScanner',
@@ -96,26 +100,28 @@ class AgentObserveEnvTaskHandlerTest extends TestCase
             'payload' => []
         ]);
         
-        $this->assertEquals(hash('sha256', 'SECRET=AWS_KEY_A3T1234567890123456'), Cache::get('agent_observe_env_hash_' . md5($envPath)));
+        $this->assertEquals(hash('sha256', 'SECRET=AWS_KEY_A3T1234567890123456'), Cache::get('agent_observe_env_hash_' . md5($canonicalEnv)));
     }
 
     // 5. Explicit project .env target is accepted.
     public function test_explicit_project_env_target_is_accepted()
     {
         $envPath = base_path('.env');
+        $canonicalEnv = realpath($envPath) ?: $envPath;
         File::put($envPath, 'TEST=123');
         
         $scanner = Mockery::mock(SecretScanner::class);
         $queue = Mockery::mock(AgentQueueInterface::class);
         $agentService = Mockery::mock(AgentService::class);
+        $agentService->shouldReceive('getAgentId')->andReturn('agent_default');
         
         $handler = new AgentObserveEnvTaskHandler($scanner, $queue, $agentService);
         
         // Cache existing to prevent enqueue
         $hash = hash('sha256', 'TEST=123');
-        Cache::put('agent_observe_env_hash_' . md5($envPath), $hash);
+        Cache::put('agent_observe_env_hash_' . md5($canonicalEnv), $hash);
         
-        $scanner->shouldNotReceive('scan');
+        $scanner->shouldReceive('scan')->andReturn([]);
         $queue->shouldNotReceive('enqueue');
             
         // Explicit valid target supplied

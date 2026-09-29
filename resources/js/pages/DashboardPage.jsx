@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { Filter, Layers, Shield } from 'lucide-react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
+import { formatRelativeTime } from '../utils/dateUtils';
 
 export default function DashboardPage() {
     const { checkAuthStatus } = useAuth();
@@ -79,7 +80,7 @@ export default function DashboardPage() {
 
     const fetchAgentHealth = useCallback(async () => {
         try {
-            const response = await axios.get('/api/agent/health');
+            const response = await axios.get('/api/agent/console');
             setAgentHealth(response.data);
         } catch (err) {
             setAgentHealth(null);
@@ -134,23 +135,52 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            {/* Section: Agent Status Widget */}
+            {/* Section: Agent Operational Widget */}
             {agentHealth && (
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            agentHealth.status === 'running' ? 'bg-brand-100 text-brand-600' : 
-                            agentHealth.status === 'stopped' ? 'bg-slate-100 text-slate-600' : 'bg-red-100 text-red-600'
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 font-mono">
+                    <div className="flex items-center gap-3.5">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                            agentHealth.overall_state === 'OBSERVING' ? 'bg-brand-50 text-brand-600 border border-brand-200 animate-ping' :
+                            agentHealth.overall_state === 'REPORTING' ? 'bg-purple-50 text-purple-600 border border-purple-200 animate-ping' :
+                            agentHealth.overall_state === 'HEALTHY_IDLE' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' :
+                            agentHealth.overall_state?.startsWith('STALE') ? 'bg-amber-50 text-amber-600 border border-amber-200' :
+                            'bg-slate-100 text-slate-600 border border-slate-200'
                         }`}>
                             <Shield size={20} />
                         </div>
                         <div>
-                            <h3 className="text-sm font-bold text-slate-900">Agent Status: <span className="uppercase">{agentHealth.status}</span></h3>
-                            <p className="text-xs text-slate-500 mt-0.5">Last Heartbeat: {agentHealth.last_heartbeat_at || 'Never'}</p>
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-bold text-slate-900 font-sans">TrustNode Security Agent</h3>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                                    agentHealth.overall_state === 'HEALTHY_IDLE' ? 'bg-emerald-100 text-emerald-800' :
+                                    agentHealth.overall_state === 'OBSERVING' ? 'bg-brand-100 text-brand-800' :
+                                    agentHealth.overall_state?.startsWith('STALE') ? 'bg-amber-100 text-amber-800' :
+                                    'bg-slate-100 text-slate-700'
+                                }`}>
+                                    ● {agentHealth.overall_state || 'HEALTHY'}
+                                </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mt-1 font-mono">
+                                <span>Agent ID: <strong className="text-slate-700">{agentHealth.agent?.id || agentHealth.health?.agent_id}</strong></span>
+                                <span>•</span>
+                                <span>Heartbeat: <strong className="text-slate-700">{
+                                    formatRelativeTime(agentHealth.process?.last_heartbeat_at)
+                                }</strong></span>
+                                <span>•</span>
+                                <span>Observation Loop: <strong className={agentHealth.observation?.stale ? 'text-amber-700' : 'text-emerald-700'}>
+                                    {agentHealth.observation?.stale ? 'Stale' : 'Active'}
+                                </strong></span>
+                                {agentHealth.active_task && (
+                                    <>
+                                        <span>•</span>
+                                        <span>Current Task: <strong className="text-brand-600">{agentHealth.active_task.type}</strong></span>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
-                    <Link to="/agent" className="text-xs font-semibold text-brand-600 hover:text-brand-700 px-3 py-1.5 bg-brand-50 rounded-lg transition-colors">
-                        View Agent Details
+                    <Link to="/agent" className="text-xs font-semibold font-sans text-brand-600 hover:text-brand-700 px-3.5 py-2 bg-brand-50 hover:bg-brand-100/70 rounded-lg transition-colors border border-brand-200/60 shrink-0">
+                        View Agent Console →
                     </Link>
                 </div>
             )}

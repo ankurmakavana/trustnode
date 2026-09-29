@@ -5,7 +5,7 @@ import {
     FileText, X, ScanLine, AlertTriangle, CheckCircle2,
     Activity, Clock, Loader2, Filter, CalendarDays,
     MoreVertical, StopCircle, Terminal, Play, ChevronDown,
-    CheckSquare, Square as SquareIcon, GitBranch,
+    CheckSquare, Square as SquareIcon, GitBranch, Lock,
 } from 'lucide-react';
 import axios from 'axios';
 import { ScanStatusBadge, ScanTypeBadge, ScanEngineBadge, ProgressBar, ScanRowSkeleton } from '../components/ui/primitives_scans';

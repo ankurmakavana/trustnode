@@ -459,7 +459,7 @@ export default function FindingsPage({ onNavigateToCreate, onNavigateToEdit, onN
 
                                         {/* Workflow Status */}
                                         <td className="py-4 px-4 align-middle">
-                                            <StatusBadge status={f.status} />
+                                            <StatusBadge status={f.lifecycle_status || f.status} />
                                         </td>
 
                                         {/* Detected at */}

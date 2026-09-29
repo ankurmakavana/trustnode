@@ -64,7 +64,7 @@ class AgentObserveEnvTaskHandler implements AgentTaskHandlerInterface
         }
 
         $hash = hash('sha256', $content);
-        $cacheKey = 'agent_observe_env_hash_' . md5($target);
+        $cacheKey = 'agent_observe_env_hash_' . md5($canonicalTarget);
 
         $lastHash = Cache::get($cacheKey);
 
@@ -73,24 +73,82 @@ class AgentObserveEnvTaskHandler implements AgentTaskHandlerInterface
             Log::info("AgentObserveEnvTaskHandler: Detected change in target security state.", ['target' => $target]);
             Cache::put($cacheKey, $hash);
 
-            $lines = explode("\n", $content);
-            $findings = $this->scanner->scan($content, $lines, basename($target), '');
-            
+            $startedAt = now();
             $agentId = $this->agentService->getAgentId();
 
-            foreach ($findings as $finding) {
-                // NormalizedFinding is DTO with public readonly properties. json encode/decode converts it to array.
-                $findingArray = json_decode(json_encode($finding), true);
-                
+            $systemUserId = \Illuminate\Support\Facades\Schema::hasTable('users') ? \App\Models\User::query()->value('id') : null;
+
+            // Create real Scan record tracking execution state if database is available
+            $scan = null;
+            if (\Illuminate\Support\Facades\Schema::hasTable('scans')) {
                 try {
-                    $this->queue->enqueue($agentId, 'agent.report_finding', [
-                        'finding' => $findingArray
+                    $scan = \App\Models\Scan::create([
+                        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+                        'name' => 'Agent Security Observation: ' . basename($target),
+                        'description' => 'Real-time security scan performed by TrustNode Agent on environment state change.',
+                        'type' => \App\Enums\Scan\ScanType::LOCAL,
+                        'engine' => \App\Enums\Scan\ScanEngine::REPOSITORY_SCANNER,
+                        'target' => basename($target),
+                        'status' => \App\Enums\Scan\ScanStatus::RUNNING,
+                        'progress' => 50,
+                        'started_at' => $startedAt,
+                        'created_by' => $systemUserId,
                     ]);
-                } catch (\App\Exceptions\QueueFullException $e) {
-                    Log::warning("AgentObserveEnvTaskHandler: Queue full. Cannot enqueue finding task.", ['error' => $e->getMessage()]);
-                    // Fail safely - stop enqueuing if queue is full.
-                    break;
+                } catch (\Throwable $e) {
+                    Log::warning("AgentObserveEnvTaskHandler: Unable to persist scan record.", ['error' => $e->getMessage()]);
                 }
+            }
+
+            try {
+                $lines = explode("\n", $content);
+                $findings = $this->scanner->scan($content, $lines, basename($target), '');
+
+                $completedAt = now();
+                $duration = max(1, $completedAt->diffInSeconds($startedAt));
+
+                if ($scan) {
+                    $scan->update([
+                        'status' => \App\Enums\Scan\ScanStatus::COMPLETED,
+                        'progress' => 100,
+                        'completed_at' => $completedAt,
+                        'duration' => $duration,
+                    ]);
+                }
+
+                foreach ($findings as $finding) {
+                    $findingArray = json_decode(json_encode($finding), true);
+
+                    try {
+                        $this->queue->enqueue($agentId, 'agent.report_finding', [
+                            'finding' => $findingArray,
+                            'scan_id' => $scan ? $scan->id : null,
+                            'agent_id' => $agentId,
+                        ]);
+                    } catch (\App\Exceptions\QueueFullException $e) {
+                        Log::warning("AgentObserveEnvTaskHandler: Queue full. Cannot enqueue finding task.", ['error' => $e->getMessage()]);
+                        break;
+                    }
+                }
+            } catch (\Throwable $e) {
+                $completedAt = now();
+                $duration = max(1, $completedAt->diffInSeconds($startedAt));
+
+                if ($scan) {
+                    $scan->update([
+                        'status' => \App\Enums\Scan\ScanStatus::FAILED,
+                        'progress' => 100,
+                        'completed_at' => $completedAt,
+                        'duration' => $duration,
+                        'description' => 'Scan failed: ' . $e->getMessage(),
+                    ]);
+                }
+
+                Log::error("AgentObserveEnvTaskHandler: Scanner execution failed.", [
+                    'scan_id' => $scan ? $scan->id : null,
+                    'error' => $e->getMessage()
+                ]);
+
+                throw $e;
             }
         }
     }

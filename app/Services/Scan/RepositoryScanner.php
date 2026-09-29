@@ -29,6 +29,11 @@ class RepositoryScanner
         ];
     }
 
+    public function getScanners(): array
+    {
+        return $this->scanners;
+    }
+
     /**
      * Run scan recursively on the workspace directory.
      */

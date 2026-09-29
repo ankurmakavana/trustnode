@@ -156,7 +156,7 @@ export default function FindingDetailPage({ findingId, onBack, onEdit }) {
                     <div>
                         <div className="flex items-center gap-2">
                             <span className="text-xs font-mono font-bold text-slate-400">{finding.finding_id}</span>
-                            <StatusBadge status={finding.status} />
+                            <StatusBadge status={finding.lifecycle_status || finding.status} />
                         </div>
                         <h1 className="text-lg font-bold text-slate-900 tracking-tight mt-0.5">{finding.title}</h1>
                     </div>
@@ -511,7 +511,15 @@ export default function FindingDetailPage({ findingId, onBack, onEdit }) {
                                         <div className="space-y-0.5">
                                             <p className="text-[11px] text-slate-650">
                                                 <span className="font-semibold text-slate-800">{log.user?.name || 'System'}</span>{' '}
-                                                {log.action} the finding.
+                                                {log.action === 'status_changed' ? (
+                                                    <>changed status from <span className="font-bold">{log.properties?.old_status || 'NEW'}</span> to <span className="font-bold text-brand-600">{log.properties?.new_status}</span>.</>
+                                                ) : log.action === 'assigned' ? (
+                                                    <>assigned finding to analyst.</>
+                                                ) : log.action === 'redetected' ? (
+                                                    <>redetected the finding via scanner.</>
+                                                ) : (
+                                                    <>{log.action.replace('_', ' ')} the finding.</>
+                                                )}
                                             </p>
                                             <span className="text-[9px] text-slate-400 block font-mono">
                                                 {new Date(log.created_at).toLocaleString()}

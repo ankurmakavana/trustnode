@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     LayoutDashboard, ScanLine, ShieldAlert,
-    FileText, Settings, ChevronLeft, Shield
+    FileText, Settings, ChevronLeft, Shield, Lock
 } from 'lucide-react';
 import { Avatar, Badge } from './ui/primitives';
 import { useAuth } from '../context/AuthContext';
@@ -19,7 +19,6 @@ const navItems = [
 const navGroups = [
     { id: 'overview', label: 'Overview' },
     { id: 'security', label: 'Security' },
-    { id: 'activity', label: 'Activity' },
     { id: 'agent', label: 'Agent' },
     { id: 'system', label: 'System' },
 ];
@@ -112,34 +111,10 @@ function NavGroup({ group, items, activePage, collapsed, onNavigate }) {
 
 export default function Sidebar({ activePage, onNavigate, collapsed, onToggle }) {
     const { user } = useAuth();
-    const [targetsCount, setTargetsCount] = React.useState('0');
-
-    // Fetch targets count dynamically to update sidebar counters
-    React.useEffect(() => {
-        if (!user) return;
-        fetch('/api/targets?per_page=1', {
-            headers: { 'Accept': 'application/json' }
-        })
-            .then(res => res.json())
-            .then(data => {
-                if (data?.meta?.total !== undefined) {
-                    setTargetsCount(String(data.meta.total));
-                }
-            })
-            .catch(() => { });
-    }, [user, activePage]);
-
-    // Replace the items list with dynamic targets counter
-    const dynamicNavItems = navItems.map(item => {
-        if (item.id === 'targets') {
-            return { ...item, badge: targetsCount };
-        }
-        return item;
-    });
 
     const groupedItems = navGroups.map(group => ({
         group,
-        items: dynamicNavItems.filter(i => i.group === group.id),
+        items: navItems.filter(i => i.group === group.id),
     }));
 
     return (

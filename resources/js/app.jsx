@@ -8,18 +8,11 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardPage from './pages/DashboardPage';
-import AssetsPage from './pages/AssetsPage';
-import AssetFormPage from './pages/AssetFormPage';
-import AssetDetailPage from './pages/AssetDetailPage';
-import TargetsPage from './pages/TargetsPage';
-import TargetFormPage from './pages/TargetFormPage';
-import TargetDetailPage from './pages/TargetDetailPage';
 import ScansPage from './pages/ScansPage';
 import ScanFormPage from './pages/ScanFormPage';
 import ScanWizardPage from './pages/ScanWizardPage';
 import ScanDetailPage from './pages/ScanDetailPage';
 import ScanReportPage from './pages/ScanReportPage';
-import PlaceholderPage from './pages/PlaceholderPage';
 import SettingsPage from './pages/SettingsPage';
 import AgentPage from './pages/AgentPage';
 import PermissionsPage from './pages/PermissionsPage';
@@ -28,17 +21,8 @@ import SetupPage from './pages/SetupPage';
 import FindingsPage from './pages/FindingsPage';
 import FindingFormPage from './pages/FindingFormPage';
 import FindingDetailPage from './pages/FindingDetailPage';
-import RiskDashboardPage from './pages/RiskDashboardPage';
-import RiskFormPage from './pages/RiskFormPage';
-import RiskDetailPage from './pages/RiskDetailPage';
 import ReportsPage from './pages/ReportsPage';
 import ReportDetailPage from './pages/ReportDetailPage';
-import ComplianceDashboardPage from './pages/ComplianceDashboardPage';
-import ComplianceDetailPage from './pages/ComplianceDetailPage';
-import IntegrationsPage from './pages/IntegrationsPage';
-import ConnectorPage from './pages/ConnectorPage';
-import IntegrationDetailPage from './pages/IntegrationDetailPage';
-import RepositoriesPage from './pages/RepositoriesPage';
 import { Loader2 } from 'lucide-react';
 
 const pageLabels = {
@@ -49,41 +33,9 @@ const pageLabels = {
     agent:     'Agent',
     permissions: 'Permissions',
     settings:  'Settings',
-    // Legacy labels for backward compatibility
-    repositories: 'Repositories',
-    assets:    'Assets',
-    targets:   'Targets',
-    risks:     'Risk Register',
-    compliance: 'Compliance',
-    integrations: 'Integrations',
-    ai:        'AI Assistant',
-    users:     'Users',
 };
 
 // ─── Route Wrappers to map URL params to component props ─────────────────────
-function AssetDetailRoute() {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    return <AssetDetailPage assetId={id} onBack={() => navigate('/assets')} onEdit={(id) => navigate(`/assets/${id}/edit`)} />;
-}
-
-function AssetEditRoute() {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    return <AssetFormPage assetId={id} onSave={() => navigate('/assets')} onCancel={() => navigate('/assets')} />;
-}
-
-function TargetDetailRoute() {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    return <TargetDetailPage targetId={id} onBack={() => navigate('/targets')} onEdit={(id) => navigate(`/targets/${id}/edit`)} />;
-}
-
-function TargetEditRoute() {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    return <TargetFormPage targetId={id} onSave={() => navigate('/targets')} onCancel={() => navigate('/targets')} />;
-}
 
 function ScanDetailRoute() {
     const { id } = useParams();
@@ -123,50 +75,10 @@ function FindingEditRoute() {
     return <FindingFormPage findingId={id} onSave={() => navigate('/findings')} onCancel={() => navigate('/findings')} />;
 }
 
-function RiskDetailRoute() {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    return <RiskDetailPage riskId={id} onBack={() => navigate('/risk-register')} onEdit={(id) => navigate(`/risk-register/${id}/edit`)} />;
-}
-
-function RiskEditRoute() {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    return <RiskFormPage riskId={id} onSave={() => navigate('/risk-register')} onCancel={() => navigate('/risk-register')} />;
-}
-
 function ReportDetailRoute() {
     const { id } = useParams();
     const navigate = useNavigate();
     return <ReportDetailPage reportId={id} onBack={() => navigate('/reports')} onEdit={(id) => navigate(`/reports/${id}/edit`)} />;
-}
-
-function ComplianceDetailRoute() {
-    const { framework } = useParams();
-    const navigate = useNavigate();
-    return <ComplianceDetailPage frameworkCode={framework} onBack={() => navigate('/compliance')} />;
-}
-
-function ConnectorRoute() {
-    const { connector } = useParams();
-    const navigate = useNavigate();
-    return (
-        <ConnectorPage 
-            connectorCode={connector} 
-            onBack={() => navigate('/integrations')} 
-        />
-    );
-}
-
-function IntegrationDetailRoute() {
-    const { connector, connection } = useParams();
-    const navigate = useNavigate();
-    return (
-        <IntegrationDetailPage 
-            integrationId={connection} 
-            onBack={() => navigate(`/integrations/${connector}`)} 
-        />
-    );
 }
 
 function MainAppLayout() {
@@ -176,7 +88,6 @@ function MainAppLayout() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Map active path to sidebar active page highlighting
     const getActivePage = () => {
         const path = location.pathname;
         if (path.startsWith('/dashboard')) return 'dashboard';
@@ -186,14 +97,6 @@ function MainAppLayout() {
         if (path.startsWith('/agent')) return 'agent';
         if (path.startsWith('/permissions')) return 'permissions';
         if (path.startsWith('/settings')) return 'settings';
-        // Legacy routes - map to closest new page or dashboard
-        if (path.startsWith('/assets')) return 'dashboard';
-        if (path.startsWith('/repositories')) return 'dashboard';
-        if (path.startsWith('/targets')) return 'dashboard';
-        if (path.startsWith('/risk-register')) return 'reports';
-        if (path.startsWith('/compliance')) return 'reports';
-        if (path.startsWith('/integrations')) return 'settings';
-        if (path.startsWith('/users')) return 'settings';
         return 'dashboard';
     };
 
@@ -209,7 +112,6 @@ function MainAppLayout() {
             </div>
         );
     }
-
     if (!user) {
         if (setupRequired) {
             return <SetupPage />;
@@ -242,21 +144,6 @@ function MainAppLayout() {
                         <Routes>
                             <Route path="/" element={<Navigate to="/dashboard" replace />} />
                             <Route path="/dashboard" element={<DashboardPage />} />
-                            
-                            {/* Assets */}
-                            <Route path="/assets" element={<AssetsPage onNavigateToCreate={() => navigate('/assets/new')} onNavigateToEdit={(id) => navigate(`/assets/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/assets/${id}`)} />} />
-                            <Route path="/assets/new" element={<AssetFormPage onSave={() => navigate('/assets')} onCancel={() => navigate('/assets')} />} />
-                            <Route path="/assets/:id" element={<AssetDetailRoute />} />
-                            <Route path="/assets/:id/edit" element={<AssetEditRoute />} />
-
-                            {/* Repositories */}
-                            <Route path="/repositories" element={<RepositoriesPage />} />
-
-                            {/* Targets */}
-                            <Route path="/targets" element={<TargetsPage onNavigateToCreate={() => navigate('/targets/new')} onNavigateToEdit={(id) => navigate(`/targets/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/targets/${id}`)} />} />
-                            <Route path="/targets/new" element={<TargetFormPage onSave={() => navigate('/targets')} onCancel={() => navigate('/targets')} />} />
-                            <Route path="/targets/:id" element={<TargetDetailRoute />} />
-                            <Route path="/targets/:id/edit" element={<TargetEditRoute />} />
 
                             {/* Scans */}
                             <Route path="/scans" element={<ScansPage onNavigateToCreate={() => navigate('/scans/new')} onNavigateToEdit={(id) => navigate(`/scans/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/scans/${id}`)} onNavigateToReport={(id) => navigate(`/scans/${id}/report`)} />} />
@@ -271,27 +158,17 @@ function MainAppLayout() {
                             <Route path="/findings/:id" element={<FindingDetailRoute />} />
                             <Route path="/findings/:id/edit" element={<FindingEditRoute />} />
 
-                            {/* Risk Register */}
-                            <Route path="/risk-register" element={<RiskDashboardPage onNavigateToCreate={() => navigate('/risk-register/new')} onNavigateToEdit={(id) => navigate(`/risk-register/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/risk-register/${id}`)} />} />
-                            <Route path="/risk-register/new" element={<RiskFormPage onSave={() => navigate('/risk-register')} onCancel={() => navigate('/risk-register')} />} />
-                            <Route path="/risk-register/:id" element={<RiskDetailRoute />} />
-                            <Route path="/risk-register/:id/edit" element={<RiskEditRoute />} />
-
                             {/* Reports */}
                             <Route path="/reports" element={<ReportsPage onNavigateToCreate={() => {}} onNavigateToEdit={(id) => navigate(`/reports/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/reports/${id}`)} />} />
                             <Route path="/reports/:id" element={<ReportDetailRoute />} />
 
-                            {/* Compliance */}
-                            <Route path="/compliance" element={<ComplianceDashboardPage onNavigateToDetail={(code) => navigate(`/compliance/${code}`)} />} />
-                            <Route path="/compliance/:framework" element={<ComplianceDetailRoute />} />
+                            {/* Agent */}
+                            <Route path="/agent" element={<AgentPage />} />
 
-                            {/* Integrations */}
-                            <Route path="/integrations" element={<IntegrationsPage onNavigateToConnector={(connector) => navigate(`/integrations/${connector.code}`)} onNavigateToDetail={(conn) => navigate(`/integrations/${conn.code}/${conn.uuid}`)} />} />
-                            <Route path="/integrations/:connector" element={<ConnectorRoute />} />
-                            <Route path="/integrations/:connector/:connection" element={<IntegrationDetailRoute />} />
+                            {/* Permissions */}
+                            <Route path="/permissions" element={<PermissionsPage />} />
 
-                            {/* Users & Settings */}
-                            <Route path="/users" element={<PlaceholderPage title="Users" />} />
+                            {/* Settings */}
                             <Route path="/settings" element={<SettingsPage />} />
                             
                             <Route path="*" element={<Navigate to="/dashboard" replace />} />

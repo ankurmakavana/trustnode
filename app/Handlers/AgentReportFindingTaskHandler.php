@@ -29,21 +29,21 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
     public function handle(array $task): void
     {
         $payload = $task['payload'] ?? [];
-        $userId = $payload['created_by'] ?? 1; 
+        $userId = $payload['created_by'] ?? 1;
         $assetId = $payload['asset_id'] ?? null;
         $findingData = $payload['finding'] ?? $payload;
-        
+
         $normalized = new NormalizedFinding(array_merge($findingData, [
             'title' => $findingData['title'] ?? 'Agent Security Observation',
             'severity' => $findingData['severity'] ?? 'low',
             'scanner' => $findingData['scanner'] ?? 'AgentObservation',
             'cve' => $findingData['cve'] ?? null
         ]));
-        
+
         $fingerprint = $this->fingerprintService->generate($normalized, $assetId);
-        
+
         $identityHash = hash('sha256', "agent_obs_{$userId}|{$fingerprint}|{$assetId}||");
-        
+
         $identity = FindingIdentity::firstOrCreate(
             ['identity_hash' => $identityHash],
             [
@@ -54,7 +54,7 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
                 'last_seen_at' => now(),
             ]
         );
-        
+
         $identity->update(['last_seen_at' => now()]);
 
         $evidence = $normalized->evidence ?? $payload['evidence'] ?? null;
@@ -62,12 +62,16 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
             $evidence = mb_substr($evidence, 0, 2000) . '... [truncated]';
         }
 
+        $scanId = $payload['scan_id'] ?? $task['scan_id'] ?? null;
+        $agentId = $payload['agent_id'] ?? $task['agent_id'] ?? null;
+
         $findingDto = new FindingData(
             title: $normalized->title,
             cve: $normalized->cve,
             cvss_score: $normalized->cvss ?? (isset($payload['cvss_score']) ? (float) $payload['cvss_score'] : null),
             severity: strtolower($normalized->severity ?? 'low'),
             status: 'open',
+            lifecycle_status: 'new',
             category: $normalized->category ?? $payload['category'] ?? 'Agent Observation',
             cwe: $normalized->cwe ?? $payload['cwe'] ?? null,
             description: $normalized->description ?? $payload['description'] ?? 'Observation recorded by TrustNode Agent.',
@@ -77,7 +81,7 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
             evidence: $evidence,
             asset_id: $assetId,
             target_id: $payload['target_id'] ?? null,
-            scan_id: null,
+            scan_id: $scanId,
             assigned_analyst: null
         );
 
@@ -86,19 +90,48 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
             ->first();
 
         if ($existingFinding) {
-            $existingFinding->update([
+            $oldStatus = $existingFinding->lifecycle_status;
+            $lifecycleStatusStr = $oldStatus instanceof \UnitEnum ? $oldStatus->value : $oldStatus;
+
+            $updates = [
                 'updated_at' => now(),
-                'agent_id' => $task['agent_id'] ?? null
-            ]);
+                'agent_id' => $agentId,
+            ];
+            if ($scanId) {
+                $updates['scan_id'] = $scanId;
+            }
+
+            if (in_array($lifecycleStatusStr, ['resolved', 'false_positive'])) {
+                $updates['lifecycle_status'] = 'regression';
+                $updates['status'] = 'open';
+
+                \App\Models\FindingActivityLog::create([
+                    'finding_id' => $existingFinding->id,
+                    'action' => 'redetected',
+                    'properties' => [
+                        'old_status' => $oldStatus,
+                        'new_status' => 'regression',
+                        'note' => 'Redetected by Agent',
+                        'scan_id' => $scanId,
+                        'agent_id' => $agentId
+                    ],
+                    'user_id' => $userId,
+                    'ip_address' => '127.0.0.1',
+                    'user_agent' => 'AgentScanner',
+                ]);
+            }
+
+            $existingFinding->update($updates);
             $finding = $existingFinding;
         } else {
             $finding = $this->findingService->create($findingDto, $userId);
-            
+
             $finding->update([
-                'finding_identity_id' => $identity->id, 
-                'fingerprint' => $fingerprint, 
+                'finding_identity_id' => $identity->id,
+                'fingerprint' => $fingerprint,
                 'scanner' => 'AgentObservation',
-                'agent_id' => $task['agent_id'] ?? null
+                'agent_id' => $agentId,
+                'scan_id' => $scanId,
             ]);
         }
 

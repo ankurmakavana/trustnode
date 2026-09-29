@@ -160,4 +160,5 @@ Route::middleware('auth:sanctum')->group(function (): void {
     });
     // Agent Endpoints
     Route::get('/agent/health', [\App\Http\Controllers\AgentController::class, 'health']);
+    Route::get('/agent/console', [\App\Http\Controllers\AgentController::class, 'console']);
 });

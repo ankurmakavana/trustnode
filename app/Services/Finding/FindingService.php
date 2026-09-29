@@ -77,15 +77,17 @@ class FindingService
     public function update(Finding $finding, FindingData $data, int $userId): Finding
     {
         return DB::transaction(function () use ($finding, $data, $userId) {
-            $original = $finding->only(['title', 'severity', 'status', 'cvss_score']);
+            $original = $finding->only(['title', 'severity', 'status', 'lifecycle_status', 'cvss_score', 'assigned_analyst']);
 
-            $finding->update(array_merge($data->toArray(), [
+            $finding->update(array_merge(array_filter($data->toArray(), function($val) {
+                return !is_null($val);
+            }), [
                 'updated_by' => $userId,
             ]));
 
             $changes = [
                 'old' => $original,
-                'new' => $finding->only(['title', 'severity', 'status', 'cvss_score']),
+                'new' => $finding->only(['title', 'severity', 'status', 'lifecycle_status', 'cvss_score', 'assigned_analyst']),
             ];
 
             $this->logActivity($finding->id, 'updated', $changes, $userId);

@@ -4,6 +4,7 @@ namespace App\Http\Requests\Finding;
 
 use App\Enums\Finding\FindingSeverity;
 use App\Enums\Finding\FindingStatus;
+use App\Enums\Finding\FindingLifecycleStatus;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
 
@@ -22,6 +23,7 @@ class UpdateFindingRequest extends FormRequest
             'cvss_score' => ['nullable', 'numeric', 'min:0', 'max:10.0'],
             'severity' => ['required', new Enum(FindingSeverity::class)],
             'status' => ['required', new Enum(FindingStatus::class)],
+            'lifecycle_status' => ['nullable', new Enum(FindingLifecycleStatus::class)],
             'category' => ['required', 'string', 'max:255'],
             'cwe' => ['nullable', 'string', 'regex:/^CWE-\d+$/'],
             'description' => ['nullable', 'string'],

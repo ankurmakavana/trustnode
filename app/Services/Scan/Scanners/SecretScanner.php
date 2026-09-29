@@ -84,7 +84,7 @@ class SecretScanner extends AbstractRegexScanner
                 'title' => 'Exposed Private Token or Secret',
                 'severity' => 'high',
                 'category' => 'Secret',
-                'regex' => '/(secret|token|password|passwd|api_key|apikey|private_key)\s*[:=]\s*["\'\s]*([a-zA-Z0-9_\-\.\/+=]{20,})["\'\s]*/i',
+                'regex' => '/(secret|token|password|passwd|api_key|apikey|private_key)\s*[:=]\s*["\'\s]*([a-zA-Z0-9_\-\.\/+=|]{20,})["\'\s]*/i',
                 'description' => 'An API token, private key, or password was found hardcoded in the source code.',
                 'remediation' => 'Move hardcoded credentials to configuration environment variables (.env) or a credential vault.',
             ],
@@ -94,7 +94,7 @@ class SecretScanner extends AbstractRegexScanner
     protected function isValidMatch(array $rule, string $matchedText): bool
     {
         if ($rule['id'] === 'SEC-SECRET-GENERIC') {
-            if (preg_match('/[:=]\s*["\'\s]*([a-zA-Z0-9_\-\.\/+=]{20,})["\'\s]*/i', $matchedText, $m)) {
+            if (preg_match('/[:=]\s*["\'\s]*([a-zA-Z0-9_\-\.\/+=|]{20,})["\'\s]*/i', $matchedText, $m)) {
                 $value = $m[1];
 
                 $lower = strtolower($value);
