@@ -42,10 +42,10 @@ class AgentOrchestrationTest extends TestCase
 
         $registry = $this->app->make(AgentCapabilityRegistryInterface::class);
         $capability = $registry->resolve('agent:scan_codebase');
-        
+
         $targetPath = base_path('tests');
         $result = $capability->execute(['target_path' => $targetPath], ['agent_id' => $agentService->getAgentId()]);
-        
+
         $this->assertIsArray($result);
         $this->assertArrayHasKey('scan_id', $result);
         $this->assertArrayHasKey('findings_count', $result);
@@ -162,10 +162,10 @@ class AgentOrchestrationTest extends TestCase
         ]);
 
         $worker->runOnce(); // Will fail and enter waiting_approval
-        
+
         $approval = AgentApproval::where('agent_id', $agentId)->first();
         $this->assertNotNull($approval);
-        
+
         // 2. User approves
         $approvalService = $this->app->make(AgentApprovalServiceInterface::class);
         $approvalService->approve($approval->id);
@@ -185,5 +185,107 @@ class AgentOrchestrationTest extends TestCase
         $this->assertEquals('agent.plan', $nextTask['type']);
         $this->assertEquals('agent:restricted_action', $nextTask['payload']['last_action']);
         $this->assertTrue($nextTask['payload']['last_result']['success']);
+    }
+
+    public function test_planner_selects_scan_network_for_network_objective()
+    {
+        $agentService = $this->app->make(AgentService::class);
+        if (!$agentService->isRunning()) {
+            $agentService->start();
+        }
+
+        $queue = $this->app->make(AgentQueueInterface::class);
+        $handlerRegistry = $this->app->make(AgentTaskHandlerRegistryInterface::class);
+        $planner = $handlerRegistry->resolve('agent.plan');
+
+        $planner->handle([
+            'id' => 'plan_task_network',
+            'agent_id' => $agentService->getAgentId(),
+            'type' => 'agent.plan',
+            'payload' => [
+                'objective' => 'scan network example.com',
+                'step' => 1
+            ]
+        ]);
+
+        $task = $queue->dequeue($agentService->getAgentId());
+        $this->assertNotNull($task);
+        $this->assertEquals('agent.capability.execute', $task['type']);
+        $this->assertEquals('agent:scan_network', $task['payload']['capability_id']);
+        $this->assertEquals('example.com', $task['payload']['arguments']['target']);
+    }
+
+    public function test_network_capability_resolves()
+    {
+        $registry = $this->app->make(AgentCapabilityRegistryInterface::class);
+        $capability = $registry->resolve('agent:scan_network');
+        $this->assertNotNull($capability);
+        $this->assertEquals('agent:scan_network', $capability->getId());
+        $this->assertEquals('HIGH', $capability->getRiskLevel());
+    }
+
+    public function test_network_capability_requires_approval()
+    {
+        $worker = $this->app->make(\App\Services\AgentWorker::class);
+        $queue = $this->app->make(AgentQueueInterface::class);
+        $agentService = $this->app->make(AgentService::class);
+        $agentService->start();
+
+        $queue->enqueue($agentService->getAgentId(), 'agent.capability.execute', [
+            'capability_id' => 'agent:scan_network',
+            'arguments' => ['target' => 'example.com']
+        ]);
+
+        $worker->runOnce();
+
+        $this->assertEquals(AgentService::S_WAITING_APPROVAL, $agentService->getState());
+        $approval = AgentApproval::where('agent_id', $agentService->getAgentId())->first();
+        $this->assertNotNull($approval);
+        $this->assertEquals('pending', $approval->status);
+    }
+
+    public function test_network_capability_executes_and_generates_findings()
+    {
+        // We will mock the scanner to avoid actual network IO
+        $mockScanner = $this->getMockBuilder(\App\Services\Scan\Infrastructure\NativeInfrastructureScanner::class)->getMock();
+        $mockScanner->method('scan')->willReturn([
+            new \App\DTOs\Import\NormalizedFinding([
+                'scanner' => 'NativeInfrastructureScanner',
+                'scannerRuleId' => 'INFRA-PORT-001',
+                'title' => 'Open Ports Detected',
+                'severity' => 'info',
+                'category' => 'Network',
+                'description' => 'Open port 80',
+                'remediation' => 'Close it',
+                'technicalDetails' => 'Ports: 80',
+                'evidence' => 'TCP connect',
+                'url' => 'example.com',
+                'assetIdentifier' => 'example.com'
+            ])
+        ]);
+
+        $this->app->instance(\App\Services\Scan\Infrastructure\NativeInfrastructureScanner::class, $mockScanner);
+
+        $registry = $this->app->make(AgentCapabilityRegistryInterface::class);
+        $capability = $registry->resolve('agent:scan_network');
+
+        $agentService = $this->app->make(AgentService::class);
+        $agentService->start();
+
+        $result = $capability->execute(['target' => 'example.com'], ['agent_id' => $agentService->getAgentId()]);
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('scan_id', $result);
+        $this->assertEquals(1, $result['findings_count']);
+
+        // Check if DB recorded it
+        if (Schema::hasTable('scans')) {
+            $this->assertDatabaseHas('scans', [
+                'id' => $result['scan_id'],
+                'target' => 'example.com',
+                'status' => 'completed',
+                'engine' => 'localscanner'
+            ]);
+        }
     }
 }

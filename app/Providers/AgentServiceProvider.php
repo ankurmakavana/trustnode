@@ -47,6 +47,10 @@ class AgentServiceProvider extends ServiceProvider
             $registry->register($app->make(\App\Capabilities\AgentRestrictedCapability::class));
             $registry->registerOperation('agent:restricted_action', 'agent:restricted_action');
 
+            // Phase B - Network Scan
+            $registry->register($app->make(\App\Capabilities\AgentScanNetworkCapability::class));
+            $registry->registerOperation('agent:scan_network', 'agent:scan_network');
+
             return $registry;
         });
 
