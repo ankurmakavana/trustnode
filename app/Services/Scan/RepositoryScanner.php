@@ -40,9 +40,23 @@ class RepositoryScanner
     public function scan(string $workspacePath, string $repositoryUrl): array
     {
         $findings = [];
-        $files = File::allFiles($workspacePath);
+        if (!is_dir($workspacePath)) {
+            return [];
+        }
 
-        foreach ($files as $file) {
+        $finder = new \Symfony\Component\Finder\Finder();
+        $finder->files()
+            ->in($workspacePath)
+            ->exclude(['vendor', 'node_modules', '.git', 'storage', 'public'])
+            ->name('*.php')
+            ->name('*.js')
+            ->name('*.ts')
+            ->name('*.yaml')
+            ->name('*.yml')
+            ->ignoreDotFiles(false)
+            ->ignoreVCS(true);
+
+        foreach ($finder as $file) {
             $relativePath = $file->getRelativePathname();
 
             // Skip binary or vendor or .git files
@@ -52,7 +66,7 @@ class RepositoryScanner
 
             // Skip files larger than 5MB to prevent memory exhaustion
             $realPath = $file->getRealPath();
-            if (filesize($realPath) > 5 * 1024 * 1024) {
+            if (filesize($realPath) > 1 * 1024 * 1024) {
                 continue;
             }
 

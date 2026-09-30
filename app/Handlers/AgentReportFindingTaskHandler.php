@@ -129,7 +129,7 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
             $finding->update([
                 'finding_identity_id' => $identity->id,
                 'fingerprint' => $fingerprint,
-                'scanner' => 'AgentObservation',
+                'scanner' => $normalized->scanner ?? 'AgentObservation',
                 'agent_id' => $agentId,
                 'scan_id' => $scanId,
             ]);
