@@ -8,6 +8,13 @@ interface AgentCapabilityRegistryInterface
 
     public function register(AgentCapabilityInterface $capability): void;
     public function resolve(string $id): ?AgentCapabilityInterface;
+
+    /**
+     * Get all registered capabilities.
+     *
+     * @return AgentCapabilityInterface[]
+     */
+    public function getCapabilities(): array;
     /**
      * Map an operation to a required capability.
      */

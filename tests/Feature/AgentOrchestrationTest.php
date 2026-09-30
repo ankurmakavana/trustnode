@@ -61,27 +61,68 @@ class AgentOrchestrationTest extends TestCase
 
     public function test_planner_selects_scan_codebase_for_codebase_audit_objective()
     {
+        $this->assertPlannerSelectsScanCodebase('Audit the current TrustNode codebase');
+    }
+
+    public function test_planner_selects_scan_codebase_for_security_issues()
+    {
+        $this->assertPlannerSelectsScanCodebase('Audit the current TrustNode codebase for security issues.');
+    }
+
+    public function test_planner_selects_scan_codebase_for_vulnerabilities()
+    {
+        $this->assertPlannerSelectsScanCodebase('Scan this repository for vulnerabilities.');
+    }
+
+    public function test_planner_rejects_unsupported_objective()
+    {
         $agentService = $this->app->make(AgentService::class);
-        $agentService->start(); // Bootstraps agent_states table row
+        $agentService->start();
 
         $queue = $this->app->make(AgentQueueInterface::class);
         $handlerRegistry = $this->app->make(AgentTaskHandlerRegistryInterface::class);
         $planner = $handlerRegistry->resolve('agent.plan');
 
         $planner->handle([
-            'id' => 'plan_task_1',
+            'id' => 'plan_task_unsupported',
             'agent_id' => $agentService->getAgentId(),
             'type' => 'agent.plan',
             'payload' => [
-                'objective' => 'Audit the current TrustNode codebase',
+                'objective' => 'Bake a cake in the oven',
                 'step' => 1
             ]
         ]);
 
         $task = $queue->dequeue($agentService->getAgentId());
-        $this->assertNotNull($task);
+        $this->assertNull($task, "Unsupported objective should not enqueue a capability task.");
+    }
+
+    protected function assertPlannerSelectsScanCodebase(string $objective)
+    {
+        $agentService = $this->app->make(AgentService::class);
+        if (!$agentService->isRunning()) {
+            $agentService->start();
+        }
+
+        $queue = $this->app->make(AgentQueueInterface::class);
+        $handlerRegistry = $this->app->make(AgentTaskHandlerRegistryInterface::class);
+        $planner = $handlerRegistry->resolve('agent.plan');
+
+        $planner->handle([
+            'id' => 'plan_task_' . md5($objective),
+            'agent_id' => $agentService->getAgentId(),
+            'type' => 'agent.plan',
+            'payload' => [
+                'objective' => $objective,
+                'step' => 1
+            ]
+        ]);
+
+        $task = $queue->dequeue($agentService->getAgentId());
+        $this->assertNotNull($task, "Planner failed to enqueue task for objective: $objective");
         $this->assertEquals('agent.capability.execute', $task['type']);
         $this->assertEquals('agent:scan_codebase', $task['payload']['capability_id']);
+        $this->assertEquals(base_path(), $task['payload']['arguments']['target_path']);
     }
 
     public function test_permission_required_capability_enters_waiting_approval()

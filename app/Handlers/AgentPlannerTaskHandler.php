@@ -8,10 +8,14 @@ use Illuminate\Support\Facades\Log;
 class AgentPlannerTaskHandler implements AgentTaskHandlerInterface
 {
     protected \App\Contracts\AgentQueueInterface $queue;
+    protected \App\Contracts\AgentPlannerInterface $planner;
 
-    public function __construct(\App\Contracts\AgentQueueInterface $queue)
-    {
+    public function __construct(
+        \App\Contracts\AgentQueueInterface $queue,
+        \App\Contracts\AgentPlannerInterface $planner
+    ) {
         $this->queue = $queue;
+        $this->planner = $planner;
     }
 
     public function supports(string $type): bool
@@ -33,22 +37,16 @@ class AgentPlannerTaskHandler implements AgentTaskHandlerInterface
             return;
         }
 
-        if ($objective === 'Audit the current TrustNode codebase') {
-            if ($step === 1) {
-                // Step 1: Resolve Target and Scan
-                $this->queue->enqueue($agentId, 'agent.capability.execute', [
-                    'capability_id' => 'agent:scan_codebase',
-                    'arguments' => ['target_path' => base_path()],
-                    'plan_task_id' => $task['id'],
-                    'objective' => $objective,
-                    'step' => $step
-                ]);
-            } elseif ($step === 2 && $lastAction === 'agent:scan_codebase') {
-                // Step 2: Verify Result and Complete
-                Log::info("Objective Complete: Audit the current TrustNode codebase.", ['result' => $lastResult]);
-            }
-        } else {
-            Log::warning("AgentPlannerTaskHandler: Unknown objective.", ['objective' => $objective]);
+        $plan = $this->planner->plan($objective, $step, $lastAction, $lastResult);
+
+        if ($plan) {
+            $this->queue->enqueue($agentId, 'agent.capability.execute', [
+                'capability_id' => $plan['capability_id'],
+                'arguments' => $plan['arguments'],
+                'plan_task_id' => $task['id'],
+                'objective' => $objective,
+                'step' => $step
+            ]);
         }
     }
 }

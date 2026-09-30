@@ -62,6 +62,7 @@ class AgentServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Contracts\AgentApprovalServiceInterface::class, \App\Services\AgentApprovalService::class);
         $this->app->singleton(\App\Contracts\AgentSecurityBoundaryInterface::class, \App\Services\AgentSecurityBoundary::class);
         $this->app->singleton(\App\Contracts\DeepSeekHarnessAdapterInterface::class, \App\Services\DeepSeekHarnessAdapter::class);
+        $this->app->singleton(\App\Contracts\AgentPlannerInterface::class, \App\Services\DeterministicAgentPlanner::class);
     }
 
     /**

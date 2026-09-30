@@ -23,6 +23,11 @@ class AgentCapabilityRegistry implements AgentCapabilityRegistryInterface
         return $this->capabilities[$id] ?? null;
     }
 
+    public function getCapabilities(): array
+    {
+        return array_values($this->capabilities);
+    }
+
     public function registerOperation(string $operation, string $capability): void
     {
         $this->operationMap[$operation] = $capability;
