@@ -309,3 +309,54 @@ Strategy (owner decision): Option B with safety-first changes. Focused commits o
 5. Install `webklex/php-imap` (dependency install).
 6. Live acceptance scan: approve the exact project path and the live database record.
 7. Legacy data: finding 1 remediation, stuck scans 2 and 3, and any backfill. All data writes.
+
+## Session log 2: reconciliation, lease evaluation, remaining failures
+
+### Reconciliation (verified)
+- Branch `main`. Local is `origin/main` (`5b100f1`) plus local commits only. Nothing is behind. Remote not changed by this session.
+- Local commits after this session began: `2116dd0` (scan workflow test), `12e2627` (agent service test fixes), `44b2c88` (progress log), then the commits below.
+- Tree was clean at the start of this session.
+
+### Agent lease: deterministic regression coverage (done)
+- Two tests in `AgentServiceTakeoverTest` control time with `Carbon::setTestNow` (the array cache honours it):
+  - Inside the 90 s window (89 s after the last heartbeat), a restarted runtime is refused and stays stopped. At 91 s, the expired lease is taken over, and the stored instance becomes the new runtime's.
+  - A heartbeat at +60 s renews the lease. A challenger at +100 s is still refused.
+- Production lease and daemon behaviour unchanged (see recommendation below).
+
+### Lease design evaluation and recommendation (documentation, no code change)
+Current behaviour:
+- `start()` refuses when the database state is not `stopped` and the cache heartbeat is fresh (TTL 90 s).
+- `agent:run` exits with status 1 on refusal. Docker `restart: unless-stopped` relaunches it, with its own back-off.
+
+Options:
+1. **Keep exit-on-refusal (current).** Operational consequence: a restart inside 90 s of the last heartbeat produces a short run of failed starts, bounded by the TTL. Observed 12:28–12:30 UTC, nine restarts. The loop ends on its own. Simple, no in-process state.
+2. **Bounded retry inside `agent:run`, then exit.** Retry `start()` every few seconds until the lease expires or a fixed deadline passes (for example, the TTL plus one heartbeat interval), then exit 1. Operational consequence: fewer container restarts; the daemon stays alive during the wait. Risk: a bounded wait can still end in a restart loop if the deadline is short, and it needs the same clock-driven test.
+3. **Unbounded retry.** Rejected: it can hide a stuck owner indefinitely, and the plan forbids an infinite retry loop.
+
+**Recommendation:** option 2, with a hard deadline of TTL + one heartbeat interval (120 s). It removes the restart churn without an infinite loop, and it keeps the exit status for the case where a live owner really holds the lease. Not implemented yet: it changes the daemon's operational contract, so it needs your approval and a deployment of the agent container.
+
+### Remaining six failures, now
+- `ImapEmailReaderAdapterTest` (1 error): **blocked.** `webklex/php-imap` is declared in `composer.json` and locked in `composer.lock` (uncommitted, but present), but `vendor/webklex` is not installed. The adapter imports `Webklex\PHPIMAP\ClientManager`. Fix needs `composer install` for that package, which needs your approval. Not installed.
+- `IntegrationManagementTest` (3): **fixed by fixture, feature code was correct.** The admin had no team and the integrations had no organization, so `TenantScope` hid them. The admin now belongs to an organization and integrations are created in it. 6 of 6 pass. Commit `b0c4725`.
+- `MailSettingsTest` (2): **real product defect, fixed.** `Setting::setValue()` never set `organization_id`, so an admin's mail settings were written and never read back. The write now assigns the authenticated user's team organization, the same rule used for scans. Commit `f898739`. 7 of 7 pass.
+
+### Known limit found, not changed (needs a decision)
+- `settings.key` is globally unique, but the upsert looks up the row under `TenantScope`. A write with no authenticated user cannot see the existing row, so it hits the unique constraint. This pre-dates this session. For a single-developer install every write comes from the authenticated admin, so it is not triggered in practice. Changing it means deciding whether settings are global or per organization, which is a product decision.
+
+### Test results
+- Full suite at `f4a64c3`: 686 tests, 1903 assertions, 1 error, 0 failures, exit 2. The one error is the IMAP dependency. No new failures.
+- Focused: `AgentServiceTakeoverTest` 11 of 11; `MailSettingsTest` 7 of 7; `IntegrationManagementTest` 6 of 6; 58 across settings-related classes.
+
+### Local commits this session
+- `f898739` fix(settings): store settings under the authenticated user's organization
+- `b0c4725` test(integrations): give the admin the organization that owns integrations
+- `f4a64c3` test(agent): deterministic regression tests for the 90-second lease window
+
+### Still pending
+- **Approval required:** `composer install` for `webklex/php-imap` (dependency install).
+- **Approval required:** agent daemon change to bounded retry (option 2 above), and the agent container redeploy to load it.
+- **Approval required:** deploying the scheduler, agent, and worker to load the scheduled-task ownership and redaction changes.
+- **Approval required:** live acceptance scan; live project registration; legacy data writes (finding 1, stuck scans 2 and 3, backfill).
+- **Approval required:** remote Git history (`76bb8da`, `5b100f1`) and pushing the local commits.
+- **Decision required:** settings global versus per-organization (see above).
+- **Not yet started (safe local work):** CLI and MCP end-to-end checks. The CLI has 2 passing tests when run with an explicit path, and the MCP server has not been exercised. Next step if you want it: verify the CLI commands against the local API in a test environment, without a live database.
