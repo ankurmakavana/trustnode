@@ -14,8 +14,15 @@ final class TokenController extends Controller
         'scans:read',
         'scans:write',
         'findings:read',
+        'findings:write',
         'reports:read',
         'reports:write',
+        'projects:read',
+        'projects:write',
+        'repositories:read',
+        'repositories:write',
+        'notifications:read',
+        'notifications:write',
     ];
 
     /**
