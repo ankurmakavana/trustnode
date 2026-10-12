@@ -196,8 +196,11 @@ class ScanController extends Controller
 
         $date = $scan->created_at ? $scan->created_at->format('Y-m-d') : date('Y-m-d');
         
+        // Only letters, digits, dots and hyphens reach the Content-Disposition header. Quotes, spaces and
+        // control characters from a target name would otherwise break or inject into the header.
         $targetName = basename(str_replace('\\', '/', $scan->target ?? 'repo'));
-        $safeRepoName = str_replace(['/', '\\', '_'], '-', $targetName);
+        $safeRepoName = preg_replace('/[^A-Za-z0-9.-]+/', '-', $targetName) ?? '';
+        $safeRepoName = substr(trim($safeRepoName, '.-'), 0, 80) ?: 'repo';
         $filename = "trustnode-{$safeRepoName}-scan-{$date}.pdf";
 
         if ($report && $report->file_path && Storage::disk('local')->exists($report->file_path)) {
