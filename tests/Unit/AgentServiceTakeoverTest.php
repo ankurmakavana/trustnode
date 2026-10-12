@@ -184,4 +184,60 @@ class AgentServiceTakeoverTest extends TestCase
         $stored = json_decode(\Illuminate\Support\Facades\DB::table('agent_states')->value('state'), true);
         $this->assertSame($agentA->getInstanceId(), $stored['instance_id'] ?? null);
     }
+
+    // Deterministic lease window: time is controlled with Carbon, and the cache honours it. Heartbeat
+    // timeout is 90 s, the production value.
+
+    public function test_lease_refuses_takeover_inside_the_90s_window_and_allows_it_after()
+    {
+        config(['agent.state.driver' => 'database', 'agent.id' => 'lease-agent', 'agent.heartbeat.timeout' => 90]);
+        $t0 = \Carbon\Carbon::parse('2026-10-12 12:00:00');
+        \Carbon\Carbon::setTestNow($t0);
+
+        try {
+            $owner = new AgentService();
+            $owner->start();
+            $this->assertTrue($owner->isRunning());
+
+            // 89 s after the last heartbeat: the lease is still fresh, so a restart must be refused.
+            \Carbon\Carbon::setTestNow($t0->copy()->addSeconds(89));
+            $early = new AgentService();
+            $early->start();
+            $this->assertTrue($early->isStopped(), 'A restart inside the 90 s window must not take ownership.');
+
+            // 91 s after the last heartbeat: the lease has expired, so takeover succeeds.
+            \Carbon\Carbon::setTestNow($t0->copy()->addSeconds(91));
+            $late = new AgentService();
+            $late->start();
+            $this->assertTrue($late->isRunning(), 'An expired lease must be taken over.');
+
+            $stored = json_decode(\Illuminate\Support\Facades\DB::table('agent_states')->where('agent_id', 'lease-agent')->value('state'), true);
+            $this->assertSame($late->getInstanceId(), $stored['instance_id'] ?? null);
+        } finally {
+            \Carbon\Carbon::setTestNow();
+        }
+    }
+
+    public function test_heartbeat_extends_the_lease_window()
+    {
+        config(['agent.state.driver' => 'database', 'agent.id' => 'lease-agent-hb', 'agent.heartbeat.timeout' => 90]);
+        $t0 = \Carbon\Carbon::parse('2026-10-12 12:00:00');
+        \Carbon\Carbon::setTestNow($t0);
+
+        try {
+            $owner = new AgentService();
+            $owner->start();
+
+            // A heartbeat at +60 s renews the lease. A challenger at +100 s is then only 40 s past it.
+            \Carbon\Carbon::setTestNow($t0->copy()->addSeconds(60));
+            $owner->heartbeat();
+
+            \Carbon\Carbon::setTestNow($t0->copy()->addSeconds(100));
+            $challenger = new AgentService();
+            $challenger->start();
+            $this->assertTrue($challenger->isStopped(), 'A heartbeat must keep the lease fresh.');
+        } finally {
+            \Carbon\Carbon::setTestNow();
+        }
+    }
 }
