@@ -423,3 +423,67 @@ Git: `main` is 12 commits ahead of `origin/main` (`5b100f1`). Nothing pushed. Lo
 5. Live acceptance scan and live project registration.
 6. Legacy data: finding 1, stuck scans 2 and 3, and any backfill.
 7. Remote history (`76bb8da`, `5b100f1`), and pushing the local commits.
+
+## Session log 4: autonomous local completion
+
+Git: `main` is 20 commits ahead of `origin/main` (`5b100f1`). Working tree clean. Nothing pushed. Remote history not touched.
+
+### Full suite at `b384286` (working tree = HEAD)
+- Tests 718, assertions 1996, **errors 1, failures 0**, exit 2.
+- The single error is `ImapEmailReaderAdapterTest`: `webklex/php-imap` is declared and locked but not installed. Blocked (dependency install).
+- Also green in this session: CLI suite 15 of 15 (`cli/`), MCP contract tests 18 of 18 (`mcp/`, `python -m unittest mcp_contract_tests`).
+
+### Completed tasks (each with its commit)
+| Task | Commit | Verified by |
+|---|---|---|
+| CLI project list, add and scan; `scan:start` requires an explicit target | `625471c` | `ProjectWorkflowTest` 13 of 13 |
+| CLI PHPUnit configuration | `6b33ee2` | CLI suite 15 of 15 |
+| CLI and MCP endpoint contract tests | `606153e`, `c6cbd08` | `CliApiContractTest` 5 of 5, `McpApiContractTest` 4 of 4 |
+| MCP: `per_page`, report-status endpoint, local notification filters | `e7d58a0` | `mcp_contract_tests` 18 of 18 |
+| Settings: installation-wide read and boot-time application of saved SMTP | `e452a3d` | `MailSettingsApplierTest` 5 of 5, `MailSettingsTest` 7 of 7 |
+| Agent: bounded wait for an expired lease, exit 1 only after the deadline | `e1776b1` | `AgentStartRetryTest` 4 of 4; agent classes 30 of 30 |
+| Server-side AI fix prompt (redacted, advisory, tenant-scoped) | `3bd3794` | `AiFixPromptTest` 5 of 5 |
+| Report download filename reduced to a safe character set | `2a9af79` | `ReportDownloadFilenameTest` 4 of 4; `TenantIsolationTest` 7 of 7 |
+| Report job: no raw credentials to the template; report stored and completed | `41952ec` | `ReportJobRedactionTest` 1 of 1 |
+| CORS restricted to local origins (was `*` with credentials) | `74a6b78` | `CorsPolicyTest` 4 of 4 |
+| Repository ownership and shared contracts documented | `b384286` | documentation only |
+
+Earlier this session (same local branch): `f898739`, `b0c4725`, `f4a64c3`, `d27474f`, `2116dd0`, `12e2627`, `44b2c88`, `9819e16`.
+
+### Defects found and fixed in this batch
+- **Saved SMTP settings were not applied outside the saving request.** Queue workers and the scheduler used `.env` mail. Fixed by an installation-wide read (`Setting::globalValues`) and boot-time application (`MailSettingsApplier`).
+- **Agent restart refused at once inside the lease.** Now a bounded wait (lease TTL plus one heartbeat interval, 120 s), then exit 1. Infinite waiting is not possible.
+- **Report download header could carry quotes or control characters** from a target name. Filenames are now limited to letters, digits, dots and hyphens.
+- **CORS reflected any origin with credentials.** Now an explicit local list, overridable with `CORS_ALLOWED_ORIGINS`.
+- **AI fix prompt was built only in the browser.** Now built and redacted on the server; the React page still builds its own copy (a UI change, left for the frontend pass).
+
+### Runtime impact (read this before deploying)
+- `config/` and `app/` are bind-mounted into the running `php` container, so the CORS change, the mail boot change, and the prompt endpoint take effect on that container's next request, without a restart.
+- The `agent`, `worker` and `scheduler` containers keep the code they loaded at start. Their changes (bounded retry, mail application in workers, the report template input) need a restart. That restart is approval-gated.
+- Nothing above was run against a live database, a live project or a live scan.
+
+### Plan status
+- **Phase 1:** complete for the local scope. Live verification of port bindings was done earlier.
+- **Phase 2:** the registered-project workflow passes in isolation (`ProjectScanWorkflowTest`), the CLI is project-based, and the agent's bounded retry is implemented. A live acceptance scan is still needed and is approval-gated.
+- **Phase 3:** lifecycle, identity, baseline, count and posture tests pass. Live verification is pending.
+- **Phase 4:** the lease window is covered by deterministic tests, and the bounded retry is in place. Redeploying the agent is approval-gated.
+- **Phase 5:** the server-side prompt is redacted and advisory, with tests. The React page still builds its own copy.
+- **Phase 6:** the report job's input is redacted, the stored report is checked, and the filename is safe. A visual check of a real PDF download is still unverified.
+- **Phase 7:** the Compose file and installer references agree, and CORS is restricted. Two items need a decision: the database name mismatch (`.env` vs `trustnode_fresh` in Compose; `.env` may not be edited), and the settings design (global vs per-organization; see session log 3).
+- **Phase 8:** ownership and shared contracts documented in `REPOSITORY_BOUNDARIES.md`. No moves.
+- **Phase 9:** the full suite at `b384286` gives 718 tests, 0 failures, 1 blocked error. The end-to-end run on a live system has not been done.
+
+### Blocked operations (exact reason and approval required)
+1. **Install `webklex/php-imap`.** `composer install` for that package. Needs your approval. Not installed.
+2. **Restart or redeploy `agent`, `worker`, `scheduler`.** To load the bounded retry, the worker mail and report changes, and the scheduled-task ownership and redaction changes. Needs your approval.
+3. **Live acceptance scan and live project registration.** Needs the exact project path and approval to create the database record.
+4. **Legacy data.** Finding 1 remediation, stuck scans 2 and 3, and any backfill. Data writes. Need approval.
+5. **Remote history and push.** `76bb8da` and `5b100f1` are on `origin/main` without a review. Pushing the 20 local commits, or any history change, needs approval.
+6. **Settings schema decision.** Global versus per-organization for the unique key, and any migration. Needs your decision and approval.
+7. **Database name alignment.** `.env` uses `trustnode`; Compose's agent uses `trustnode_fresh`. Changing either touches configuration or runtime data. Needs approval.
+
+### Known limits, recorded
+- The AI prompt is advisory. The server does not apply patches, and the prompt says so.
+- Redaction is pattern-based. It does not catch an arbitrary secret with no key name and no known token shape.
+- The MCP token scope is not enforced by the server. The MCP itself issues GET requests only.
+- Settings written with no user still collide with the unique key (see session log 3).
