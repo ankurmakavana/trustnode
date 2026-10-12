@@ -96,6 +96,9 @@ class Setting extends Model
             $attributes['organization_id'] = $organizationId;
         }
 
-        return static::updateOrCreate(['key' => $key], $attributes);
+        // The key is unique across the installation, so the lookup must not be narrowed by TenantScope.
+        // A scoped lookup misses a row another organization owns and then violates the unique key.
+        return static::withoutGlobalScope(\App\Models\Scopes\TenantScope::class)
+            ->updateOrCreate(['key' => $key], $attributes);
     }
 }
