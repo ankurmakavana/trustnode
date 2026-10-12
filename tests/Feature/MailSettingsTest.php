@@ -26,12 +26,18 @@ class MailSettingsTest extends TestCase
         $adminRole = Role::where('slug', 'administrator')->first();
         $this->admin = User::factory()->create(['role_id' => $adminRole->id]);
 
+        // Settings are organization-owned (TenantScope): the admin belongs to the organization.
+        $org = \App\Models\Organization::factory()->create();
+        \App\Models\Team::factory()->create(['organization_id' => $org->id])->users()->attach($this->admin->id);
+
         $userRole = Role::where('slug', 'operator')->first();
         $this->user = User::factory()->create(['role_id' => $userRole->id]);
     }
 
     public function test_admin_can_read_settings_but_password_is_hidden()
     {
+        // Settings are written by an authenticated admin, so they get the admin's organization.
+        $this->actingAs($this->admin);
         Setting::setValue('mail_host', 'smtp.example.com');
         Setting::setValue('mail_password', 'secret', true);
 
@@ -40,6 +46,15 @@ class MailSettingsTest extends TestCase
         $response->assertStatus(200);
         $response->assertJsonFragment(['mail_host' => 'smtp.example.com']);
         $response->assertJsonMissing(['mail_password' => 'secret']);
+    }
+
+    public function test_setting_written_by_an_authenticated_user_gets_their_organization()
+    {
+        $this->actingAs($this->admin);
+        $setting = Setting::setValue('mail_from_name', 'TrustNode');
+
+        $expected = $this->admin->teams()->first()->organization_id;
+        $this->assertSame($expected, $setting->organization_id);
     }
 
     public function test_non_admin_cannot_read_settings()

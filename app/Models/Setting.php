@@ -67,13 +67,21 @@ class Setting extends Model
     public static function setValue($key, $value, $encrypt = false)
     {
         $storeValue = $encrypt && $value ? Crypt::encryptString($value) : $value;
-        
-        return static::updateOrCreate(
-            ['key' => $key],
-            [
-                'value' => $storeValue,
-                'is_encrypted' => $encrypt,
-            ]
-        );
+
+        // Settings are organization-owned. A row without an organization is hidden from every user by
+        // TenantScope, so the authenticated user's team organization is assigned on write, as for scans.
+        $organizationId = \Illuminate\Support\Facades\Auth::user()?->teams()->first()?->organization_id;
+
+        $attributes = [
+            'value' => $storeValue,
+            'is_encrypted' => $encrypt,
+        ];
+
+        // Without an authenticated user, the existing row's organization is left unchanged.
+        if ($organizationId !== null) {
+            $attributes['organization_id'] = $organizationId;
+        }
+
+        return static::updateOrCreate(['key' => $key], $attributes);
     }
 }
