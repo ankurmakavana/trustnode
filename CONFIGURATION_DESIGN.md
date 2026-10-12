@@ -125,13 +125,14 @@ Consequences:
    process that shares the installation. Host-side `artisan` should run inside the `php` container
    (`docker compose exec php php artisan ...`), as the installers already do. That keeps the host and the
    containers on the same queue and lease.
-3. **Schema reconciliation before data.** Bringing `trustnode` up to date is not a plain `php artisan migrate`.
-   Running `2026_08_11_054000_create_integrations_table` there would fail, because `integrations` already exists under
-   the stale record `053000`. The reconciliation has to be planned per migration: verify the schema each file would
-   create, then either run the four missing migrations (`agent_id`, `user_id`, `agent_activity_logs`, `codebase_projects`)
-   or record the integrations migration as applied after checking the schema matches. Do this only after a backup and
-   approval. Do not copy `trustnode_fresh` into `trustnode` without a reviewed merge plan, because the two diverged in
-   both schema and data.
+3. **Schema reconciliation before data.** Bringing `trustnode` up to date needs a per-migration plan. The full plan is in
+   `DEPLOYMENT_RUNBOOK.md` (section 2). In short: the `integrations` migration `2026_08_11_054000` is guarded by
+   `Schema::hasTable('integrations')`, and the table already exists in `trustnode` with identical columns, so it is a
+   no-op there. The other four pending migrations create or alter objects that are absent, so they must be applied.
+   Do this only after a backup and approval. Do not copy `trustnode_fresh` into `trustnode` without a reviewed merge
+   plan, because the two diverged in both schema and data.
+   *Correction:* an earlier version of this section said the integrations migration would fail on `trustnode`. That was
+   wrong; the guard prevents it.
 4. **Retire `trustnode_fresh` last.** Keep it until the canonical database has been verified for the full
    workflow. Then remove it with approval.
 

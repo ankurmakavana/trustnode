@@ -562,3 +562,55 @@ Earlier this session (same local branch): `f898739`, `b0c4725`, `f4a64c3`, `d274
 
 ### Not claimed
 - Production readiness. The live acceptance checks, the PDF visual check and the Phase 9 end-to-end run have not passed.
+
+## Session log 6 — Phase A (local verification), Phase B (runbook), Phase C (safe local work)
+
+### Test-count discrepancy: resolved (from session log 5)
+- Current counts are reproducible. The 695 run cannot be reproduced and its cause is unknown.
+
+### Tests at this milestone (HEAD `718d503`)
+- Laravel (`php -d memory_limit=512M vendor/bin/phpunit --do-not-cache-result`): **742 tests, 2045 assertions, 1 error** (`ImapEmailReaderAdapterTest`, package not installed), 7 deprecations, 3 skipped, 1 incomplete. Exit code 2.
+- CLI (`cli/`): **15 tests, 43 assertions, OK.**
+- MCP (`mcp/`, `.venv`, `python -I -m unittest mcp_contract_tests`): **18 tests, OK.**
+
+### Defects found and fixed (each with its commit)
+- **Settings write with no user** could not overwrite a key another organization owned (unique-key violation). Fixed in `aceecd1`; `SettingWriteTest` (3 tests) failed before the fix.
+- **Report layout** (checked on a real generated 25-page PDF): the "Vulnerability Findings" heading was stranded at the foot of the summary page; the posture-change table overran the margin; "(INITIAL_BASELINE)" could not wrap. Fixed in `771a936`. Residual: the label still overruns by a few pixels.
+- **Published artifacts** (`5b100f1`, `public/test_report.pdf`, `console.json`): a generated report in the web root, containing a local host path, plus an empty root file. Removed in `718d503`. History keeps them until a history change is approved. **Until the removal is pushed, the file is reachable on the published branch.**
+- **Download authorization** had no test for a same-organization user without `scans.view`, or for an unauthenticated request. Added in `423109c` (3 tests). The positive case passes; the rest return 403 and 401.
+
+### Checked and found correct (no change needed)
+- Backfill audit (`trustnode:backfill-organization-ownership`, no `--force`): read-only; reports ownership as deterministic on `trustnode_fresh`; the prompt was answered "no", so nothing was written.
+- Legacy masks (`findings:remediate-legacy-masks`, dry run): 1 finding matched; nothing written.
+- No credential-shaped strings in any added line of the 29 local commits or of `5b100f1`/`76bb8da`. The only matches are labelled synthetic fixtures (`FAKE…`) in `SecretRedactorTest`, `SecretRedactionTest` and `FindingManagementTest`. They match the AWS key shape, so a CI secret scanner will flag them.
+- The agent cannot write source: no file-write capability is registered under `app/` or `config/`; `AgentSecurityBoundaryTest` covers the non-read-only deny path.
+
+### Migration reconciliation (read-only; full table in `DEPLOYMENT_RUNBOOK.md` section 2)
+- `trustnode_fresh`: 44 of 44 applied; nothing pending.
+- `trustnode`: 40 of 44 applied; 5 pending; 1 stale record (`2026_08_11_053000_create_integrations_table`; no file in the repo or its history).
+- Pending on `trustnode`: `..._054000_create_integrations_table` (record only; guarded by `Schema::hasTable`, and the table is identical); `..._112502_add_agent_id_to_findings_table`; `..._095121_add_user_id_to_agent_tasks_table`; `..._142416_create_agent_activity_logs_table`; `..._113911_create_codebase_projects_table` (apply).
+- **Correction:** `CONFIGURATION_DESIGN.md` previously said the integrations migration would fail on `trustnode`. That was wrong, because the guard prevents it.
+- The five pending migrations have run on SQLite in every test run. They have **not** run on MySQL against a copy of `trustnode`.
+
+### Database choice (owner decision)
+- Recommendation revised to **`trustnode_fresh` (Option F)**. It has the complete migration set, and all four containers use it. Option F needs no schema change. `trustnode`'s 177 agent tasks need a data review before retiring it. See `DEPLOYMENT_RUNBOOK.md` section 1.
+
+### Stuck scans (read-only)
+- Scan 2: `running`, created 2026-10-10, no organization. Scan 3: `queued`, same. No approved command exists to fix them; the owner must choose a method.
+
+### Phase 6 (PDF): local evidence only
+- A real report from the report job was generated in the test environment from synthetic data (throwaway test, deleted; not committed). The PDF is 25 pages, 30 findings, severity totals 6/6/6/6/6, no raw synthetic credentials in the text. PyMuPDF opened it; the cover and summary pages were rendered and viewed.
+- Not verified: pages 3–25 were checked by text only, not visually. No live report has been checked.
+
+### Phase 9: prerequisites only
+- The local prerequisites are the focused tests and the full-suite run above. The end-to-end run is live and approval-gated (`DEPLOYMENT_RUNBOOK.md` section 12).
+
+### Git state
+- Branch `main`, HEAD `718d503`, **32 commits ahead of `origin/main`.** Nothing pushed; no history rewritten.
+- Published commits `76bb8da` and `5b100f1` were reviewed (see above). `5b100f1`'s message says "fixtures"; it changes 62 files including production code, `TenantScope` and the mail and agent services. Its message understates its scope. This is recorded, not changed.
+
+### Blocked (approval required; not performed)
+- See `DEPLOYMENT_RUNBOOK.md` section 15 for the grouped approvals: backups, canonical database, configuration, migrations, restart, live project and scan, legacy remediation, IMAP install, retiring a database, and push.
+
+### Not claimed
+- Production readiness. Live acceptance, the Phase 6 live PDF check and the Phase 9 end-to-end run have not passed.
