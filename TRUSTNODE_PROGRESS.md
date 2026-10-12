@@ -360,3 +360,66 @@ Options:
 - **Approval required:** remote Git history (`76bb8da`, `5b100f1`) and pushing the local commits.
 - **Decision required:** settings global versus per-organization (see above).
 - **Not yet started (safe local work):** CLI and MCP end-to-end checks. The CLI has 2 passing tests when run with an explicit path, and the MCP server has not been exercised. Next step if you want it: verify the CLI commands against the local API in a test environment, without a live database.
+
+## Session log 3: CLI, MCP, settings design, IMAP
+
+Git: `main` is 12 commits ahead of `origin/main` (`5b100f1`). Nothing pushed. Local commits this session: `f898739`, `b0c4725`, `f4a64c3`, `d27474f`, `625471c`, `6b33ee2`, `606153e`, `e7d58a0`, `c6cbd08`, and this log.
+
+### Priority 1 — CLI project workflow (done)
+- **Finding:** the CLI had no project-selection command. Its only scan command posted an arbitrary target to `POST /api/scans`, which bypasses the explicit project authorisation the plan requires. `scan:start` also fell back to the placeholder target `default-target`.
+- **Added:** `project:list` (`GET api/projects`), `project:add` (`POST api/projects`), `project:scan <id>` (`POST api/projects/{id}/scan`). Scans start only from a project ID. The CLI accepts no path for project scans.
+- **Changed:** `scan:start` now fails with exit 1 and sends no request when `--target` is missing. Existing command names and options are unchanged.
+- **Tests:** `cli/tests/ProjectWorkflowTest.php`, 13 of 13. A real `TrustNodeClient` with a Guzzle `MockHandler` records every request. Covered: the bearer token on requests; list and empty list; 401; 404 for an unregistered or out-of-scope project; 503 when no agent runs; rejected IDs; add sends only the registration fields; rejected paths; network failure; `scan:start` without a target.
+- **Contract:** `tests/Feature/CliApiContractTest.php`, 5 of 5. Calls the same endpoints in the isolated test database and checks the fields and status codes the CLI reads.
+- **CLI suite:** `cli/phpunit.xml` added, so the suite runs with no arguments: 15 of 15 pass, exit 0.
+- **Not verified:** a live CLI run against the running API. That needs the containers, which is approval-gated.
+
+### Priority 2 — MCP integration (done, with two findings)
+- **Defects found by checking the MCP's calls against the controllers:**
+  - Lists sent `limit`, which the API ignores. It paginates with `per_page`, so lists always returned 15.
+  - `trustnode_get_report_status` read `report_status` from the scan resource, which has no such field. It always returned `unknown`. It now calls `GET api/scans/{id}/report/status`, and a 404 maps to `none`.
+  - Notifications sent `unread` and `limit`. The API has neither: its index returns a fixed page. Unread and the limit are now applied to the response.
+- **Not fixed (server gap):** the API does not enforce the Sanctum token abilities that the MCP README says make its token read-only. The MCP itself issues only GET requests. Enforcing abilities on the server is a separate change.
+- **Tests:** `mcp/mcp_contract_tests.py`, 18 of 18, run with `python -m unittest mcp_contract_tests` in the existing `.venv`. The `.venv` has no pytest or respx, so the pre-existing pytest tests cannot run without installing them. The new file is renamed from `test_*.py` because the root `.gitignore` ignores that pattern.
+- **Server contract:** `tests/Feature/McpApiContractTest.php`, 4 of 4. Confirms `per_page` on scans, `scan_id` plus `per_page` on findings, the report-status 404, and 401 when unauthenticated.
+- **Not verified:** the MCP against a running server, and Claude Desktop integration. Both need a running API.
+
+### Priority 3 — settings architecture (audit and design; no change)
+**Inventory (verified):**
+- Only mail settings use the table: `SettingController` reads and writes `mail_*` and `mail_password` (encrypted with `Crypt`). Nothing else calls `Setting`.
+- The table has `key` unique (migration `2026_08_18_194531`). `organization_id` was added later (`2026_09_13`). The unique constraint was never changed.
+- `Setting` is organization-owned, so `TenantScope` hides rows with no organization from every user.
+
+**Defects found:**
+1. **Saved SMTP settings do not reach queued mail (verified).** `applyMailSettings()` is called only from `updateMailSettings()`, inside that request. Nothing applies the settings at boot or in a job, so worker mail uses `.env`, not the admin's saved settings.
+2. **Write-then-hidden (fixed in `f898739`).** Settings written without an organization were invisible on read. The write now uses the authenticated user's organization.
+3. **Write without a user collides with the unique key (not fixed).** The upsert looks the row up under `TenantScope`. Without a user it can't see the row, so it inserts and hits `settings.key`'s unique constraint.
+
+**Design recommendation (not implemented):**
+- **Global (installation-wide), `organization_id` NULL:** `mail_*` and SMTP credentials. A single-developer install has one SMTP configuration, and runtime processes (web, worker, scheduler) must read it with no user context.
+  - Read through an explicit unscoped query (`withoutGlobalScope(TenantScope::class)`), so runtime reads don't depend on a request user.
+  - Write only through the authenticated administrator route.
+  - Apply to the mail config at boot, in a provider guarded by `Schema::hasTable`, so every process applies it.
+- **Per-organization, if and when needed:** tenant-specific credentials and integration configuration. Integration credentials already follow the integration's organization, so no change is needed there.
+- **Schema change (only when per-organization settings are adopted):** replace `unique(key)` with `unique(organization_id, key)`, and handle NULL-organization global rows explicitly. This is a migration on a live table. It needs its own design and approval, and it is not part of this session.
+
+**Migration and compatibility implications:**
+- Existing rows already have NULL `organization_id` (created before `f898739`) or the admin's organization (created after). The global design needs NULL rows to be the global set, so rows written by `f898739` would need to be reconciled.
+- Changing the mail read path changes behaviour for every process. It needs a test per process and a deployment, both approval-gated.
+
+**Not changed:** schema, unique key, runtime mail configuration. Each needs an approved design and a deployment.
+
+### Priority 4 — IMAP error (diagnosed, not installed)
+- `webklex/php-imap` is declared in `composer.json` on `origin/main` (1 occurrence) and locked in `composer.lock` (6 occurrences).
+- It is not installed: `vendor/webklex` does not exist.
+- The adapter `app/Services/Mail/ImapEmailReaderAdapter.php` imports `Webklex\PHPIMAP\ClientManager` and `Message`. The test fails with `Class "Webklex\PHPIMAP\Support\AttachmentCollection" not found`.
+- **Blocked:** the fix is `composer install` for that package, which needs your approval. No install was run.
+
+### Pending, needing your approval
+1. Install `webklex/php-imap` (IMAP test).
+2. Settings design: approve the global mail-settings read path and boot-time application, then implement and deploy.
+3. Deploy the agent, worker, and scheduler to load the scheduled-task ownership, redaction, and mail changes.
+4. Agent bounded-retry change (see session log 2), and its agent redeploy.
+5. Live acceptance scan and live project registration.
+6. Legacy data: finding 1, stuck scans 2 and 3, and any backfill.
+7. Remote history (`76bb8da`, `5b100f1`), and pushing the local commits.
