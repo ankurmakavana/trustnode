@@ -22,6 +22,10 @@ class ScanE2ETest extends TestCase
         $this->seed(RolePermissionSeeder::class);
         $admin = User::factory()->create(['role_id' => \App\Models\Role::where('slug', 'administrator')->first()->id]);
 
+        // Setup creates a default team and the admin belongs to it, so new scans get an organization.
+        $org = \App\Models\Organization::factory()->create();
+        \App\Models\Team::factory()->create(['organization_id' => $org->id])->users()->attach($admin->id);
+
         Queue::fake();
 
         $payload = [
@@ -73,8 +77,38 @@ class ScanE2ETest extends TestCase
         }
         $this->assertEquals(ScanStatus::COMPLETED, $scan->status);
         $this->assertEquals(100, $scan->progress);
+        // Findings are visible only for an authenticated user in the scan's organization (TenantScope).
+        $this->actingAs($admin);
         $this->assertTrue($scan->findings()->count() > 0);
     }
+    public function test_scan_created_through_the_api_is_assigned_to_the_users_organization()
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create(['role_id' => \App\Models\Role::where('slug', 'administrator')->first()->id]);
+        $org = \App\Models\Organization::factory()->create();
+        \App\Models\Team::factory()->create(['organization_id' => $org->id])->users()->attach($admin->id);
+        Queue::fake();
+
+        $response = $this->actingAs($admin)->postJson('/api/scans', [
+            'name' => 'Org assignment scan',
+            'type' => ScanType::NETWORK_IP->value,
+            'engine' => ScanEngine::NMAP->value,
+            'target' => 'example.com',
+            'status' => 'queued',
+            'progress' => 0,
+        ]);
+
+        $response->assertStatus(201);
+        $scan = Scan::withoutGlobalScopes()->findOrFail($response->json('data.id') ?? $response->json('id'));
+        $this->assertSame($org->id, $scan->organization_id);
+
+        // Another organization's user cannot see this scan, so the assignment matters for isolation too.
+        $outsider = User::factory()->create(['role_id' => \App\Models\Role::where('slug', 'administrator')->first()->id]);
+        $otherOrg = \App\Models\Organization::factory()->create();
+        \App\Models\Team::factory()->create(['organization_id' => $otherOrg->id])->users()->attach($outsider->id);
+        $this->actingAs($outsider)->getJson("/api/scans/{$scan->id}")->assertStatus(404);
+    }
+
     public function test_infrastructure_scan_tenant_isolation()
     {
         $this->seed(RolePermissionSeeder::class);

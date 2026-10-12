@@ -64,6 +64,10 @@ class ScanService
             $data['created_by'] = $creator->id;
             $data['updated_by'] = $creator->id;
 
+            // Same rule as storeLocal(): without an organization the scan's findings are not visible
+            // under TenantScope, even to the user who started the scan.
+            $data['organization_id'] ??= $creator->current_organization_id ?? $creator->teams()->first()?->organization_id;
+
             if (!empty($data['repository_id'])) {
                 // Lock repository if possible to serialize requests
                 \App\Models\Repository::where('id', $data['repository_id'])->lockForUpdate()->first();
