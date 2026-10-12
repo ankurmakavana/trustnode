@@ -30,11 +30,21 @@ class AgentRunCommand extends Command
     {
         $this->info('TrustNode Agent process started.');
         
-        // Ensure AgentServiceProvider's boot logic actually started the agent
-        // and we acquired ownership. If not, we should exit.
+        // A restart inside the previous owner's lease is refused. Wait for the lease to expire, within a
+        // bounded deadline (lease TTL plus one heartbeat interval), instead of exiting at once. If the
+        // deadline passes, exit with status 1 as before, so a live owner is never displaced.
         if (!$agentService->isRunning() && !$agentService->isStarting()) {
-            $this->error('Failed to acquire agent ownership or agent is not in RUNNING state. Exiting.');
-            return 1;
+            $this->info('Waiting for the previous agent lease to expire (bounded).');
+            $retry = new \App\Services\AgentStartRetry(
+                (int) config('agent.heartbeat.timeout', 90),
+                (int) config('agent.heartbeat.interval', 30),
+            );
+            $owned = $retry->attempt($agentService);
+
+            if (!$owned) {
+                $this->error('Failed to acquire agent ownership within the lease window. Exiting.');
+                return 1;
+            }
         }
 
         $lastHeartbeat = Carbon::now();
