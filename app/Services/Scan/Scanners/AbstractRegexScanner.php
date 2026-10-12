@@ -3,6 +3,7 @@
 namespace App\Services\Scan\Scanners;
 
 use App\DTOs\Import\NormalizedFinding;
+use App\Services\SecretRedactor;
 
 abstract class AbstractRegexScanner implements ScannerInterface
 {
@@ -38,8 +39,12 @@ abstract class AbstractRegexScanner implements ScannerInterface
                     $evidence = mb_convert_encoding(trim($lineContent), 'UTF-8', 'UTF-8');
 
                     if ($rule['category'] === 'Secret') {
-                        $evidence = $this->maskSecret($matchedText);
+                        // Full placeholder: no part of the credential, not even its prefix or suffix, is stored.
+                        $evidence = '[REDACTED: ' . $rule['id'] . ']';
                     } else {
+                        // Redact before truncation so a credential cannot be cut in half and left readable.
+                        $evidence = SecretRedactor::redact($evidence);
+
                         if (mb_strlen($evidence) > 2000) {
                             $matchPos = mb_strpos($evidence, $matchedText);
                             if ($matchPos !== false) {
@@ -82,16 +87,5 @@ abstract class AbstractRegexScanner implements ScannerInterface
         }
 
         return $findings;
-    }
-
-    protected function maskSecret(string $secret): string
-    {
-        $secret = trim($secret);
-        $len = strlen($secret);
-        if ($len <= 8) {
-            return '********';
-        }
-
-        return substr($secret, 0, 4).str_repeat('*', $len - 8).substr($secret, -4);
     }
 }

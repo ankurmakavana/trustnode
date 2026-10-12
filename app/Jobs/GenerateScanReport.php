@@ -43,15 +43,18 @@ class GenerateScanReport implements ShouldQueue, TenantAwareJob
             // Fetch only specific columns needed
             $findings = Finding::where('scan_id', $scan->id)
                 ->select('id', 'scan_id', 'title', 'severity', 'category', 'cwe', 'technical_details', 'url', 'cvss_score', 'description', 'evidence', 'remediation')
-                ->get();
-            
+                ->get()
+                // In memory only: stored rows may predate server-side redaction.
+                ->each->redactSecrets();
+
             $this->scanReport->update(['progress' => 30]);
 
             $repository = Repository::where('name', $scan->target)->select('id', 'name', 'visibility', 'default_branch')->first();
 
             if (! $repository) {
+                $targetName = basename(str_replace('\\', '/', $scan->target));
                 $repository = (object) [
-                    'name' => $scan->target,
+                    'name' => $targetName,
                     'visibility' => 'unknown',
                     'default_branch' => 'main',
                 ];

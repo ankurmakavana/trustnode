@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Finding;
 
 use Illuminate\Http\Request;
+use App\Services\SecretRedactor;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class FindingResource extends JsonResource
@@ -22,10 +23,10 @@ class FindingResource extends JsonResource
             'lifecycle_status' => $this->lifecycle_status?->value ?? 'new',
             'category' => $this->category,
             'cwe' => $this->cwe,
-            'description' => $this->description,
+            'description' => SecretRedactor::redact($this->description),
             'technical_details' => $this->maskSecrets($this->technical_details, $this->category, $this->title),
-            'business_impact' => $this->business_impact,
-            'remediation' => $this->remediation,
+            'business_impact' => SecretRedactor::redact($this->business_impact),
+            'remediation' => SecretRedactor::redact($this->remediation),
             'evidence' => $this->maskSecrets($this->evidence, $this->category, $this->title),
             'url' => $this->url,
             'scanner' => $this->scanner,
@@ -78,7 +79,6 @@ class FindingResource extends JsonResource
             return '******** [REDACTED IN API RESPONSE] ********';
         }
 
-        $pattern = '/((?:api_key|apikey|token|secret|password|passwd|key|auth)(?:\s*[:=]\s*[\'"]?))([^\'"\s]+)([\'"]?)/i';
-        return preg_replace($pattern, '$1********$3', $content);
+        return SecretRedactor::redact($content);
     }
 }

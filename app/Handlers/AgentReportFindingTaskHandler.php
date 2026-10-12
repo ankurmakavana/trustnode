@@ -8,6 +8,7 @@ use App\DTOs\Import\NormalizedFinding;
 use App\Models\FindingIdentity;
 use App\Services\Finding\FindingService;
 use App\Services\Import\FingerprintService;
+use App\Services\SecretRedactor;
 use Illuminate\Support\Facades\Log;
 
 class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
@@ -57,7 +58,8 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
 
         $identity->update(['last_seen_at' => now()]);
 
-        $evidence = $normalized->evidence ?? $payload['evidence'] ?? null;
+        // Server-side redaction before persistence, for every text field, whatever the finding category.
+        $evidence = SecretRedactor::redact($normalized->evidence ?? $payload['evidence'] ?? null);
         if (is_string($evidence) && mb_strlen($evidence) > 2000) {
             $evidence = mb_substr($evidence, 0, 2000) . '... [truncated]';
         }
@@ -66,7 +68,7 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
         $agentId = $payload['agent_id'] ?? $task['agent_id'] ?? null;
 
         $findingDto = new FindingData(
-            title: $normalized->title,
+            title: SecretRedactor::redact($normalized->title),
             cve: $normalized->cve,
             cvss_score: $normalized->cvss ?? (isset($payload['cvss_score']) ? (float) $payload['cvss_score'] : null),
             severity: strtolower($normalized->severity ?? 'low'),
@@ -74,10 +76,10 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
             lifecycle_status: 'new',
             category: $normalized->category ?? $payload['category'] ?? 'Agent Observation',
             cwe: $normalized->cwe ?? $payload['cwe'] ?? null,
-            description: $normalized->description ?? $payload['description'] ?? 'Observation recorded by TrustNode Agent.',
-            technical_details: $normalized->technicalDetails ?? $payload['technical_details'] ?? null,
-            business_impact: $payload['business_impact'] ?? null,
-            remediation: $normalized->remediation ?? $payload['remediation'] ?? null,
+            description: SecretRedactor::redact($normalized->description ?? $payload['description'] ?? 'Observation recorded by TrustNode Agent.'),
+            technical_details: SecretRedactor::redact($normalized->technicalDetails ?? $payload['technical_details'] ?? null),
+            business_impact: SecretRedactor::redact($payload['business_impact'] ?? null),
+            remediation: SecretRedactor::redact($normalized->remediation ?? $payload['remediation'] ?? null),
             evidence: $evidence,
             asset_id: $assetId,
             target_id: $payload['target_id'] ?? null,
