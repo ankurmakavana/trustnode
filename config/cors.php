@@ -19,7 +19,12 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['*'],
+    // Explicit local origins only. A wildcard with credentials let any website read authenticated API
+    // responses. The app itself is same-origin. These entries cover the dev server and local access.
+    'allowed_origins' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', env('CORS_ALLOWED_ORIGINS', 'http://localhost:8000,http://127.0.0.1:8000,http://localhost:5173,http://127.0.0.1:5173'))
+    ))),
 
     'allowed_origins_patterns' => [],
 
