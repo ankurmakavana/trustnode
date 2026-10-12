@@ -209,6 +209,13 @@ about hourly and Compose restarts it. Eight restarts over about 9.9 h fits that 
 - *Action:* none. An hourly clean exit is expected. A worker without a healthcheck cannot report a stuck process, so
   consider one later.
 
+**Agent restarts (not resolved).** `trustnode-agent-1`: `RestartCount` 9 since creation (2026-10-12 10:36 UTC). Its last
+exit was code 0 at 12:30:06 UTC, and it has been up since 12:30:32. Between roughly 10:50 and 12:30 the log repeats
+`TrustNode Agent process started.` followed by `Failed to acquire agent ownership or agent is not in RUNNING state.
+Exiting.`, with no error or exception line. The activity log shows an agent `failed` event about every 15 minutes in the
+same window. The message text is not in `app/`, `cli/src/`, `mcp/`, `config/`, `routes/` or `bootstrap/`. I did not find its
+source. Cause: **unknown**. The agent is stable now, so no action is taken. The recreate must wait for the lease (6a, step 4).
+
 **Worker failed jobs.** `failed_jobs` in `trustnode_fresh` has two rows (2026-10-12 12:01:03 and 12:01:04 UTC),
 `HighSeverityFindingNotification`: "Object of class App\Enums\Finding\FindingSeverity could not be converted to string".
 - The defect is fixed in code. `severityValue()` handles a backed enum (commit `323b040`). The file was last changed at
@@ -339,7 +346,7 @@ recreate will relabel them to `compose.dev.yaml`.
 | 1 | `docker compose -f compose.dev.yaml stop scheduler agent` | `agent_tasks` `processing` = 0 |
 | 2 | `docker compose -f compose.dev.yaml up -d --no-deps --force-recreate php` | `php` healthy within 120 s; `printenv DB_DATABASE` = `trustnode_fresh` |
 | 3 | `docker compose -f compose.dev.yaml up -d --no-deps --force-recreate worker` | `printenv DB_DATABASE`; no `FATAL` in `docker logs trustnode-worker-1`; `RestartCount` 0 |
-| 4 | `docker compose -f compose.dev.yaml up -d --no-deps --force-recreate agent` | Agent log shows `agent:run` starting; `config('agent.id')` = `trustnode-local-agent-1` |
+| 4 | Wait until the previous lease has expired (heartbeat timeout 90 s plus one 30 s interval; `agent_states` for `trustnode-local-agent-1` not `RUNNING` or stale), then `docker compose -f compose.dev.yaml up -d --no-deps --force-recreate agent` | Agent log shows `agent:run` starting, with no `Failed to acquire agent ownership` line; `config('agent.id')` = `trustnode-local-agent-1`; `RestartCount` stays 0 for two minutes |
 | 5 | `docker compose -f compose.dev.yaml up -d --no-deps --force-recreate scheduler` | `printenv DB_DATABASE`; `docker compose ps` shows all four running |
 
 After step 5, confirm the database in each container with `php artisan tinker --execute='echo config("database.connections.mysql.database");'` (expect `trustnode_fresh`). Confirm `docker compose -f compose.dev.yaml ps` shows no restart loop.
