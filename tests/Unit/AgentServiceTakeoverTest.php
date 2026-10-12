@@ -6,10 +6,14 @@ use App\Services\AgentService;
 use App\Providers\AgentServiceProvider;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class AgentServiceTakeoverTest extends TestCase
 {
+    // start() notifies administrators, so the users and roles tables must exist.
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -164,41 +168,20 @@ class AgentServiceTakeoverTest extends TestCase
 
     public function test_true_concurrency_race_condition_using_db_cas()
     {
-        // Switch to database driver to test CAS logic
+        // Real database, no mocks: two runtimes start against the same agent_states row. The
+        // compare-and-swap on the stored instance must leave exactly one owner.
         config(['agent.state.driver' => 'database']);
-        
-        // Mock DB table
-        $tableMock = \Mockery::mock('Illuminate\Database\Query\Builder');
-        \Illuminate\Support\Facades\DB::shouldReceive('table')->with('agent_states')->andReturn($tableMock);
-        
-        $agentId = 'test-takeover-agent';
-        $initialState = json_encode(['state' => AgentService::S_STOPPED, 'instance_id' => null]);
-        
-        // Setup initial record read
-        $record = (object)['state' => $initialState];
-        
-        // Both A and B will read this exact same record initially
-        $tableMock->shouldReceive('where')->with('agent_id', $agentId)->andReturnSelf();
-        $tableMock->shouldReceive('first')->andReturn($record);
-        
-        // Agent A attempts CAS
-        // Agent B attempts CAS
-        // We mock update so that it succeeds for A (1 affected) and fails for B (0 affected) because state changed
-        $tableMock->shouldReceive('whereNull')->with('state->instance_id')->andReturnSelf();
-        $tableMock->shouldReceive('where')->with('state->instance_id', \Mockery::any())->andReturnSelf();
-        $tableMock->shouldReceive('update')->andReturn(1, 0); // First call returns 1, second returns 0
-        $tableMock->shouldReceive('updateOrInsert')->andReturn(true);
-        
+
         $agentA = new AgentService();
         $agentB = new AgentService();
-        
-        $agentA->start(); // Wins race
-        $agentB->start(); // Loses race
-        
+
+        $agentA->start(); // wins the row
+        $agentB->start(); // must lose: A holds a fresh heartbeat
+
         $this->assertTrue($agentA->isRunning());
         $this->assertTrue($agentB->isStopped());
-        
-        // Clear mock for other tests
-        \Mockery::close();
+
+        $stored = json_decode(\Illuminate\Support\Facades\DB::table('agent_states')->value('state'), true);
+        $this->assertSame($agentA->getInstanceId(), $stored['instance_id'] ?? null);
     }
 }

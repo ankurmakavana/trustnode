@@ -6,10 +6,14 @@ use App\Services\AgentService;
 use App\Providers\AgentServiceProvider;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class AgentServiceBootstrapTest extends TestCase
 {
+    // start() notifies administrators, so the users and roles tables must exist.
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
