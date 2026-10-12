@@ -3,6 +3,10 @@
 Status: **audit and design only.** No configuration, schema, data or runtime change is made by this document.
 Each rollout step below needs approval where the step is marked.
 
+Recovery note: an earlier version of this file was present but untracked and was overwritten before it was committed.
+Its content could not be recovered. The transcript has no copy of it, the file-history backup for that write holds no content,
+no other copy exists on disk, and the two stash entries contain no untracked file. This version is the only copy.
+
 Source of truth: `TRUSTNODE_IMPLEMENTATION_PLAN.md` (Phase 7, and the non-negotiable rules).
 
 ## 1. Runtime configuration sources (verified)
@@ -37,6 +41,18 @@ Both databases exist on the same MySQL server. They have diverged.
 | Scans | 3 | 3 |
 | `agent_tasks` | 177 | 34 (all `agent.observe_env`, all failed before the ownership fix) |
 | `agent_states` | 2 | 1 |
+
+Migration state (read-only comparison of the `migrations` tables, Session log 5):
+
+- `trustnode_fresh` has 5 migrations that `trustnode` does not: `2026_08_11_054000_create_integrations_table`
+  (a different name from the one `trustnode` records), `2026_09_26_112502_add_agent_id_to_findings_table`,
+  `2026_10_06_095121_add_user_id_to_agent_tasks_table`, `2026_10_06_142416_create_agent_activity_logs_table`,
+  and `2026_10_07_113911_create_codebase_projects_table`.
+- `trustnode` records `2026_08_11_053000_create_integrations_table`, which has no file in the repo. It is a stale
+  record, probably from an earlier rename of that migration.
+- Table counts: `trustnode` 59, `trustnode_fresh` 61. `agent_activity_logs` and `codebase_projects` exist only in
+  `trustnode_fresh`. `findings.agent_id` and `agent_tasks.user_id` exist only in `trustnode_fresh`.
+- The `integrations` table has the same columns in both databases.
 
 Consequences:
 - Anything run from the host with `.env` writes to a database the running agent does not read.
@@ -109,9 +125,13 @@ Consequences:
    process that shares the installation. Host-side `artisan` should run inside the `php` container
    (`docker compose exec php php artisan ...`), as the installers already do. That keeps the host and the
    containers on the same queue and lease.
-3. **Schema reconciliation before data.** Apply the pending migrations to `trustnode` (including
-   `codebase_projects`) only after a backup and approval. Do not copy `trustnode_fresh` into `trustnode`
-   without a reviewed merge plan, because the two diverged in both schema and data.
+3. **Schema reconciliation before data.** Bringing `trustnode` up to date is not a plain `php artisan migrate`.
+   Running `2026_08_11_054000_create_integrations_table` there would fail, because `integrations` already exists under
+   the stale record `053000`. The reconciliation has to be planned per migration: verify the schema each file would
+   create, then either run the four missing migrations (`agent_id`, `user_id`, `agent_activity_logs`, `codebase_projects`)
+   or record the integrations migration as applied after checking the schema matches. Do this only after a backup and
+   approval. Do not copy `trustnode_fresh` into `trustnode` without a reviewed merge plan, because the two diverged in
+   both schema and data.
 4. **Retire `trustnode_fresh` last.** Keep it until the canonical database has been verified for the full
    workflow. Then remove it with approval.
 
