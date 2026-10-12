@@ -620,3 +620,19 @@ Earlier this session (same local branch): `f898739`, `b0c4725`, `f4a64c3`, `d274
 - **Final HEAD `bc0e7be`, 34 commits ahead of `origin/main`.** The entry above recorded HEAD as `718d503` and 32 ahead, because it was written before the runbook and later fix commits.
 - Final Laravel suite at `bc0e7be`: **742 tests, 2045 assertions, 1 error** (IMAP), exit 2. CLI 15 OK and MCP 18 OK were run at `718d503`, before the card fix. Neither suite touches the changed view.
 - Throwaway generator `tests/Feature/TmpRealPdfExportTest.php` was created twice and deleted both times. It is not in git.
+
+## Session log 7 — step 1 approved: verified backups and scratch restores
+
+No live operation other than read-only queries and `mysqldump` (read-only, `--single-transaction`). No source database modified. No `.env`, Compose or container change. No restart. Nothing deleted. Nothing pushed.
+
+- **Backup location:** `C:\tn_backups\20261013-014935\` — `trustnode.sql` (137,289 bytes), `trustnode_fresh.sql` (254,276 bytes), `SHA256SUMS.txt`. `sha256sum -c`: both OK.
+- **Dump form:** by database name, no `CREATE DATABASE`/`USE`, so the file cannot target a live name when restored. Routines, triggers and events included. No error markers.
+- **Scratch restores** (new databases, nothing overwritten): `trustnode_restore_check` and `trustnode_fresh_restore_check`. Both still exist as evidence; dropping them needs approval.
+- **Table lists:** 59/59 (trustnode) and 61/61 (trustnode_fresh) identical.
+- **Row counts (exact):** `trustnode` 59/59 tables match, 375 rows. `trustnode_fresh` 60/61 match. The one difference, `agent_tasks`, is live growth after the snapshot: restored 539 rows = source rows with `created_at` ≤ 20:19:54 (exact). The 6 later rows were created 20:20:03–20:25:02.
+- **Sizes (data+index, information_schema):** trustnode 3.00 MB source / 3.58 MB restored; trustnode_fresh 3.41 MB / 4.03 MB. Restored sizes differ because of allocation, not content, as the row counts match.
+- **Live observation:** the running agent wrote 6 `agent_tasks` rows in about 5 minutes (20:20–20:25). Earlier counts had 34 rows for `trustnode_fresh`; the agent is actively writing. A clean cutover needs the agent stopped first (approval group 5).
+- **Not verified by this step:** column-level equality on all tables (checked earlier only for `integrations`), and the restore into MySQL of the actual production data path.
+- **Caught and corrected during this step:** the first dump used `--databases`, which would have put live-name `CREATE DATABASE`/`USE` statements in the file; re-dumped by name. The first row-count check flagged `agent_tasks` because it compared against the current count instead of the snapshot; corrected by comparing against `created_at` ≤ snapshot time.
+- **Runbook:** section 3 updated with these results; a path-corruption error I introduced in that update was repaired (backslash escapes), and the checksums in the runbook match `SHA256SUMS.txt`.
+- **Rollback checkpoint C1:** established and restore-verified.

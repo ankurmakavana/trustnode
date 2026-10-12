@@ -68,17 +68,47 @@ migrates a fresh database at every run (739 tests pass). They have **not** been 
 
 ---
 
-## 3. Backups and restore checks **[APPROVAL]**
+## 3. Backups and restore checks — **executed 2026-10-13 (step 1 approved)**
 
-1. Dump both databases to a directory outside the repo, for example `C:\tn_backups\<timestamp>\`. Record SHA-256
-   checksums of each dump.
-2. Restore check: load each dump into a scratch database and compare row counts with the source. A restore check
-   creates a new database on the server, which is a server change and needs the same approval.
-3. Stop if any dump is empty, a checksum does not match, or a restore check fails.
+Read-only on both source databases (`mysqldump --single-transaction`, no locks on the live tables). No `.env`,
+Compose, container, or source-database change. No database was retired or deleted.
 
-**Rollback checkpoint C1:** the verified dumps. Nothing after this point is considered reversible without them.
+**Backup location:** `C:\tn_backups\20261013-014935\`
 
----
+| File | Bytes | SHA-256 | Dump completed |
+|---|---|---|---|
+| `trustnode.sql` | 137,289 | `b3494b14f75845db5ff69d755b0721f29ba5ba20c749dbd63068aa22b49073bc` | 2026-10-12 20:19:51 |
+| `trustnode_fresh.sql` | 254,276 | `5c2a56ba7b3df3ddb8ce7fca2c6c0ed716be7277796b78461198fc5cd0742ca0` | 2026-10-12 20:19:54 |
+| `SHA256SUMS.txt` | — | verified with `sha256sum -c`: both OK | — |
+
+Dumps are by database name (no `CREATE DATABASE` or `USE` statements), so they cannot target a live database when
+restored. Both contain routines, triggers and events. Neither contains an error marker.
+
+**Scratch restores (new databases; nothing existing was overwritten):**
+
+| Source | Scratch database | Tables (source / restored) | Data+index size (source / restored) |
+|---|---|---|---|
+| `trustnode` | `trustnode_restore_check` | 59 / 59 | 3.00 MB / 3.58 MB |
+| `trustnode_fresh` | `trustnode_fresh_restore_check` | 61 / 61 | 3.41 MB / 4.03 MB |
+
+**Row-count verification (exact `COUNT(*)` per table):**
+- `trustnode`: all 59 tables match exactly. 375 rows in total.
+- `trustnode_fresh`: 60 of 61 tables match exactly. `agent_tasks` differs by 6 rows, as explained below.
+- `agent_tasks` difference: the source is live. The restored database holds 539 rows, which equals the source rows
+  with `created_at` at or before the snapshot time (20:19:54). The 6 extra rows were created at 20:20:03 to 20:25:02,
+  after the snapshot. So the restore matches the snapshot exactly. The first comparison, which used the current
+  count, incorrectly reported a mismatch.
+
+**Caveats recorded:**
+- `agent_tasks` is written continuously by the running agent (6 new rows in about 5 minutes). A backup taken while
+  the agent runs is a point-in-time snapshot. For a clean cutover, stop the agent first (approval group 5).
+- The scratch databases `trustnode_restore_check` and `trustnode_fresh_restore_check` are **still present**, as
+  evidence. Dropping them is a deletion and needs your approval.
+- Schema equality was checked by table list only. Column-level equality was not re-checked by this restore step.
+  It was checked earlier for the `integrations` table.
+
+**Rollback checkpoint C1: established and restore-verified.** Use `mysql <db> < trustnode.sql` (or the fresh dump)
+into a database that has been dropped or renamed, with approval.
 
 ## 4. Configuration alignment **[APPROVAL]**
 
