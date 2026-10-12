@@ -614,3 +614,9 @@ Earlier this session (same local branch): `f898739`, `b0c4725`, `f4a64c3`, `d274
 
 ### Not claimed
 - Production readiness. Live acceptance, the Phase 6 live PDF check and the Phase 9 end-to-end run have not passed.
+
+### Addendum (final state of session 6)
+- Finding cards now stay on one page (`bc0e7be`). The synthetic report went from 25 to 32 pages. Text checks unchanged (no raw synthetic credentials; severity totals 6/6/6/6/6).
+- **Final HEAD `bc0e7be`, 34 commits ahead of `origin/main`.** The entry above recorded HEAD as `718d503` and 32 ahead, because it was written before the runbook and later fix commits.
+- Final Laravel suite at `bc0e7be`: **742 tests, 2045 assertions, 1 error** (IMAP), exit 2. CLI 15 OK and MCP 18 OK were run at `718d503`, before the card fix. Neither suite touches the changed view.
+- Throwaway generator `tests/Feature/TmpRealPdfExportTest.php` was created twice and deleted both times. It is not in git.

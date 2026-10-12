@@ -175,9 +175,10 @@ the prior configuration restores them. Code rollback needs a new commit or branc
 
 ## 11. Phase 6 PDF acceptance
 
-Local checks already done, on a synthetic report: 25 pages, 30 findings, severity totals 6/6/6/6/6, no raw
-synthetic credentials in the text, the cover and summary pages checked visually. This is evidence about the
-template, **not** an acceptance check.
+Local checks already done, on a synthetic report: 32 pages (after keeping finding cards whole, `bc0e7be`), 30
+findings, severity totals 6/6/6/6/6, no raw synthetic credentials in the text, and the cover, summary, a finding page
+and the last page checked visually. Pages 4–31 were checked by text only. This is evidence about the template,
+**not** an acceptance check.
 
 Live: download a real report for the approved scan, then:
 1. Open it, and count pages and check pagination (no heading left alone at a page foot).
