@@ -17,6 +17,9 @@ use TrustNode\Cli\Commands\ActivateCommand;
 use TrustNode\Cli\Commands\UpdateCommand;
 use TrustNode\Cli\Commands\DoctorCommand;
 use TrustNode\Cli\Commands\RepairCommand;
+use TrustNode\Cli\Commands\ProjectListCommand;
+use TrustNode\Cli\Commands\ProjectAddCommand;
+use TrustNode\Cli\Commands\ProjectScanCommand;
 // Keep existing auth commands just in case
 require_once __DIR__ . '/../src/Commands/ScanLocalUploadCommand.php';
 use TrustNode\Cli\Commands\ScanLocalUploadCommand;
@@ -30,6 +33,10 @@ $configManager = new ConfigManager();
 $client = new TrustNodeClient($configManager);
 
 // Register commands
+// Project workflow: scans start only for registered projects.
+$application->add(new ProjectListCommand($client));
+$application->add(new ProjectAddCommand($client));
+$application->add(new ProjectScanCommand($client));
 $application->add(new ScanCommand($client));
 $application->add(new ScanLocalUploadCommand($client, $configManager));
 $application->add(new StatusCommand($client));

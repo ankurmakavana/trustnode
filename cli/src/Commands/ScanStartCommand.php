@@ -43,8 +43,11 @@ class ScanStartCommand extends Command
         $target = $input->getOption('target');
         $name = $input->getOption('name');
 
+        // A scan needs an explicit target. A placeholder target would queue a meaningless scan.
         if (!$target) {
-            $target = 'default-target'; // or throw error
+            $output->writeln('<error>--target is required.</error>');
+
+            return Command::FAILURE;
         }
 
         $scanType = '';
