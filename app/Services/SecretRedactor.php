@@ -30,8 +30,13 @@ class SecretRedactor
 
     private const BEARER_PATTERN = '/(\bbearer\s+)[A-Za-z0-9._~+\/\-]+=*/i';
 
+    // HTTP Basic credentials. Anchored to the Authorization header, so prose such as "Basic authentication"
+    // is not changed.
+    private const BASIC_AUTH_PATTERN = '/(\bauthorization["\']?\s*[:=]\s*basic\s+)[A-Za-z0-9+\/]+=*/i';
+
     // Keeps the key name and separator so the finding stays readable, and replaces only the value.
-    private const ASSIGNMENT_PATTERN = '/(\b[A-Za-z0-9_.\-]*(?:password|passwd|pwd|secret|token|api[_\-]?key|apikey|access[_\-]?key|private[_\-]?key|client[_\-]?secret|credentials?)[A-Za-z0-9_.\-]*["\']?\s*[:=]\s*)(?:"[^"\r\n]*"|\'[^\'\r\n]*\'|[^\s"\',;#]+)/i';
+    // Added terms are specific on purpose: a broad term such as "auth" would also match "author".
+    private const ASSIGNMENT_PATTERN = '/(\b[A-Za-z0-9_.\-]*(?:password|passwd|pwd|secret|token|api[_\-]?key|apikey|access[_\-]?key|private[_\-]?key|client[_\-]?secret|credentials?|session[_\-]?id|sessionid|cookie|signature|webhook[_\-]?secret|connection[_\-]?string)[A-Za-z0-9_.\-]*["\']?\s*[:=]\s*)(?:"[^"\r\n]*"|\'[^\'\r\n]*\'|[^\s"\',;#]+)/i';
 
     public static function redact(?string $text): ?string
     {
@@ -45,6 +50,7 @@ class SecretRedactor
 
         $text = self::replace(self::URL_CREDENTIAL_PATTERN, '$1' . self::PLACEHOLDER . '@', $text);
         $text = self::replace(self::BEARER_PATTERN, '$1' . self::PLACEHOLDER, $text);
+        $text = self::replace(self::BASIC_AUTH_PATTERN, '$1' . self::PLACEHOLDER, $text);
         $text = self::replace(self::ASSIGNMENT_PATTERN, '$1' . self::PLACEHOLDER, $text);
 
         return $text;
