@@ -515,3 +515,50 @@ Earlier this session (same local branch): `f898739`, `b0c4725`, `f4a64c3`, `d274
 ### Still outside safe local scope
 - Live CLI/MCP run against the running API; visual PDF verification; Phase 9 end-to-end run.
 - Production readiness is not claimed. The security, deployment and acceptance checks are not verified.
+
+
+## Session log 5 — fast completion: test-count reconciliation, settings defect, configuration recovery
+
+### Test-count discrepancy (resolved)
+- At `b384286`: 718 tests (recorded). Since then `TokenAbilityEnforcementTest` added 13 tests and `SecretRedactorTest` grew from 9 to 14 methods (+5). 718 + 13 + 5 = 736, which matches the foreground run and `--list-tests`.
+- The earlier background run that reported **695 tests / 1924 assertions** could not be reproduced. Its cause is not established. The foreground runs below are the authoritative counts.
+- Static inventory: `test_*` methods were 683 at `b384286` and 701 at `aceecd1` before the settings tests were added. The rest of the difference is data-provider expansion, which `--list-tests` reports.
+
+### Defect fixed
+- **`Setting::setValue` could not overwrite a key owned by another organization without a user.** Its `updateOrCreate` ran under `TenantScope`, so the lookup missed the row and the insert violated the unique key on `key`. The lookup is now unscoped, since keys are unique across the installation. Commit `aceecd1`. Regression tests: `tests/Feature/SettingWriteTest.php` (3 tests). Two of them failed with `UniqueConstraintViolationException` before the fix.
+
+### Configuration recovery (partial)
+- The earlier untracked `CONFIGURATION_DESIGN.md` **could not be recovered.** The transcript holds no copy of its original text. The file-history backup for that write has no content. No other copy exists on disk. The two stash entries contain no untracked file.
+- The design document now carries a recovery note, and this version is the only copy.
+- Verified migration drift (read-only): `trustnode_fresh` has 5 migrations `trustnode` lacks; `trustnode` has a stale record for `2026_08_11_053000_create_integrations_table`, which has no file in the repo. `findings.agent_id`, `agent_tasks.user_id`, `agent_activity_logs` and `codebase_projects` exist only in `trustnode_fresh`. Commit `479fff6`.
+- Consequence: a plain `migrate` on `trustnode` would fail at `2026_08_11_054000`, because `integrations` already exists there. Reconciliation must be planned per migration.
+- Process-to-database map (verified in `compose.dev.yaml`): the `php`, `worker`, `scheduler` and `agent` services use `trustnode_fresh`. Host `.env` uses `trustnode`. Nothing was changed.
+
+### Verified locally in this session
+- MCP token ability enforcement: `TokenAbilityEnforcementTest` (13 tests).
+- React AI prompt endpoint: `AiFixPromptTest`.
+- Redaction and false-positive guards: `SecretRedactorTest` (14 tests).
+- Agent bounded retry: `AgentStartRetryTest`.
+- Worker and scheduler mail configuration: `MailSettingsApplierTest`.
+- Report download filename and redaction: `ReportDownloadFilenameTest`, `ReportJobRedactionTest`.
+- CORS restrictions: `CorsPolicyTest`. Setup: `SetupTest`.
+- MCP and CLI contracts: `McpApiContractTest`, `CliApiContractTest`; MCP `mcp_contract_tests` (18); CLI suite (15).
+- Agent cannot write source: no file-write capability is registered under `app/` or `config/`. `AgentSecurityBoundaryTest::test_security_boundary_denies_non_read_only_operations` covers the deny path. Live behaviour is not verified.
+
+### Test results at this milestone (after `aceecd1`)
+- Laravel (`php -d memory_limit=512M vendor/bin/phpunit --do-not-cache-result`): **739 tests, 2042 assertions, 1 error** (`ImapEmailReaderAdapterTest`, package not installed), 7 deprecations, 3 skipped, 1 incomplete. Exit code 2.
+- CLI and MCP: unchanged since their passing runs (CLI 15 tests OK; MCP 18 tests OK). No later commit touches `cli/` or `mcp/`.
+
+### Git state
+- Branch `main`, HEAD `479fff6`, **28 local commits ahead of `origin/main`.** Nothing pushed; no history rewritten.
+- Remote risk unchanged: `76bb8da` and `5b100f1` are on `origin/main` and have not been reviewed.
+
+### Still blocked (approval required; not performed)
+- Installing `webklex/php-imap`.
+- Restarting or redeploying `php`, `worker`, `scheduler`, `agent`.
+- Compose database-name change, backups, migrations on `trustnode`, retiring `trustnode_fresh`.
+- Live acceptance scan and live project registration; legacy data remediation (finding 1, stuck scans 2 and 3).
+- Pushing local commits.
+
+### Not claimed
+- Production readiness. The live acceptance checks, the PDF visual check and the Phase 9 end-to-end run have not passed.
