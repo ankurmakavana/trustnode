@@ -161,4 +161,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // Agent Endpoints
     Route::get('/agent/health', [\App\Http\Controllers\AgentController::class, 'health']);
     Route::get('/agent/console', [\App\Http\Controllers\AgentController::class, 'console']);
+
+    // Codebase Project Endpoints
+    Route::get('/projects/workspace-directories', [\App\Http\Controllers\Api\CodebaseProjectController::class, 'workspaceDirectories']);
+    Route::post('/projects/{project}/scan', [\App\Http\Controllers\Api\CodebaseProjectController::class, 'scan']);
+    Route::apiResource('/projects', \App\Http\Controllers\Api\CodebaseProjectController::class)->only(['index', 'store', 'destroy']);
 });

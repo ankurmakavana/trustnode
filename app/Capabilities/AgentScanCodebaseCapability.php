@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use App\Models\Scan;
 use Illuminate\Support\Str;
+use App\Models\CodebaseProject;
+use App\Enums\CodebaseProject\CodebaseProjectStatus;
 
 class AgentScanCodebaseCapability implements AgentCapabilityInterface
 {
@@ -27,7 +29,7 @@ class AgentScanCodebaseCapability implements AgentCapabilityInterface
 
     public function getDescription(): string
     {
-        return 'Scans a codebase repository for vulnerabilities and secrets.';
+        return 'Scans a codebase repository or a registered CodebaseProject for vulnerabilities and secrets.';
     }
 
     public function getRequiredPermission(): ?string
@@ -45,9 +47,10 @@ class AgentScanCodebaseCapability implements AgentCapabilityInterface
         return [
             'type' => 'object',
             'properties' => [
-                'target_path' => ['type' => 'string']
-            ],
-            'required' => ['target_path']
+                'target_path' => ['type' => 'string'],
+                'project_id' => ['type' => 'integer'],
+                'scan_profile' => ['type' => 'string']
+            ]
         ];
     }
 
@@ -64,25 +67,76 @@ class AgentScanCodebaseCapability implements AgentCapabilityInterface
 
     public function execute(array $arguments, array $context): mixed
     {
-        $targetPath = $arguments['target_path'] ?? '';
+        $systemUserId = \App\Services\TenantContext::currentUserId();
+        if (!$systemUserId) {
+            throw new \RuntimeException("Missing tenant context for codebase scan.");
+        }
+
+        $user = \App\Models\User::find($systemUserId);
+        $organizationId = $user ? $user->organizations()->first()?->id : null;
+
+        $projectId = $arguments['project_id'] ?? null;
+        $targetPath = $arguments['target_path'] ?? null;
         
-        $canonicalTarget = realpath($targetPath);
+        $scanProfile = 'standard';
+        $canonicalTarget = false;
+        $project = null;
+
         $basePath = realpath(base_path());
+        $scanMountDir = realpath(config('agent.scan_mount_dir', '/mnt/trustnode-scan'));
         
-        if ($canonicalTarget === false || !str_starts_with($canonicalTarget, $basePath)) {
-            throw new \RuntimeException("Invalid or unauthorized target path. Target must be within base_path.");
+        $mountPrefix = $scanMountDir !== false ? rtrim($scanMountDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR : null;
+        $basePrefix = $basePath !== false ? rtrim($basePath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR : null;
+
+        if ($projectId) {
+            $project = CodebaseProject::find($projectId);
+            
+            if (!$project || $project->status !== CodebaseProjectStatus::ACTIVE || $project->organization_id !== $organizationId) {
+                throw new \RuntimeException("Invalid, unauthorized, or inactive codebase project.");
+            }
+            
+            $scanProfile = $project->scan_profile?->value ?? $arguments['scan_profile'] ?? 'standard';
+            
+            if (!$mountPrefix) {
+                throw new \RuntimeException("Scan mount directory is not configured or unavailable.");
+            }
+            
+            $targetPath = rtrim($scanMountDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . ltrim($project->path, '/\\');
+            $canonicalTarget = realpath($targetPath);
+            
+            if ($canonicalTarget === false || !is_dir($canonicalTarget)) {
+                throw new \RuntimeException("Invalid target path: directory does not exist or cannot be resolved.");
+            }
+            
+            // Boundary check avoiding prefix-sibling attacks
+            if ($canonicalTarget !== rtrim($mountPrefix, DIRECTORY_SEPARATOR) && !str_starts_with($canonicalTarget, $mountPrefix)) {
+                throw new \RuntimeException("Invalid or unauthorized target path. Target must be within the designated scan mount.");
+            }
+        } elseif ($targetPath) {
+            // Legacy flow
+            $canonicalTarget = realpath($targetPath);
+            if ($canonicalTarget === false || !is_dir($canonicalTarget)) {
+                throw new \RuntimeException("Invalid target path: directory does not exist or cannot be resolved.");
+            }
+            
+            $isWithinBasePath = $basePrefix !== null && ($canonicalTarget === rtrim($basePrefix, DIRECTORY_SEPARATOR) || str_starts_with($canonicalTarget, $basePrefix));
+            $isWithinScanMount = $mountPrefix !== null && ($canonicalTarget === rtrim($mountPrefix, DIRECTORY_SEPARATOR) || str_starts_with($canonicalTarget, $mountPrefix));
+            
+            if (!$isWithinBasePath && !$isWithinScanMount) {
+                throw new \RuntimeException("Invalid or unauthorized target path. Target must be within base_path or the designated scan mount.");
+            }
+        } else {
+            throw new \RuntimeException("Missing project_id or target_path.");
         }
 
         $startedAt = now();
         $agentId = $context['agent_id'] ?? 'unknown';
 
-        $systemUserId = Schema::hasTable('users') ? \App\Models\User::query()->value('id') : null;
-
         $scan = null;
         if (Schema::hasTable('scans')) {
-            $scan = Scan::create([
+            $scanData = [
                 'uuid' => (string) Str::uuid(),
-                'name' => 'Agent Codebase Scan',
+                'name' => $project ? 'Project Scan: ' . $project->name : 'Agent Codebase Scan',
                 'description' => 'Autonomous codebase scan by Agent.',
                 'type' => \App\Enums\Scan\ScanType::LOCAL,
                 'engine' => \App\Enums\Scan\ScanEngine::REPOSITORY_SCANNER,
@@ -91,10 +145,22 @@ class AgentScanCodebaseCapability implements AgentCapabilityInterface
                 'progress' => 50,
                 'started_at' => $startedAt,
                 'created_by' => $systemUserId,
-            ]);
+                'organization_id' => $organizationId,
+            ];
+            
+            // If the schema supports codebase_project_id, attach it.
+            // (Documented integration point)
+            if (Schema::hasColumn('scans', 'codebase_project_id')) {
+                $scanData['codebase_project_id'] = $project ? $project->id : null;
+            }
+            
+            $scan = Scan::create($scanData);
         }
 
         try {
+            // Note: $scanProfile could be passed to the scanner if supported.
+            // We pass it to the scanner if the underlying method signature updates, 
+            // otherwise we stick to existing behaviour.
             $findings = $this->scanner->scan($canonicalTarget, $canonicalTarget);
 
             $completedAt = now();
