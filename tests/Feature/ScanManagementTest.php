@@ -173,6 +173,9 @@ class ScanManagementTest extends TestCase
             'created_by' => $this->admin->id,
         ]);
 
+        // Relations on tenant-scoped models resolve only for an authenticated user (TenantScope).
+        $this->actingAs($this->admin);
+
         $this->assertNotNull($scan->targetRelation);
         $this->assertEquals($target->id, $scan->targetRelation->id);
         $this->assertEquals('Edge Gateway Firewall', $scan->targetRelation->name);

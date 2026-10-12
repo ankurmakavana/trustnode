@@ -43,6 +43,11 @@ class RepositoryScanLifecycleTest extends TestCase
             'name' => 'test/repo',
             'created_by' => $this->admin->id,
         ]);
+
+        // A user can only reach repositories of an organization they belong to (TenantScope).
+        // The factory creates its own organization, so the admin is made a member of it here.
+        $team = \App\Models\Team::factory()->create(['organization_id' => $this->repository->organization_id]);
+        $team->users()->attach($this->admin->id);
     }
 
     private function createScan(ScanStatus $status, $updatedAt = null)

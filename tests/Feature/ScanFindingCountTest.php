@@ -20,6 +20,11 @@ class ScanFindingCountTest extends TestCase
         $adminRole = Role::where('slug', UserRole::ADMINISTRATOR->value)->first();
         $user = User::factory()->create(['role_id' => $adminRole->id]);
 
+        // Scans and their findings are visible only through an organization the user belongs to (TenantScope).
+        $org = \App\Models\Organization::factory()->create();
+        $team = \App\Models\Team::factory()->create(['organization_id' => $org->id]);
+        $team->users()->attach($user->id);
+
         $scanRunning = Scan::create([
             'name' => 'Running Scan',
             'type' => 'port_discovery',
@@ -27,6 +32,7 @@ class ScanFindingCountTest extends TestCase
             'target' => '10.10.1.1',
             'status' => 'running',
             'progress' => 50,
+            'organization_id' => $org->id,
             'created_by' => $user->id,
         ]);
 
@@ -37,6 +43,7 @@ class ScanFindingCountTest extends TestCase
             'target' => '10.10.1.2',
             'status' => 'completed',
             'progress' => 100,
+            'organization_id' => $org->id,
             'created_by' => $user->id,
         ]);
 

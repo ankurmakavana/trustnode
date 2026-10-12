@@ -29,6 +29,8 @@ class SecurityPostureDashboardTest extends TestCase
     use RefreshDatabase;
 
     protected User $tenantA;
+    protected \App\Models\Organization $orgA;
+    protected \App\Models\Organization $orgB;
     protected User $tenantB;
 
     protected function setUp(): void
@@ -48,6 +50,14 @@ class SecurityPostureDashboardTest extends TestCase
             'role_id' => $adminRole->id,
             'name' => 'Tenant B Admin',
         ]);
+
+        // Scans and findings are visible only through the owning user's organization (TenantScope).
+        // Each tenant gets its own organization, and its scans are assigned to it in createScan.
+        $this->orgA = \App\Models\Organization::factory()->create();
+        \App\Models\Team::factory()->create(['organization_id' => $this->orgA->id])->users()->attach($this->tenantA->id);
+
+        $this->orgB = \App\Models\Organization::factory()->create();
+        \App\Models\Team::factory()->create(['organization_id' => $this->orgB->id])->users()->attach($this->tenantB->id);
     }
 
     /**
@@ -64,6 +74,7 @@ class SecurityPostureDashboardTest extends TestCase
             'progress' => 100,
             'started_at' => now()->subMinutes(10),
             'completed_at' => now()->subMinutes(5),
+            'organization_id' => $user->id === $this->tenantA->id ? $this->orgA->id : $this->orgB->id,
             'created_by' => $user->id,
         ], $attributes));
     }

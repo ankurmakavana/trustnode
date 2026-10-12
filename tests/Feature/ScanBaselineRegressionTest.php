@@ -31,6 +31,7 @@ class ScanBaselineRegressionTest extends TestCase
 
     private User $tenantA;
     private User $tenantB;
+    private \App\Models\Organization $tenantOrg;
     private Repository $repoA;
     private Repository $repoB;
     private ScanBaselineComparisonService $comparisonService;
@@ -68,6 +69,19 @@ class ScanBaselineRegressionTest extends TestCase
         ]);
 
         $this->comparisonService = app(ScanBaselineComparisonService::class);
+
+        // Scans and findings are visible only through an organization the user belongs to (TenantScope).
+        $this->tenantOrg = \App\Models\Organization::factory()->create();
+        $team = \App\Models\Team::factory()->create(['organization_id' => $this->tenantOrg->id]);
+        $team->users()->attach($this->tenantA->id);
+    }
+
+    // The queue listener sets the tenant context from getTenantId() before a job runs; direct handle()
+    // calls bypass that listener, so the context is set here, matching production.
+    private function runScanJob(ScanRepositoryJob $job): void
+    {
+        \App\Services\TenantContext::setUserId($job->getTenantId());
+        app()->call([$job, 'handle']);
     }
 
     private function createScan(Repository $repo, User $user, int $timeOffsetMinutes = 0): Scan
@@ -85,6 +99,7 @@ class ScanBaselineRegressionTest extends TestCase
             'progress' => 0,
             'started_at' => $time,
             'created_at' => $time,
+            'organization_id' => $this->tenantOrg->id,
             'created_by' => $user->id,
         ]);
     }
@@ -121,7 +136,7 @@ class ScanBaselineRegressionTest extends TestCase
 
         $scan = $this->createScan($this->repoA, $this->tenantA, 0);
         $job = new ScanRepositoryJob($scan, $this->repoA);
-        app()->call([$job, 'handle']);
+        $this->runScanJob($job);
 
         $this->actingAs($this->tenantA);
 
@@ -164,7 +179,7 @@ class ScanBaselineRegressionTest extends TestCase
         });
         $scan1 = $this->createScan($this->repoA, $this->tenantA, 0);
         $job1 = new ScanRepositoryJob($scan1, $this->repoA);
-        app()->call([$job1, 'handle']);
+        $this->runScanJob($job1);
 
         // Scan 2: B (high) and C (medium). (A is resolved, B is recurring, C is new)
         $this->mock(RepositoryScanner::class, function (MockInterface $mock) use ($findingB, $findingC) {
@@ -172,7 +187,7 @@ class ScanBaselineRegressionTest extends TestCase
         });
         $scan2 = $this->createScan($this->repoA, $this->tenantA, 10);
         $job2 = new ScanRepositoryJob($scan2, $this->repoA);
-        app()->call([$job2, 'handle']);
+        $this->runScanJob($job2);
 
         $this->actingAs($this->tenantA);
 
@@ -215,7 +230,7 @@ class ScanBaselineRegressionTest extends TestCase
         });
         $scan1 = $this->createScan($this->repoA, $this->tenantA, 0);
         $job1 = new ScanRepositoryJob($scan1, $this->repoA);
-        app()->call([$job1, 'handle']);
+        $this->runScanJob($job1);
 
         // Scan 2: Zero findings (clean)
         $this->mock(RepositoryScanner::class, function (MockInterface $mock) {
@@ -223,7 +238,7 @@ class ScanBaselineRegressionTest extends TestCase
         });
         $scan2 = $this->createScan($this->repoA, $this->tenantA, 10);
         $job2 = new ScanRepositoryJob($scan2, $this->repoA);
-        app()->call([$job2, 'handle']);
+        $this->runScanJob($job2);
 
         $this->actingAs($this->tenantA);
 
@@ -257,7 +272,7 @@ class ScanBaselineRegressionTest extends TestCase
         });
         $scan1 = $this->createScan($this->repoA, $this->tenantA, 0);
         $job1 = new ScanRepositoryJob($scan1, $this->repoA);
-        app()->call([$job1, 'handle']);
+        $this->runScanJob($job1);
 
         // Scan 2: Fails during checkout
         $this->mock(RepositoryService::class, function (MockInterface $mock) {
@@ -267,7 +282,7 @@ class ScanBaselineRegressionTest extends TestCase
         });
         $scan2 = $this->createScan($this->repoA, $this->tenantA, 10);
         $job2 = new ScanRepositoryJob($scan2, $this->repoA);
-        app()->call([$job2, 'handle']);
+        $this->runScanJob($job2);
 
         // Scan 3: Successful (same finding A)
         $this->mock(RepositoryService::class, function (MockInterface $mock) {
@@ -280,7 +295,7 @@ class ScanBaselineRegressionTest extends TestCase
         });
         $scan3 = $this->createScan($this->repoA, $this->tenantA, 20);
         $job3 = new ScanRepositoryJob($scan3, $this->repoA);
-        app()->call([$job3, 'handle']);
+        $this->runScanJob($job3);
 
         $this->actingAs($this->tenantA);
 
@@ -310,7 +325,7 @@ class ScanBaselineRegressionTest extends TestCase
 
         $scan = $this->createScan($this->repoA, $this->tenantA, 0);
         $job = new ScanRepositoryJob($scan, $this->repoA);
-        app()->call([$job, 'handle']);
+        $this->runScanJob($job);
 
         // Unauthenticated request -> 401
         $response = $this->getJson("/api/scans/{$scan->id}/lifecycle");

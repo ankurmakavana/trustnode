@@ -40,6 +40,16 @@ class FindingLifecycleIntelligenceTest extends TestCase
     private Repository $repoA;
     private Repository $repoB;
 
+    private \App\Models\Organization $tenantOrg;
+
+    // The queue listener sets the tenant context from getTenantId() before a job runs. Direct handle()
+    // calls bypass that listener, so the context is set here, matching production.
+    private function runScanJob(ScanRepositoryJob $job): void
+    {
+        \App\Services\TenantContext::setUserId($job->getTenantId());
+        app()->call([$job, 'handle']);
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -71,6 +81,11 @@ class FindingLifecycleIntelligenceTest extends TestCase
             'repository_url' => 'https://github.com/org/repo-lifecycle-b',
             'created_by' => $this->tenantA->id,
         ]);
+
+        // Scans and findings are visible only through an organization the user belongs to (TenantScope).
+        $this->tenantOrg = \App\Models\Organization::factory()->create();
+        $team = \App\Models\Team::factory()->create(['organization_id' => $this->tenantOrg->id]);
+        $team->users()->attach($this->tenantA->id);
     }
 
     private function createScan(Repository $repo, User $user, int $timeOffsetMinutes = 0): Scan
@@ -88,6 +103,7 @@ class FindingLifecycleIntelligenceTest extends TestCase
             'progress' => 0,
             'started_at' => $time,
             'created_at' => $time,
+            'organization_id' => $this->tenantOrg->id,
             'created_by' => $user->id,
         ]);
     }
@@ -124,7 +140,7 @@ class FindingLifecycleIntelligenceTest extends TestCase
 
         $scan = $this->createScan($this->repoA, $this->tenantA);
         $job = new ScanRepositoryJob($scan, $this->repoA);
-        app()->call([$job, 'handle']);
+        $this->runScanJob($job);
 
         $this->actingAs($this->tenantA);
 
@@ -163,12 +179,12 @@ class FindingLifecycleIntelligenceTest extends TestCase
         // Scan 1 (T=0)
         $scan1 = $this->createScan($this->repoA, $this->tenantA, 0);
         $job1 = new ScanRepositoryJob($scan1, $this->repoA);
-        app()->call([$job1, 'handle']);
+        $this->runScanJob($job1);
 
         // Scan 2 (T=10)
         $scan2 = $this->createScan($this->repoA, $this->tenantA, 10);
         $job2 = new ScanRepositoryJob($scan2, $this->repoA);
-        app()->call([$job2, 'handle']);
+        $this->runScanJob($job2);
 
         $this->actingAs($this->tenantA);
 
@@ -209,7 +225,7 @@ class FindingLifecycleIntelligenceTest extends TestCase
 
         $scan1 = $this->createScan($this->repoA, $this->tenantA, 0);
         $job1 = new ScanRepositoryJob($scan1, $this->repoA);
-        app()->call([$job1, 'handle']);
+        $this->runScanJob($job1);
 
         $this->actingAs($this->tenantA);
         $finding1A = Finding::where('scan_id', $scan1->id)->where('title', 'Vulnerability A')->first();
@@ -227,7 +243,7 @@ class FindingLifecycleIntelligenceTest extends TestCase
 
         $scan2 = $this->createScan($this->repoA, $this->tenantA, 10);
         $job2 = new ScanRepositoryJob($scan2, $this->repoA);
-        app()->call([$job2, 'handle']);
+        $this->runScanJob($job2);
 
         // Assert that Scan 2 only has 1 Finding occurrence row (for B)
         $scan2Findings = Finding::where('scan_id', $scan2->id)->get();
@@ -273,7 +289,7 @@ class FindingLifecycleIntelligenceTest extends TestCase
         });
         $scan1 = $this->createScan($this->repoA, $this->tenantA, 0);
         $job1 = new ScanRepositoryJob($scan1, $this->repoA);
-        app()->call([$job1, 'handle']);
+        $this->runScanJob($job1);
 
         // Scan 2: Finding A absent -> RESOLVED
         $this->mock(RepositoryScanner::class, function (MockInterface $mock) {
@@ -281,7 +297,7 @@ class FindingLifecycleIntelligenceTest extends TestCase
         });
         $scan2 = $this->createScan($this->repoA, $this->tenantA, 10);
         $job2 = new ScanRepositoryJob($scan2, $this->repoA);
-        app()->call([$job2, 'handle']);
+        $this->runScanJob($job2);
 
         $this->actingAs($this->tenantA);
         $identity = FindingIdentity::first();
@@ -293,7 +309,7 @@ class FindingLifecycleIntelligenceTest extends TestCase
         });
         $scan3 = $this->createScan($this->repoA, $this->tenantA, 20);
         $job3 = new ScanRepositoryJob($scan3, $this->repoA);
-        app()->call([$job3, 'handle']);
+        $this->runScanJob($job3);
 
         $finding3 = Finding::where('scan_id', $scan3->id)->first();
         $this->assertNotNull($finding3);
@@ -326,7 +342,7 @@ class FindingLifecycleIntelligenceTest extends TestCase
         });
         $scan1 = $this->createScan($this->repoA, $this->tenantA, 0);
         $job1 = new ScanRepositoryJob($scan1, $this->repoA);
-        app()->call([$job1, 'handle']);
+        $this->runScanJob($job1);
 
         $this->actingAs($this->tenantA);
         $identity = FindingIdentity::first();
@@ -341,7 +357,7 @@ class FindingLifecycleIntelligenceTest extends TestCase
 
         $scan2 = $this->createScan($this->repoA, $this->tenantA, 10);
         $job2 = new ScanRepositoryJob($scan2, $this->repoA);
-        app()->call([$job2, 'handle']);
+        $this->runScanJob($job2);
 
         // Assert Identity is NOT marked resolved
         $identity->refresh();
@@ -373,12 +389,12 @@ class FindingLifecycleIntelligenceTest extends TestCase
         // Scan Repo A for Tenant A
         $scanRepoA = $this->createScan($this->repoA, $this->tenantA, 0);
         $jobA = new ScanRepositoryJob($scanRepoA, $this->repoA);
-        app()->call([$jobA, 'handle']);
+        $this->runScanJob($jobA);
 
         // Scan Repo B for Tenant A (same finding) -> Must be NEW, NOT RECURRING!
         $scanRepoB = $this->createScan($this->repoB, $this->tenantA, 10);
         $jobB = new ScanRepositoryJob($scanRepoB, $this->repoB);
-        app()->call([$jobB, 'handle']);
+        $this->runScanJob($jobB);
 
         $this->actingAs($this->tenantA);
 
@@ -409,7 +425,7 @@ class FindingLifecycleIntelligenceTest extends TestCase
 
         $scan = $this->createScan($this->repoA, $this->tenantA, 0);
         $job = new ScanRepositoryJob($scan, $this->repoA);
-        app()->call([$job, 'handle']);
+        $this->runScanJob($job);
 
         $service = app(FindingLifecycleService::class);
 

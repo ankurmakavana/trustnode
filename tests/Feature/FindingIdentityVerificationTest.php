@@ -37,6 +37,8 @@ class FindingIdentityVerificationTest extends TestCase
     use RefreshDatabase;
 
     private User $tenantA;
+
+    private \App\Models\Organization $tenantOrg;
     private User $tenantB;
     private Repository $repoA;
     private Repository $repoB;
@@ -72,6 +74,12 @@ class FindingIdentityVerificationTest extends TestCase
             'repository_url' => 'https://github.com/org/repo-b',
             'created_by' => $this->tenantA->id,
         ]);
+
+        // Scans and findings are visible only through an organization the user belongs to (TenantScope).
+        // Tenant A's organization is created here, and its scans are assigned to it in createRepositoryScan.
+        $this->tenantOrg = \App\Models\Organization::factory()->create();
+        $team = \App\Models\Team::factory()->create(['organization_id' => $this->tenantOrg->id]);
+        $team->users()->attach($this->tenantA->id);
     }
 
     private function createRepositoryScan(Repository $repo, User $user): Scan
@@ -86,6 +94,7 @@ class FindingIdentityVerificationTest extends TestCase
             'target' => $repo->name,
             'status' => ScanStatus::RUNNING,
             'progress' => 0,
+            'organization_id' => $this->tenantOrg->id,
             'created_by' => $user->id,
         ]);
     }
@@ -121,14 +130,17 @@ class FindingIdentityVerificationTest extends TestCase
             $mock->shouldReceive('scan')->andReturn([$mockFinding]);
         });
 
-        // Scan 1
+        // Scan 1. The queue listener sets the tenant context from getTenantId() before a job runs;
+        // direct handle() calls bypass that listener, so it is set here.
         $scan1 = $this->createRepositoryScan($this->repoA, $this->tenantA);
         $job1 = new ScanRepositoryJob($scan1, $this->repoA);
+        \App\Services\TenantContext::setUserId($job1->getTenantId());
         app()->call([$job1, 'handle']);
 
         // Scan 2
         $scan2 = $this->createRepositoryScan($this->repoA, $this->tenantA);
         $job2 = new ScanRepositoryJob($scan2, $this->repoA);
+        \App\Services\TenantContext::setUserId($job2->getTenantId());
         app()->call([$job2, 'handle']);
 
         // Authenticate as Tenant A to view scoped models
