@@ -26,6 +26,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Saved mail settings apply in every process (web, worker, scheduler), not only in the request that saved them.
+        \App\Services\Mail\MailSettingsApplier::applyAtBoot();
+
         \Illuminate\Support\Facades\Queue::before(function (\Illuminate\Queue\Events\JobProcessing $event) {
             $payload = $event->job->payload();
             if (isset($payload['data']['command'])) {

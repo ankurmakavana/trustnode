@@ -54,6 +54,20 @@ class Setting extends Model
     }
 
     /**
+     * Installation-wide read. Keys are unique, so a key has one row whichever organization wrote it.
+     * Runtime processes (queue workers, the scheduler, boot) have no user, so TenantScope would hide
+     * the row. Use this only for installation-wide keys such as mail configuration.
+     */
+    public static function globalValues(array $keys): array
+    {
+        return static::withoutGlobalScope(\App\Models\Scopes\TenantScope::class)
+            ->whereIn('key', $keys)
+            ->get()
+            ->mapWithKeys(fn (Setting $setting) => [$setting->key => $setting->decrypted_value])
+            ->all();
+    }
+
+    /**
      * Get the organization this setting belongs to.
      */
     public function organization(): \Illuminate\Database\Eloquent\Relations\BelongsTo

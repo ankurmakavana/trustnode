@@ -106,23 +106,7 @@ class SettingController extends Controller
      */
     public static function applyMailSettings()
     {
-        $mailer = Setting::getValue('mail_mailer');
-        if ($mailer) {
-            Config::set('mail.default', $mailer);
-            
-            if ($mailer === 'smtp') {
-                Config::set('mail.mailers.smtp.host', Setting::getValue('mail_host'));
-                Config::set('mail.mailers.smtp.port', Setting::getValue('mail_port'));
-                Config::set('mail.mailers.smtp.username', Setting::getValue('mail_username'));
-                Config::set('mail.mailers.smtp.password', Setting::getValue('mail_password'));
-                Config::set('mail.mailers.smtp.encryption', Setting::getValue('mail_encryption'));
-            }
-        }
-        
-        $fromAddress = Setting::getValue('mail_from_address');
-        if ($fromAddress) {
-            Config::set('mail.from.address', $fromAddress);
-            Config::set('mail.from.name', Setting::getValue('mail_from_name'));
-        }
+        // Shared with the boot path, so every process applies the same installation-wide settings.
+        \App\Services\Mail\MailSettingsApplier::apply();
     }
 }
