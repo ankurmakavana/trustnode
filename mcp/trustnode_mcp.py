@@ -84,12 +84,13 @@ def trustnode_list_scans(status: Optional[str] = None, type: Optional[str] = Non
         limit: Maximum number of scans to return (max 100)
     """
     limit = min(max(1, limit), 100)
-    params = {"limit": limit}
+    # The API paginates with per_page (it ignores "limit").
+    params = {"per_page": limit}
     if status:
         params["status"] = status
     if type:
         params["type"] = type
-        
+
     return api.request("GET", "api/scans", params=params)
 
 @mcp.tool(description="Get details of a specific TrustNode scan. (READ ONLY)")
@@ -117,7 +118,8 @@ def trustnode_list_findings(scan_id: int, severity: Optional[str] = None, status
         return {"error": "scan_id must be a positive integer"}
         
     limit = min(max(1, limit), 200)
-    params = {"scan_id": scan_id, "limit": limit}
+    # The API paginates with per_page (it ignores "limit").
+    params = {"scan_id": scan_id, "per_page": limit}
     
     if severity and severity.lower() in ['critical', 'high', 'medium', 'low', 'info']:
         params["severity"] = severity.lower()
@@ -148,14 +150,16 @@ def trustnode_get_report_status(scan_id: int) -> dict:
     if scan_id <= 0:
         return {"error": "scan_id must be a positive integer"}
     
-    result = api.request("GET", f"api/scans/{scan_id}")
+    # The report status is served by its own endpoint. A scan resource has no report_status field.
+    result = api.request("GET", f"api/scans/{scan_id}/report/status")
     if "error" in result:
+        if result.get("status") == 404:
+            return {"scan_id": scan_id, "report_status": "none"}
         return result
-        
-    scan_data = result.get("data", {})
+
     return {
         "scan_id": scan_id,
-        "report_status": scan_data.get("report_status", "unknown")
+        "report_status": result.get("status", "unknown")
     }
 
 @mcp.tool(description="Get user notifications. (READ ONLY)")
@@ -167,12 +171,18 @@ def trustnode_get_notifications(unread_only: bool = False, limit: int = 20) -> d
         limit: Max number of notifications (max 50)
     """
     limit = min(max(1, limit), 50)
-    params = {"limit": limit}
-    
+    # The API has no per_page or unread filter for notifications (it returns a fixed page), so both are
+    # applied here, after the response is received.
+    result = api.request("GET", "api/notifications")
+    if "error" in result or not isinstance(result.get("data"), list):
+        return result
+
+    items = result["data"]
     if unread_only:
-        params["unread"] = "true"
-        
-    return api.request("GET", "api/notifications", params=params)
+        items = [n for n in items if not n.get("read_at")]
+    result["data"] = items[:limit]
+
+    return result
 
 def main():
     mcp.run()
