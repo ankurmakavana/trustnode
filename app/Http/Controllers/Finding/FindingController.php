@@ -49,6 +49,21 @@ class FindingController extends Controller
         return new FindingResource($finding);
     }
 
+    /**
+     * Copyable remediation prompt for one finding. Built and redacted on the server. Advisory only.
+     */
+    public function aiPrompt(Finding $finding, \App\Services\Remediation\AiFixPromptBuilder $builder): JsonResponse
+    {
+        $this->authorize('view', $finding);
+
+        return response()->json([
+            'data' => [
+                'finding_id' => $finding->finding_id ?: 'finding-' . $finding->id,
+                'prompt' => $builder->build($finding),
+            ],
+        ]);
+    }
+
     public function update(UpdateFindingRequest $request, Finding $finding): FindingResource
     {
         $this->authorize('update', $finding);

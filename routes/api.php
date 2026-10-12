@@ -94,6 +94,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // Finding Management Endpoints
     Route::get('/findings/{finding}/activity', [FindingController::class, 'activityLogs']);
+    Route::get('/findings/{finding}/ai-prompt', [FindingController::class, 'aiPrompt']);
     Route::apiResource('/findings', FindingController::class);
 
     // Risk Management Endpoints
