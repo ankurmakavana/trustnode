@@ -13,6 +13,7 @@ class IntegrationManagementTest extends TestCase
     use RefreshDatabase;
 
     private User $admin;
+    private \App\Models\Organization $org;
 
     protected function setUp(): void
     {
@@ -22,15 +23,20 @@ class IntegrationManagementTest extends TestCase
 
         $adminRole = Role::where('slug', 'administrator')->first();
 
+        $this->org = \App\Models\Organization::factory()->create();
         $this->admin = User::factory()->create([
             'role_id' => $adminRole->id,
             'email' => 'admin@trustnode.local',
         ]);
+
+        // Integrations are organization-owned: the admin must belong to the organization (TenantScope).
+        \App\Models\Team::factory()->create(['organization_id' => $this->org->id])->users()->attach($this->admin->id);
     }
 
     public function test_can_list_integration_stats(): void
     {
         $integration = Integration::create([
+            'organization_id' => $this->org->id,
             'name' => 'Corporate Network Nmap',
             'code' => 'nmap',
             'type' => 'scanner',
@@ -87,6 +93,7 @@ class IntegrationManagementTest extends TestCase
     public function test_can_validate_connection(): void
     {
         $integration = Integration::create([
+            'organization_id' => $this->org->id,
             'name' => 'OpenVAS Local scanner',
             'code' => 'greenbone',
             'type' => 'scanner',
@@ -104,6 +111,7 @@ class IntegrationManagementTest extends TestCase
     public function test_can_trigger_import_data(): void
     {
         $integration = Integration::create([
+            'organization_id' => $this->org->id,
             'name' => 'Burp REST interface',
             'code' => 'burp',
             'type' => 'scanner',
