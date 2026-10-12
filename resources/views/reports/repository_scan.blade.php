@@ -41,7 +41,7 @@
         .badge-low { background-color: #e0f2fe; color: #075985; }
         .badge-info { background-color: #f3f4f6; color: #374151; }
         
-        .finding-card { border: 1px solid #e5e7eb; border-radius: 6px; padding: 20px; margin-bottom: 25px; background-color: #fafafa; }
+        .finding-card { border: 1px solid #e5e7eb; border-radius: 6px; padding: 20px; margin-bottom: 25px; background-color: #fafafa; page-break-inside: avoid; }
         .finding-header { border-bottom: 1px solid #e5e7eb; padding-bottom: 10px; margin-bottom: 15px; }
         .finding-title { font-size: 18px; font-weight: bold; margin: 0; color: #111827; }
         .finding-badge-container { float: right; margin-top: -30px; }
