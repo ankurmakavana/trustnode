@@ -636,3 +636,20 @@ No live operation other than read-only queries and `mysqldump` (read-only, `--si
 - **Caught and corrected during this step:** the first dump used `--databases`, which would have put live-name `CREATE DATABASE`/`USE` statements in the file; re-dumped by name. The first row-count check flagged `agent_tasks` because it compared against the current count instead of the snapshot; corrected by comparing against `created_at` ≤ snapshot time.
 - **Runbook:** section 3 updated with these results; a path-corruption error I introduced in that update was repaired (backslash escapes), and the checksums in the runbook match `SHA256SUMS.txt`.
 - **Rollback checkpoint C1:** established and restore-verified.
+
+## Session log 8 — Phase 1 configuration alignment, diagnostics, recreate plan
+
+Owner decisions: canonical `trustnode_fresh`; `trustnode` kept read-only as archive; stale migration record kept; scratch databases and backups kept; no pushes.
+
+- **Phase 1 (approved) executed.** `.env` line 26 `DB_DATABASE=trustnode` → `trustnode_fresh`. `compose.dev.yaml` lines 36, 120, 150, 181 → `${DB_DATABASE:-trustnode_fresh}`. Both verified byte-for-byte. Backup: `C:\tn_backups\config-20261013-021259\` (SHA-256 OK). No container was recreated or restarted.
+- **Verified after Phase 1:** host CLI resolves `trustnode_fresh` (config only). Rendered Compose shows `trustnode_fresh` ×4. Running containers still hold their previous environment.
+- **Mistake caught and repaired:** the first edit used `sed -i`, which stripped two CR bytes from `.env`. Restored from the backup and re-applied with byte-exact replacement. Lesson in `DEPLOYMENT_RUNBOOK.md` section 4.
+- **Worker restarts:** `RestartCount` 8, last exit 0, not OOM. Expected hourly exit from `--max-time=3600` with `restart: unless-stopped`. Inferred, not proven: Docker kept no earlier lifecycle events. No jobs were affected.
+- **Worker failed jobs (2):** `HighSeverityFindingNotification` enum-to-string error, 2026-10-12 12:01 UTC. Fixed in code (`323b040`) before the current worker started. The rows are kept; clearing them needs approval.
+- **Stuck scans 2 and 3 (both databases):** no job, no sanctioned cancel path, no dispatch from `schedule`. Guarded status-update procedure documented in runbook 4b. Not executed. `trustnode` left as archive.
+- **Scans 4–6 (`trustnode_fresh`):** local uploads (`target` = `.env`), created by user 1 in organization 1. Scans 5 and 6 were created during this session, not by any command run here. Origin unconfirmed; owner to confirm. The one finding has no credential-shaped text (regex, title and description). Its `scan_id` (6) does not match the creating task (scan 4). Unresolved.
+- **Continuous scan:** on by default in config; no projects are registered, so nothing runs. Decide before registering any project.
+- **Owner identity:** the same administrator (email fingerprint `060e54041e33`, org 1, team 1) in both databases. Database account is MySQL `root` in both. Hardening item: the app runs as root.
+- **Host CLI:** MySQL is not published to the host, so host `artisan` runs cannot connect to either database. The earlier mail-settings warnings were from these refused host runs, not from the worker.
+- **Recreate plan:** runbook 6a. Not executed. Proposed sequence: stop scheduler and agent; recreate php, worker, agent, scheduler, each with health checks. Recreate is optional, since no runtime value changes.
+- **Not done (approval needed):** service recreate; scan status updates; deletion of failed-job rows; owner confirmation of scans 4–6; continuous-scan setting; committing `compose.dev.yaml`.
