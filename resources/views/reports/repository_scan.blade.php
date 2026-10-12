@@ -29,7 +29,7 @@
         /* Report Content Styles */
         .report-header { border-bottom: 3px solid #1e3a8a; padding-bottom: 20px; margin-bottom: 30px; }
         .report-logo { font-size: 24px; font-weight: bold; color: #1e3a8a; text-transform: uppercase; letter-spacing: 1px; }
-        h2 { color: #1e3a8a; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; margin-top: 40px; }
+        h2 { color: #1e3a8a; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; margin-top: 40px; page-break-after: avoid; }
         h3 { color: #2563eb; }
         table { width: 100%; border-collapse: collapse; margin: 20px 0; }
         th, td { padding: 12px; border: 1px solid #e5e7eb; text-align: left; }
@@ -165,7 +165,7 @@
 
         @if ($comparison)
             <h2>Security Posture Change</h2>
-            <table>
+            <table style="table-layout: fixed;">
                 <thead>
                     <tr>
                         <th>New</th>
@@ -187,7 +187,7 @@
                         <td style="font-weight: bold;">{{ $comparison['posture']['current_open_count'] }}</td>
                         <td style="font-weight: bold; color: {{ $comparison['posture']['net_change'] > 0 ? '#b91c1c' : ($comparison['posture']['net_change'] < 0 ? '#15803d' : '#374151') }};">
                             {{ $comparison['posture']['net_change'] > 0 ? '+' : '' }}{{ $comparison['posture']['net_change'] }}
-                            ({{ strtoupper($comparison['posture']['assessment']) }})
+                            ({{ str_replace('_', ' ', strtoupper($comparison['posture']['assessment'])) }})
                         </td>
                     </tr>
                 </tbody>
