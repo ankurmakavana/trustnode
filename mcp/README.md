@@ -25,12 +25,16 @@ Copy `.env.example` to `.env` and fill in your details:
 cp .env.example .env
 ```
 
-Your `TRUSTNODE_API_TOKEN` must be a Sanctum Personal Access Token with the following abilities:
+Your `TRUSTNODE_API_TOKEN` must be a Sanctum Personal Access Token with exactly these abilities:
 - `scans:read`
 - `findings:read`
 - `reports:read`
+- `notifications:read`
 
-Do NOT use a token with write privileges.
+The API enforces these abilities on every request made with a token (default deny). A token with only the
+read abilities above cannot start a scan, create or change a finding, register a project, or mint another
+token. Tools that the MCP exposes issue GET requests only. Do not create a token with any `:write` ability
+for this server.
 
 ## Running the Server
 
