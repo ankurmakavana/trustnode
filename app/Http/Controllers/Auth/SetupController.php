@@ -9,18 +9,25 @@ use App\Models\Team;
 use App\Models\Role;
 use App\Enums\UserRole;
 use App\Enums\UserStatus;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules\Password;
 
 class SetupController extends Controller
 {
+    private const SETUP_LOCK_KEY = 'trustnode:setup-lock';
+    private const SETUP_LOCK_TTL_SECONDS = 30;
+    private const SETUP_LOCK_WAIT_SECONDS = 5;
+
     public function status(): JsonResponse
     {
         $setupRequired = true;
-        
+
         if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
             $setupRequired = User::count() === 0;
         }
@@ -42,7 +49,21 @@ class SetupController extends Controller
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
+        // Serialize concurrent setup requests. The owner check is repeated inside the lock,
+        // so only the request that holds the lock can create the first administrator.
+        $lock = Cache::lock(self::SETUP_LOCK_KEY, self::SETUP_LOCK_TTL_SECONDS);
+
         try {
+            $lock->block(self::SETUP_LOCK_WAIT_SECONDS);
+        } catch (LockTimeoutException) {
+            return response()->json(['message' => 'Setup is already in progress.'], 409);
+        }
+
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('users') && User::count() > 0) {
+                return response()->json(['message' => 'Setup has already been completed.'], 403);
+            }
+
             DB::beginTransaction();
 
             $adminRole = Role::where('slug', UserRole::ADMINISTRATOR->value)->first();
@@ -73,7 +94,13 @@ class SetupController extends Controller
             return response()->json(['message' => 'Setup completed successfully.']);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Failed to initialize setup.', 'error' => $e->getMessage()], 500);
+            // The exception message can contain SQL bindings (including the password hash), so only
+            // the class and line are logged and nothing from the message is returned to the client.
+            Log::error('Initial setup failed.', ['exception' => $e::class, 'line' => $e->getLine()]);
+
+            return response()->json(['message' => 'Failed to initialize setup.'], 500);
+        } finally {
+            $lock->release();
         }
     }
 }
