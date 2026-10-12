@@ -271,3 +271,41 @@ Strategy (owner decision): Option B with safety-first changes. Focused commits o
 ## Next steps
 - Commit scheduled ownership and worker redaction once the pre-existing dependencies (`AgentQueue`, `AgentWorker` ownership, `agent_tasks` migration, `ScanController`, and `TenantScope`) are reviewed and approved for commit.
 - Phase 3 finding-lifecycle verification: the lifecycle, identity, baseline, count, and posture tests now pass at HEAD (`9e793ca`) for the committed state. Remaining Phase 3 acceptance is blocked on the mixed-file decisions above.
+
+## Session log: Git state, agent lease, and the next steps
+
+### Git relationship (verified read-only)
+- Local `main` = `origin/main` + 1 local commit. `origin/main` is at `5b100f1`. Local is not behind.
+- Local-only commit: `2116dd0` (scan workflow test) and `12e2627` (agent test fixes). Both are unpushed.
+- Unexpected remote history (reflog: "update by push"): `76bb8da` (18:56) and `5b100f1` (18:59). I did not push either. `5b100f1` is the sweeping commit. It contains the whole working tree that was uncommitted, including the four artifacts (`console.json`, `public/test_report.pdf`, `trustnode.png`, the plan document) and the held-back implementation files. Its message describes only the fixture change. Who pushed it is not recorded in Git.
+- Secret scan of the pushed tree: no real credentials. The `mcp/.env.example` token value is placeholder-like and that file already existed at base. `cli/vendor` (2,125 files) was committed at base, not by the push.
+- Decision still open: revert, corrective commit, or rewrite. Not done, because each needs your approval.
+
+### Agent lease and takeover: current behaviour (documented from code)
+- `AgentService::start()`: refuses when the database state row is not `stopped` **and** the heartbeat is fresh. Otherwise it calls `acquireOwnership()`.
+- Freshness is read from the **cache** key `trustnode_agent_heartbeat_<agent>` (TTL = `heartbeat.timeout`, 90 s). The database state row persists and is not expired.
+- `acquireOwnership()` (database driver): inserts a row if none exists; otherwise compare-and-swap on `state->instance_id`. Stale or stopped rows can be taken over.
+- `heartbeat()` writes the cache key every interval, and marks the instance stopped when the stored instance differs ("usurped").
+- `agent:run` (`AgentRunCommand`) exits with status 1 when ownership is refused. Docker's `restart: unless-stopped` then relaunches it.
+
+**Restart-loop cause (observed 12:28–12:30 UTC):** a restart within 90 s of the previous owner's last heartbeat is refused. The new process exits, Docker relaunches it, and the loop ends only when the cache lease expires. It is bounded by the TTL, not infinite, but it is noisy and wastes restarts.
+
+**Not changed:** the exit-on-refusal behaviour. Changing it alters the daemon's operational contract, so it needs your approval. Options: retry within a bounded window before exiting, or keep exiting and rely on Docker backoff.
+
+### Regression coverage for the lease
+- Existing: `AgentServiceTakeoverTest` covers refusal while a fresh heartbeat exists, takeover after a stale heartbeat, persistence of the new instance, a usurped runtime stopping itself, heartbeat keys scoped per agent, and a stored-instance race with one owner (real database, after `12e2627`).
+- Not added: a test that reproduces the 90-second refusal window end to end. It would need a time-controlled cache, which I did not build.
+
+### Test results (this session)
+- Full suite on the working tree at `12e2627`: 683 tests, 1891 assertions, 1 error, 5 failures, exit 2. Unique failing: 6.
+- Remaining failures, all outside the agent takeover path: IMAP (`webklex/php-imap` not installed; needs approval), `IntegrationManagementTest` (3), `MailSettingsTest` (2). The integration 404s look like the same missing-membership fixture pattern as before, but the feature area is out of scope for this phase, so I did not change it. Root cause not confirmed.
+- Previous working-tree figure (19 failing) was before the agent test fixes.
+
+### Pending, needing your approval
+1. Resolve the remote state (`5b100f1`, `76bb8da`).
+2. Push any local commits (`2116dd0`, `12e2627`). Not done.
+3. Restart or redeploy the agent, worker, and scheduler to load the scheduled-task and redaction changes.
+4. Change the agent's exit-on-refusal behaviour (see above).
+5. Install `webklex/php-imap` (dependency install).
+6. Live acceptance scan: approve the exact project path and the live database record.
+7. Legacy data: finding 1 remediation, stuck scans 2 and 3, and any backfill. All data writes.
