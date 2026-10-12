@@ -25,6 +25,7 @@ class AgentOrchestrationTest extends TestCase
         $adminRole = \App\Models\Role::where('slug', \App\Enums\UserRole::ADMINISTRATOR->value)->first();
         $this->user = \App\Models\User::factory()->create(['role_id' => $adminRole->id]);
         $this->actingAs($this->user);
+        \App\Services\TenantContext::setUserId($this->user->id);
     }
 
     public function test_capability_registry_resolves_capability()
@@ -44,6 +45,9 @@ class AgentOrchestrationTest extends TestCase
         $capability = $registry->resolve('agent:scan_codebase');
 
         $targetPath = base_path('tests');
+        // The worker sets the tenant context right before a handler runs. Queue events fired during
+        // start() (sync driver in tests) clear it, so it is set here, next to the call.
+        \App\Services\TenantContext::setUserId($this->user->id);
         $result = $capability->execute(['target_path' => $targetPath], ['agent_id' => $agentService->getAgentId()]);
 
         $this->assertIsArray($result);
@@ -272,6 +276,7 @@ class AgentOrchestrationTest extends TestCase
         $agentService = $this->app->make(AgentService::class);
         $agentService->start();
 
+        \App\Services\TenantContext::setUserId($this->user->id);
         $result = $capability->execute(['target' => 'example.com'], ['agent_id' => $agentService->getAgentId()]);
 
         $this->assertIsArray($result);
@@ -287,5 +292,97 @@ class AgentOrchestrationTest extends TestCase
                 'engine' => 'localscanner'
             ]);
         }
+    }
+
+    public function test_planner_selects_email_capability_for_email_objective()
+    {
+        $agentService = $this->app->make(AgentService::class);
+        if (!$agentService->isRunning()) {
+            $agentService->start();
+        }
+
+        $queue = $this->app->make(AgentQueueInterface::class);
+        $handlerRegistry = $this->app->make(AgentTaskHandlerRegistryInterface::class);
+        $planner = $handlerRegistry->resolve('agent.plan');
+
+        $planner->handle([
+            'id' => 'plan_task_email',
+            'agent_id' => $agentService->getAgentId(),
+            'type' => 'agent.plan',
+            'payload' => [
+                'objective' => 'read email from security@trustnode.test',
+                'step' => 1
+            ]
+        ]);
+
+        $task = $queue->dequeue($agentService->getAgentId());
+        $this->assertNotNull($task);
+        $this->assertEquals('agent.capability.execute', $task['type']);
+        $this->assertEquals('agent:email_read', $task['payload']['capability_id']);
+        $this->assertEquals('security@trustnode.test', $task['payload']['arguments']['mailbox']);
+    }
+
+    public function test_email_capability_resolves_and_requires_approval()
+    {
+        $registry = $this->app->make(AgentCapabilityRegistryInterface::class);
+        $capability = $registry->resolve('agent:email_read');
+        $this->assertNotNull($capability);
+        $this->assertEquals('agent:email_read', $capability->getId());
+        $this->assertEquals('HIGH', $capability->getRiskLevel());
+
+        $worker = $this->app->make(\App\Services\AgentWorker::class);
+        $queue = $this->app->make(AgentQueueInterface::class);
+        $agentService = $this->app->make(AgentService::class);
+        if (!$agentService->isRunning()) $agentService->start();
+
+        $queue->enqueue($agentService->getAgentId(), 'agent.capability.execute', [
+            'capability_id' => 'agent:email_read',
+            'arguments' => ['mailbox' => 'security@trustnode.test']
+        ]);
+
+        $worker->runOnce();
+
+        $this->assertEquals(AgentService::S_WAITING_APPROVAL, $agentService->getState());
+        $approval = AgentApproval::where('agent_id', $agentService->getAgentId())->orderBy('id', 'desc')->first();
+        $this->assertNotNull($approval);
+        $this->assertEquals('pending', $approval->status);
+        $this->assertEquals('agent:email_read', $approval->capability);
+    }
+
+    public function test_email_capability_executes_after_approval_and_stops_at_boundary()
+    {
+        $registry = $this->app->make(AgentCapabilityRegistryInterface::class);
+        $capability = $registry->resolve('agent:email_read');
+
+        $agentService = $this->app->make(AgentService::class);
+        if (!$agentService->isRunning()) $agentService->start();
+        $agentId = $agentService->getAgentId();
+
+        // Mock the approval directly
+        $approvalService = $this->app->make(AgentApprovalServiceInterface::class);
+        $boundary = $this->app->make(\App\Services\AgentSecurityBoundary::class);
+
+        // Setup pending approval
+        $args = ['mailbox' => 'security@trustnode.test', 'limit' => 50, 'unread_only' => true];
+
+        try {
+            $boundary->authorize($agentId, 'agent:email_read', $args);
+            $this->fail("Should require approval");
+        } catch (\App\Exceptions\AgentSecurityException $e) {
+            // expected
+        }
+
+        $approval = AgentApproval::where('agent_id', $agentId)->orderBy('id', 'desc')->first();
+        // bypass gate
+        $approval->update(['status' => 'approved', 'approved_by' => $this->user->id]);
+
+        $boundary->authorize($agentId, 'agent:email_read', $args);
+
+        // Verify it hits the ImapEmailReaderAdapter boundary exception (since no integration exists for this mailbox in the test)
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("No connected email integration found for mailbox: security@trustnode.test");
+
+        \App\Services\TenantContext::setUserId($this->user->id);
+        $capability->execute($args, ['agent_id' => $agentId]);
     }
 }

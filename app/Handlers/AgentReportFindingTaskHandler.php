@@ -91,6 +91,7 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
             ->where('target_id', $payload['target_id'] ?? null)
             ->first();
 
+        $findingWasNew = false;
         if ($existingFinding) {
             $oldStatus = $existingFinding->lifecycle_status;
             $lifecycleStatusStr = $oldStatus instanceof \UnitEnum ? $oldStatus->value : $oldStatus;
@@ -106,6 +107,7 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
             if (in_array($lifecycleStatusStr, ['resolved', 'false_positive'])) {
                 $updates['lifecycle_status'] = 'regression';
                 $updates['status'] = 'open';
+                $findingWasNew = true; // Regression counts as newly detected for notifications
 
                 \App\Models\FindingActivityLog::create([
                     'finding_id' => $existingFinding->id,
@@ -135,6 +137,20 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
                 'agent_id' => $agentId,
                 'scan_id' => $scanId,
             ]);
+            $findingWasNew = true;
+        }
+
+        if ($findingWasNew && in_array(strtolower($finding->severity instanceof \BackedEnum ? $finding->severity->value : $finding->severity), ['high', 'critical'])) {
+            $initiator = \App\Models\User::find($userId);
+            $context = new \App\Services\Notification\NotificationContext(
+                scan: $finding->scan,
+                initiator: $initiator
+            );
+            \App\Services\Notification\NotificationRouter::dispatch(
+                \App\Enums\Notification\NotificationType::HIGH_SEVERITY_FINDING,
+                $context,
+                new \App\Notifications\HighSeverityFindingNotification($finding)
+            );
         }
 
         Log::info('AgentReportFindingTaskHandler: finding created successfully.', [

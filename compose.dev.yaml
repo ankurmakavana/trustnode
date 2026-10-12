@@ -28,6 +28,7 @@ services:
       - trustnode-vendor:/var/www/html/vendor
       - trustnode-storage:/var/www/html/storage
       - trustnode-bootstrap-cache:/var/www/html/bootstrap/cache
+      - ${SCAN_HOST_DIR:-./storage/scan-mount}:/mnt/trustnode-scan:ro
     environment:
       DB_CONNECTION: mysql
       DB_HOST: mysql
@@ -111,6 +112,7 @@ services:
       - trustnode-vendor:/var/www/html/vendor
       - trustnode-storage:/var/www/html/storage
       - trustnode-bootstrap-cache:/var/www/html/bootstrap/cache
+      - ${SCAN_HOST_DIR:-./storage/scan-mount}:/mnt/trustnode-scan:ro
     environment:
       DB_CONNECTION: mysql
       DB_HOST: mysql
@@ -140,6 +142,7 @@ services:
       - trustnode-vendor:/var/www/html/vendor
       - trustnode-storage:/var/www/html/storage
       - trustnode-bootstrap-cache:/var/www/html/bootstrap/cache
+      - ${SCAN_HOST_DIR:-./storage/scan-mount}:/mnt/trustnode-scan:ro
     environment:
       DB_CONNECTION: mysql
       DB_HOST: mysql
@@ -170,6 +173,7 @@ services:
       - trustnode-vendor:/var/www/html/vendor
       - trustnode-storage:/var/www/html/storage
       - trustnode-bootstrap-cache:/var/www/html/bootstrap/cache
+      - ${SCAN_HOST_DIR:-./storage/scan-mount}:/mnt/trustnode-scan:ro
     environment:
       DB_CONNECTION: mysql
       DB_HOST: mysql

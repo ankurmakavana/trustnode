@@ -332,6 +332,26 @@ class AgentController extends Controller
             ]);
         }
 
+        // Add agent activity logs
+        $agentLogs = \App\Models\AgentActivityLog::where('agent_id', $agentId)
+            ->orderBy('created_at', 'desc')
+            ->limit(15)
+            ->get();
+
+        foreach ($agentLogs as $al) {
+            $ts = $al->created_at?->toISOString() ?? $al->created_at;
+            $actionLabel = $al->action ?? 'unknown';
+
+            $activityEvents->push([
+                'id' => 'agent_log_' . $al->id,
+                'timestamp' => $ts,
+                'event' => strtoupper($actionLabel),
+                'details' => $al->properties['message'] ?? 'Agent Lifecycle Event',
+                'type' => 'agent',
+                'created_at' => $ts,
+            ]);
+        }
+
         $sortedActivity = $activityEvents->filter(fn($e) => !empty($e['timestamp']))
             ->sortByDesc('timestamp')
             ->values()

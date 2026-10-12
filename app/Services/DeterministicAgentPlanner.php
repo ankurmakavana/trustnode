@@ -30,6 +30,8 @@ class DeterministicAgentPlanner implements AgentPlannerInterface
 
         $isScanIntent = str_contains($normalized, 'audit')
             || str_contains($normalized, 'scan')
+            || str_contains($normalized, 'read')
+            || str_contains($normalized, 'check')
             || str_contains($normalized, 'vulnerabilit');
 
         if (!$isScanIntent) {
@@ -62,7 +64,26 @@ class DeterministicAgentPlanner implements AgentPlannerInterface
                 ];
             }
 
-            if (!$isNetworkIntent && str_contains($desc, 'scan') && (str_contains($desc, 'codebase') || str_contains($desc, 'repository'))) {
+            $isEmailIntent = str_contains($normalized, 'email') || str_contains($normalized, 'mailbox');
+            if ($isEmailIntent && str_contains($desc, 'email')) {
+                $mailbox = 'security@trustnode.test'; // default placeholder
+                if (preg_match('/(?:read|scan|check|audit)\s+(?:email|mailbox|inbox)?\s*([a-zA-Z0-9\.\-_@]+)/i', $normalized, $matches)) {
+                    if (filter_var($matches[1], FILTER_VALIDATE_EMAIL)) {
+                        $mailbox = $matches[1];
+                    }
+                }
+
+                return [
+                    'capability_id' => $capability->getId(),
+                    'arguments' => [
+                        'mailbox' => $mailbox,
+                        'limit' => 50,
+                        'unread_only' => true
+                    ]
+                ];
+            }
+
+            if (!$isNetworkIntent && !$isEmailIntent && str_contains($desc, 'scan') && (str_contains($desc, 'codebase') || str_contains($desc, 'repository'))) {
 
                 // Extract expected input schema
                 $schema = $capability->getInputSchema();

@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     LayoutDashboard, ScanLine, ShieldAlert,
-    FileText, Settings, ChevronLeft, Shield, Lock
+    FileText, Settings, ChevronLeft, Shield, Lock, FolderGit
 } from 'lucide-react';
 import { Avatar, Badge } from './ui/primitives';
 import { useAuth } from '../context/AuthContext';
@@ -11,7 +11,8 @@ const navItems = [
     { id: 'scans', label: 'Scans', icon: 'ScanLine', group: 'security' },
     { id: 'findings', label: 'Findings', icon: 'ShieldAlert', group: 'security' },
     { id: 'reports', label: 'Reports', icon: 'FileText', group: 'security' },
-    { id: 'agent', label: 'Agent', icon: 'ScanLine', group: 'agent' },
+    { id: 'projects', label: 'Projects', icon: 'FolderGit', group: 'agent' },
+    { id: 'agent', label: 'Console', icon: 'ScanLine', group: 'agent' },
     { id: 'permissions', label: 'Permissions', icon: 'Shield', group: 'agent' },
     { id: 'settings', label: 'Settings', icon: 'Settings', group: 'system' },
 ];
@@ -24,7 +25,7 @@ const navGroups = [
 ];
 
 const iconMap = {
-    LayoutDashboard, ScanLine, ShieldAlert, FileText, Settings, Shield
+    LayoutDashboard, ScanLine, ShieldAlert, FileText, Settings, Shield, FolderGit
 };
 
 const badgeVariants = {

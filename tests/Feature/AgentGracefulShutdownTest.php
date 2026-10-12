@@ -24,6 +24,12 @@ class AgentGracefulShutdownTest extends TestCase
     {
         parent::setUp();
         
+        $this->artisan('db:seed', ['--class' => 'RolePermissionSeeder']);
+        $adminRole = \App\Models\Role::where('slug', \App\Enums\UserRole::ADMINISTRATOR->value)->firstOrFail();
+        $user = \App\Models\User::factory()->create(['role_id' => $adminRole->id, 'status' => \App\Enums\UserStatus::ACTIVE]);
+        \Illuminate\Support\Facades\Auth::login($user);
+        \App\Services\TenantContext::setUserId($user->id);
+
         $this->agent = app(AgentService::class);
         $this->agent->start();
         

@@ -18,6 +18,18 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 class AgentSecurityBoundaryTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected $testUserId;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->artisan('db:seed', ['--class' => 'RolePermissionSeeder']);
+        $adminRole = \App\Models\Role::where('slug', \App\Enums\UserRole::ADMINISTRATOR->value)->firstOrFail();
+        $user = \App\Models\User::factory()->create(['role_id' => $adminRole->id]);
+        $this->testUserId = $user->id;
+    }
+
     public function test_security_boundary_denies_execution_by_default()
     {
         $registry = new \App\Services\AgentCapabilityRegistry();
@@ -107,6 +119,7 @@ class AgentSecurityBoundaryTest extends TestCase
         $queue = $this->createMock(AgentQueueInterface::class);
         $queue->method('dequeue')->willReturn([
             'id' => 'task-1',
+            'user_id' => $this->testUserId,
             'type' => 'test.type',
             'payload' => []
         ]);
@@ -141,6 +154,7 @@ class AgentSecurityBoundaryTest extends TestCase
         $queue = $this->createMock(AgentQueueInterface::class);
         $queue->method('dequeue')->willReturn([
             'id' => 'task-1',
+            'user_id' => $this->testUserId,
             'type' => 'test.type',
             'payload' => []
         ]);

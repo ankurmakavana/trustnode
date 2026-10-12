@@ -25,6 +25,7 @@ class FindingFactory extends Factory
             'cvss_score' => $cvss,
             'severity' => $severity,
             'status' => $this->faker->randomElement(FindingStatus::cases()),
+            'lifecycle_status' => 'new',
             'category' => $this->faker->randomElement(['web_application', 'network_ip', 'container_audit', 'cloud_infrastructure']),
             'cwe' => 'CWE-'.$this->faker->numberBetween(79, 94),
             'description' => $this->faker->paragraph(2),

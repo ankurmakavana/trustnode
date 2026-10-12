@@ -14,6 +14,13 @@ class AgentReportFindingTaskHandlerTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        \App\Services\TenantContext::clear();
+        \Illuminate\Support\Facades\Notification::fake();
+    }
+
     public function test_handler_supports_report_finding_task()
     {
         $findingService = $this->createMock(FindingService::class);
@@ -54,7 +61,7 @@ class AgentReportFindingTaskHandlerTest extends TestCase
 
         $handler->handle($task);
         
-        $finding = Finding::where('title', 'Test Agent Finding')->first();
+        $finding = Finding::withoutGlobalScopes()->where('title', 'Test Agent Finding')->first();
         
         $this->assertNotNull($finding);
         $this->assertEquals('Test Agent Finding', $finding->title);

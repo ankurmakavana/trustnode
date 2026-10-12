@@ -100,6 +100,44 @@ export default function FindingDetailPage({ findingId, onBack, onEdit }) {
         alert('Evidence content copied to clipboard!');
     };
 
+    const generateAIPrompt = () => {
+        if (!finding) return '';
+
+        let evidenceToInclude = finding.evidence || 'No specific code snippet available.';
+
+        // Redact potential secrets to prevent exposure
+        evidenceToInclude = evidenceToInclude
+            .replace(/(password|secret|key|token|api_key|access_token|auth_token|client_secret)[\s:=]+['"][^'"]+['"]/gi, '$1: [REDACTED]')
+            .replace(/(password|secret|key|token|api_key|access_token|auth_token|client_secret)[\s:=]+[^\s;]+/gi, '$1: [REDACTED]')
+            .replace(/(bearer\s+)[\w\.\-]+/gi, '$1 [REDACTED]');
+
+        // Limit evidence length to prevent context bloat
+        if (evidenceToInclude.length > 800) {
+            evidenceToInclude = evidenceToInclude.substring(0, 800) + '\n...[EVIDENCE TRUNCATED]';
+        }
+
+        return `Inspect this security finding and identify its root cause. Propose the smallest safe fix in the affected code. Preserve unrelated changes and existing architecture. Do not modify unrelated files. Add or update focused regression tests, run them, and report the exact files changed and test results. If evidence is insufficient, ask for clarification rather than guessing.
+
+FINDING DETAILS:
+Title: ${finding.title}
+Severity: ${finding.severity}
+Location: ${finding.technical_details || finding.url || 'Unknown location'}
+
+Security Risk Explanation:
+${finding.description || 'No description provided.'}
+
+Evidence:
+${evidenceToInclude}
+
+Requested Fix:
+${finding.remediation || 'Provide the minimal correct remediation.'}`;
+    };
+
+    const handleCopyAIPrompt = () => {
+        navigator.clipboard.writeText(generateAIPrompt());
+        alert('AI Remediation Prompt copied to clipboard!');
+    };
+
     // Filter and Sort evidences
     const filteredEvidences = evidences
         .filter(ev => {
@@ -210,6 +248,22 @@ export default function FindingDetailPage({ findingId, onBack, onEdit }) {
                             <p className="text-xs text-slate-600 mt-2 leading-relaxed">
                                 {finding.remediation || 'No remediation instructions registered.'}
                             </p>
+                        </div>
+                        <div className="border-t border-slate-100 pt-4 mt-2">
+                            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">AI Fix Prompt</h3>
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 relative">
+                                <pre className="text-[11px] font-mono text-slate-600 whitespace-pre-wrap pr-10">
+                                    {generateAIPrompt()}
+                                </pre>
+                                <button
+                                    onClick={handleCopyAIPrompt}
+                                    className="absolute top-2 right-2 p-1.5 bg-white border border-slate-200 rounded shadow-sm text-slate-500 hover:text-brand-600 hover:bg-brand-50 transition"
+                                    title="Copy AI Prompt"
+                                >
+                                    <Copy size={14} />
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-2 italic">Copy this prompt and paste it into your AI coding assistant to quickly generate a safe fix.</p>
                         </div>
                     </div>
 

@@ -94,10 +94,10 @@ class BackfillOrganizationOwnership extends Command
     private function auditAssets(): array
     {
         $blockers = [];
-        $unresolved = Asset::whereNull('organization_id')->get();
+        $unresolved = Asset::withoutGlobalScopes()->whereNull('organization_id')->get();
 
         foreach ($unresolved as $asset) {
-            $orgs = $asset->creator?->organizations ?? collect();
+            $orgs = $asset->creator ? $asset->creator->organizations()->get() : collect();
             if ($orgs->count() === 0) {
                 $blockers[] = "Asset {$asset->id} creator has no organization";
             } elseif ($orgs->count() > 1) {
@@ -111,10 +111,10 @@ class BackfillOrganizationOwnership extends Command
     private function auditTargets(): array
     {
         $blockers = [];
-        $unresolved = Target::whereNull('organization_id')->get();
+        $unresolved = Target::withoutGlobalScopes()->whereNull('organization_id')->get();
 
         foreach ($unresolved as $target) {
-            $orgs = $target->creator?->organizations ?? collect();
+            $orgs = $target->creator ? $target->creator->organizations()->get() : collect();
             if ($orgs->count() === 0) {
                 $blockers[] = "Target {$target->id} creator has no organization";
             } elseif ($orgs->count() > 1) {
@@ -128,10 +128,10 @@ class BackfillOrganizationOwnership extends Command
     private function auditRepositories(): array
     {
         $blockers = [];
-        $unresolved = Repository::whereNull('organization_id')->get();
+        $unresolved = Repository::withoutGlobalScopes()->whereNull('organization_id')->get();
 
         foreach ($unresolved as $repo) {
-            $orgs = $repo->creator?->organizations ?? collect();
+            $orgs = $repo->creator ? $repo->creator->organizations()->get() : collect();
             if ($orgs->count() === 0) {
                 $blockers[] = "Repository {$repo->id} creator has no organization";
             } elseif ($orgs->count() > 1) {
@@ -145,7 +145,7 @@ class BackfillOrganizationOwnership extends Command
     private function auditScans(): array
     {
         $blockers = [];
-        $unresolved = Scan::whereNull('organization_id')->get();
+        $unresolved = Scan::withoutGlobalScopes()->whereNull('organization_id')->get();
 
         foreach ($unresolved as $scan) {
             // Try to get from repository first
@@ -157,7 +157,7 @@ class BackfillOrganizationOwnership extends Command
             }
 
             // Fall back to creator's organization
-            $orgs = $scan->creator?->organizations ?? collect();
+            $orgs = $scan->creator ? $scan->creator->organizations()->get() : collect();
             if ($orgs->count() === 0) {
                 $blockers[] = "Scan {$scan->id} has no repository and creator has no organization";
             } elseif ($orgs->count() > 1) {
@@ -171,10 +171,10 @@ class BackfillOrganizationOwnership extends Command
     private function auditLocalProjects(): array
     {
         $blockers = [];
-        $unresolved = LocalProject::whereNull('organization_id')->get();
+        $unresolved = LocalProject::withoutGlobalScopes()->whereNull('organization_id')->get();
 
         foreach ($unresolved as $project) {
-            $orgs = $project->creator?->organizations ?? collect();
+            $orgs = $project->creator ? $project->creator->organizations()->get() : collect();
             if ($orgs->count() === 0) {
                 $blockers[] = "LocalProject {$project->id} creator has no organization";
             } elseif ($orgs->count() > 1) {
@@ -212,8 +212,8 @@ class BackfillOrganizationOwnership extends Command
     private function backfillAssets(): void
     {
         $updated = 0;
-        Asset::whereNull('organization_id')->each(function (Asset $asset) use (&$updated) {
-            $orgs = $asset->creator?->organizations;
+        Asset::withoutGlobalScopes()->whereNull('organization_id')->each(function (Asset $asset) use (&$updated) {
+            $orgs = $asset->creator ? $asset->creator->organizations()->get() : null;
             if ($orgs && $orgs->count() === 1) {
                 $asset->organization_id = $orgs->first()->id;
                 $asset->save();
@@ -226,8 +226,8 @@ class BackfillOrganizationOwnership extends Command
     private function backfillTargets(): void
     {
         $updated = 0;
-        Target::whereNull('organization_id')->each(function (Target $target) use (&$updated) {
-            $orgs = $target->creator?->organizations;
+        Target::withoutGlobalScopes()->whereNull('organization_id')->each(function (Target $target) use (&$updated) {
+            $orgs = $target->creator ? $target->creator->organizations()->get() : null;
             if ($orgs && $orgs->count() === 1) {
                 $target->organization_id = $orgs->first()->id;
                 $target->save();
@@ -240,8 +240,8 @@ class BackfillOrganizationOwnership extends Command
     private function backfillRepositories(): void
     {
         $updated = 0;
-        Repository::whereNull('organization_id')->each(function (Repository $repo) use (&$updated) {
-            $orgs = $repo->creator?->organizations;
+        Repository::withoutGlobalScopes()->whereNull('organization_id')->each(function (Repository $repo) use (&$updated) {
+            $orgs = $repo->creator ? $repo->creator->organizations()->get() : null;
             if ($orgs && $orgs->count() === 1) {
                 $repo->organization_id = $orgs->first()->id;
                 $repo->save();
@@ -254,7 +254,7 @@ class BackfillOrganizationOwnership extends Command
     private function backfillScans(): void
     {
         $updated = 0;
-        Scan::whereNull('organization_id')->each(function (Scan $scan) use (&$updated) {
+        Scan::withoutGlobalScopes()->whereNull('organization_id')->each(function (Scan $scan) use (&$updated) {
             // Prefer repository ownership
             if ($scan->repository_id && $scan->repository?->organization_id) {
                 $scan->organization_id = $scan->repository->organization_id;
@@ -264,7 +264,7 @@ class BackfillOrganizationOwnership extends Command
             }
 
             // Fall back to creator's organization
-            $orgs = $scan->creator?->organizations;
+            $orgs = $scan->creator ? $scan->creator->organizations()->get() : null;
             if ($orgs && $orgs->count() === 1) {
                 $scan->organization_id = $orgs->first()->id;
                 $scan->save();
@@ -277,8 +277,8 @@ class BackfillOrganizationOwnership extends Command
     private function backfillLocalProjects(): void
     {
         $updated = 0;
-        LocalProject::whereNull('organization_id')->each(function (LocalProject $project) use (&$updated) {
-            $orgs = $project->creator?->organizations;
+        LocalProject::withoutGlobalScopes()->whereNull('organization_id')->each(function (LocalProject $project) use (&$updated) {
+            $orgs = $project->creator ? $project->creator->organizations()->get() : null;
             if ($orgs && $orgs->count() === 1) {
                 $project->organization_id = $orgs->first()->id;
                 $project->save();

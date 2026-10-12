@@ -206,11 +206,48 @@ export default function ReportDetailPage({ reportId, onBack, onEdit }) {
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-1.5 text-slate-500 font-semibold">
                     <Info size={14} className="text-brand-500" />
-                    <span>Export options &amp; distribution channels are restricted to Enterprise subscribers.</span>
+                    <span>Download your generated report below.</span>
                 </div>
                 <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            if (!report?.options?.scan_id) {
+                                alert("This report does not have an associated scan for PDF generation.");
+                                return;
+                            }
+                            try {
+                                const response = await axios.get(`/api/scans/${report.options.scan_id}/report/download`, {
+                                    responseType: 'blob',
+                                    headers: { 'Accept': 'application/pdf' }
+                                });
+                                const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+                                const link = document.createElement('a');
+                                link.href = url;
+                                let filename = `trustnode-report-${report.id}.pdf`;
+                                const disposition = response.headers['content-disposition'];
+                                if (disposition && disposition.indexOf('filename=') !== -1) {
+                                    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+                                    if (matches != null && matches[1]) {
+                                        filename = matches[1].replace(/['"]/g, '');
+                                    }
+                                }
+                                link.setAttribute('download', filename);
+                                document.body.appendChild(link);
+                                link.click();
+                                link.parentNode.removeChild(link);
+                                window.URL.revokeObjectURL(url);
+                            } catch (err) {
+                                console.error('Failed to download PDF', err);
+                                alert('Failed to download PDF. The report might still be generating or unavailable.');
+                            }
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition"
+                    >
+                        <Download size={11} />
+                        PDF Report
+                    </button>
                     {[
-                        { label: 'PDF Report', icon: Download },
                         { label: 'Word Doc', icon: Download },
                         { label: 'Share Link', icon: Share2 },
                         { label: 'Schedule', icon: Clock }

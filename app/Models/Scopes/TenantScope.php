@@ -21,12 +21,23 @@ class TenantScope implements Scope
         \App\Models\Scan::class,
         \App\Models\Integration::class,
         \App\Models\Setting::class,
+        \App\Models\AgentActivityLog::class,
+        \App\Models\CodebaseProject::class,
     ];
 
     private const DERIVED_ORGANIZATION_RELATIONS = [
         \App\Models\Finding::class => 'scan',
         \App\Models\ScanReport::class => 'scan',
         \App\Models\IntegrationCredential::class => 'integration',
+    ];
+
+    private const CREATOR_FALLBACK_MODELS = [
+        \App\Models\Asset::class,
+        \App\Models\Target::class,
+        \App\Models\Repository::class,
+        \App\Models\LocalProject::class,
+        \App\Models\Scan::class,
+        \App\Models\CodebaseProject::class,
     ];
 
     /**
@@ -45,10 +56,19 @@ class TenantScope implements Scope
                 return;
             }
 
-            $builder->whereIn(
-                $model->getTable() . '.organization_id',
-                $this->organizationIdsForUser($userId)
-            );
+            $builder->where(function ($query) use ($model, $userId) {
+                $query->whereIn(
+                    $model->getTable() . '.organization_id',
+                    $this->organizationIdsForUser($userId)
+                );
+
+                if (in_array(get_class($model), self::CREATOR_FALLBACK_MODELS, true)) {
+                    $query->orWhere(function ($q) use ($model, $userId) {
+                        $q->whereNull($model->getTable() . '.organization_id')
+                          ->where($model->getTable() . '.created_by', $userId);
+                    });
+                }
+            });
 
             return;
         }

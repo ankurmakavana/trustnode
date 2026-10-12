@@ -5,8 +5,7 @@ import {
 } from 'lucide-react';
 import { Avatar, IconButton } from './ui/primitives';
 import { useAuth } from '../context/AuthContext';
-
-const notifications = [];
+import axios from 'axios';
 
 /* ── useClickOutside hook ─────────────────────────────────── */
 function useClickOutside(ref, handler) {
@@ -39,9 +38,9 @@ const notifColors = {
 };
 
 /* ── NotificationPanel ───────────────────────────────────── */
-function NotificationPanel({ onClose }) {
+function NotificationPanel({ onClose, notifications = [], onMarkAllRead, onMarkRead }) {
     const ref = useRef(null);
-    const unreadCount = notifications.filter(n => n.unread).length;
+    const unreadCount = notifications.filter(n => !n.read_at).length;
     useClickOutside(ref, onClose);
 
     return (
@@ -61,34 +60,40 @@ function NotificationPanel({ onClose }) {
                         </span>
                     )}
                 </div>
-                <button className="text-xs text-brand-600 font-medium hover:text-brand-700 transition-colors focus:outline-none focus-visible:underline">
+                <button 
+                    onClick={onMarkAllRead}
+                    className="text-xs text-brand-600 font-medium hover:text-brand-700 transition-colors focus:outline-none focus-visible:underline"
+                >
                     Mark all read
                 </button>
             </div>
 
             {/* List */}
             <div className="divide-y divide-slate-50 max-h-80 overflow-y-auto">
-                {notifications.map((n) => {
-                    const Icon = notifIcons[n.type] || Bell;
-                    const color = notifColors[n.type] || notifColors.user;
+                {notifications.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-500">No notifications</div>
+                ) : notifications.map((n) => {
+                    const isUnread = !n.read_at;
+                    const Icon = notifIcons[n.data?.type] || Bell;
+                    const color = notifColors[n.data?.type] || notifColors.user;
 
                     return (
                         <div
                             key={n.id}
-                            className={`flex gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors ${n.unread ? '' : 'opacity-70'}`}
+                            onClick={() => { if(isUnread) onMarkRead(n.id); }}
+                            className={`flex gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors ${isUnread ? '' : 'opacity-70'}`}
                         >
                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${color}`}>
                                 <Icon size={13} strokeWidth={2} />
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-start justify-between gap-2">
-                                    <p className={`text-xs font-semibold text-slate-900 leading-snug ${n.unread ? '' : 'font-medium'}`}>
-                                        {n.title}
+                                    <p className={`text-xs font-semibold text-slate-900 leading-snug ${isUnread ? '' : 'font-medium'}`}>
+                                        {n.data?.title || 'Notification'}
                                     </p>
-                                    {n.unread && <span className="w-1.5 h-1.5 rounded-full bg-brand-500 shrink-0 mt-1" />}
+                                    {isUnread && <span className="w-1.5 h-1.5 rounded-full bg-brand-500 shrink-0 mt-1" />}
                                 </div>
-                                <p className="text-xs text-slate-500 truncate mt-0.5">{n.desc}</p>
-                                <p className="text-[10px] text-slate-400 mt-1">{n.time} ago</p>
+                                <p className="text-xs text-slate-500 truncate mt-0.5">{n.data?.message}</p>
                             </div>
                         </div>
                     );
@@ -167,8 +172,38 @@ export default function Header({ darkMode, onToggleDark, pageTitle }) {
     const [showProfile, setShowProfile] = useState(false);
     const [searchValue, setSearchValue] = useState('');
     const [searchFocus, setSearchFocus] = useState(false);
+    
+    const [notifications, setNotifications] = useState([]);
+    const unreadCount = notifications.filter(n => !n.read_at).length;
 
-    const unreadCount = notifications.filter(n => n.unread).length;
+    useEffect(() => {
+        if (!user) return;
+        const fetchNotifs = async () => {
+            try {
+                const res = await axios.get('/api/notifications');
+                setNotifications(res.data.data || []);
+            } catch (err) {
+                console.error(err);
+            }
+        };
+        fetchNotifs();
+        const intId = setInterval(fetchNotifs, 30000);
+        return () => clearInterval(intId);
+    }, [user]);
+
+    const handleMarkAllRead = async () => {
+        try {
+            await axios.post('/api/notifications/mark-all-read');
+            setNotifications(prev => prev.map(n => ({ ...n, read_at: new Date().toISOString() })));
+        } catch (err) {}
+    };
+
+    const handleMarkRead = async (id) => {
+        try {
+            await axios.post(`/api/notifications/${id}/mark-read`);
+            setNotifications(prev => prev.map(n => n.id === id ? { ...n, read_at: new Date().toISOString() } : n));
+        } catch (err) {}
+    };
 
     const closeAll = useCallback(() => {
         setShowNotifications(false);
@@ -270,7 +305,12 @@ export default function Header({ darkMode, onToggleDark, pageTitle }) {
                         )}
                     </button>
                     {showNotifications && (
-                        <NotificationPanel onClose={() => setShowNotifications(false)} />
+                        <NotificationPanel 
+                            onClose={() => setShowNotifications(false)} 
+                            notifications={notifications}
+                            onMarkAllRead={handleMarkAllRead}
+                            onMarkRead={handleMarkRead}
+                        />
                     )}
                 </div>
 

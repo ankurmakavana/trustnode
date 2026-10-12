@@ -10,9 +10,12 @@ use Tests\TestCase;
 
 class AgentServiceTest extends TestCase
 {
+    use \Illuminate\Foundation\Testing\RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
 
         // Set agent config to use cache driver for isolated testing
         config([
@@ -28,6 +31,8 @@ class AgentServiceTest extends TestCase
                 ]
             ]
         ]);
+
+        \Illuminate\Support\Facades\Notification::fake();
     }
 
     protected function tearDown(): void

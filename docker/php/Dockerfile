@@ -8,11 +8,12 @@ RUN apt-get update && apt-get install -y \
     zip \
     unzip \
     libzip-dev \
+    libpng-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
 # Note: zip is recommended for efficient Composer package extraction.
-RUN docker-php-ext-install pdo_mysql mbstring pcntl bcmath zip
+RUN docker-php-ext-install pdo_mysql mbstring pcntl bcmath zip gd
 
 # Install Redis extension
 RUN pecl install redis && docker-php-ext-enable redis

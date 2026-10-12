@@ -10,6 +10,7 @@ use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
 class AgentHealthApiTest extends TestCase
@@ -203,11 +204,25 @@ class AgentHealthApiTest extends TestCase
         $handler = new \App\Handlers\AgentObserveEnvTaskHandler($scanner, $queue, $agentService);
 
         Cache::flush();
-        $envPath = base_path('.env');
-        $originalEnvContent = file_exists($envPath) ? file_get_contents($envPath) : '';
+
+        // The project's real .env must never be written by this test. Record its hash (never its
+        // contents) so the test can prove afterwards that it is unchanged.
+        $realEnvPath = base_path('.env');
+        $realEnvHashBefore = is_file($realEnvPath) ? hash_file('sha256', $realEnvPath) : null;
+
+        $originalBasePath = app()->basePath();
+        $tempBase = storage_path('app/agent_health_env_' . uniqid());
+        File::makeDirectory($tempBase, 0755, true);
+        app()->setBasePath($tempBase);
+
         try {
+            $envPath = base_path('.env');
+            $this->assertSame($tempBase, base_path());
+            $this->assertNotSame($realEnvPath, $envPath);
+
             file_put_contents($envPath, "APP_KEY=base64:3f6B78dZ7x7VbLqP3g3kL5x9Z8w1y2z3A4b5c6d7e8f=\nAWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n");
 
+            \App\Services\TenantContext::setUserId($this->developer->id);
             $handler->handle([
                 'id' => 'task-obs-test-1',
                 'agent_id' => $agentService->getAgentId(),
@@ -215,12 +230,14 @@ class AgentHealthApiTest extends TestCase
                 'payload' => []
             ]);
         } finally {
-            if ($originalEnvContent !== '') {
-                file_put_contents($envPath, $originalEnvContent);
-            }
+            app()->setBasePath($originalBasePath);
+            File::deleteDirectory($tempBase);
         }
 
-        $scan = \App\Models\Scan::withoutGlobalScopes()->where('target', basename($envPath))->latest()->first();
+        $realEnvHashAfter = is_file($realEnvPath) ? hash_file('sha256', $realEnvPath) : null;
+        $this->assertSame($realEnvHashBefore, $realEnvHashAfter, 'The real project .env was modified by this test.');
+
+        $scan = \App\Models\Scan::where('target', basename($envPath))->latest()->first();
         $this->assertNotNull($scan);
         $this->assertEquals(\App\Enums\Scan\ScanStatus::COMPLETED, $scan->status);
 
@@ -236,5 +253,45 @@ class AgentHealthApiTest extends TestCase
         $this->assertNotNull($finding);
         $this->assertEquals($scan->id, $finding->scan_id);
         $this->assertEquals($agentService->getAgentId(), $finding->agent_id);
+    }
+
+    public function test_api_tenant_isolation_for_activity_timeline()
+    {
+        $orgA = \App\Models\Organization::factory()->create();
+        $orgB = \App\Models\Organization::factory()->create();
+
+        $adminRole = \App\Models\Role::firstOrCreate(['slug' => \App\Enums\UserRole::ADMINISTRATOR->value], ['name' => 'Admin']);
+
+        $userA = \App\Models\User::factory()->create(['role_id' => $adminRole->id]);
+        $teamA = \App\Models\Team::factory()->create(['organization_id' => $orgA->id]);
+        $userA->teams()->attach($teamA->id);
+
+        $userB = \App\Models\User::factory()->create(['role_id' => $adminRole->id]);
+        $teamB = \App\Models\Team::factory()->create(['organization_id' => $orgB->id]);
+        $userB->teams()->attach($teamB->id);
+
+        $agent = $this->app->make(AgentService::class);
+        $agent->start();
+
+        \App\Models\AgentActivityLog::create([
+            'agent_id' => $agent->getAgentId(),
+            'action' => 'failed',
+            'properties' => ['message' => 'Exception: secret-token-123'],
+            'organization_id' => $orgA->id,
+            'user_id' => $userA->id,
+        ]);
+
+        // User A should see it
+        $responseA = $this->actingAs($userA)->getJson('/api/agent/console');
+        $responseA->assertStatus(200);
+        $timelineA = $responseA->json('activity_timeline');
+        $this->assertCount(1, collect($timelineA)->where('type', 'agent'));
+        // Verify redaction wasn't fully applied since we manually inserted it, wait, we are just testing isolation
+
+        // User B should NOT see it
+        $responseB = $this->actingAs($userB)->getJson('/api/agent/console');
+        $responseB->assertStatus(200);
+        $timelineB = $responseB->json('activity_timeline');
+        $this->assertCount(0, collect($timelineB)->where('type', 'agent'));
     }
 }

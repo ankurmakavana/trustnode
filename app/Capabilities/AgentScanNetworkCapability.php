@@ -81,7 +81,10 @@ class AgentScanNetworkCapability implements AgentCapabilityInterface
         $startedAt = now();
         $agentId = $context['agent_id'] ?? 'unknown';
 
-        $systemUserId = Schema::hasTable('users') ? \App\Models\User::query()->value('id') : null;
+        $systemUserId = \App\Services\TenantContext::currentUserId();
+        if (!$systemUserId) {
+            throw new \RuntimeException("Missing tenant context for network scan.");
+        }
 
         $scan = null;
         if (Schema::hasTable('scans')) {

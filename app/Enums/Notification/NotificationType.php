@@ -10,4 +10,9 @@ enum NotificationType: string
     case USER_INVITATION = 'user_invitation';
     case REPORT_READY = 'report_ready';
     case REPORT_FAILED = 'report_failed';
+    case AGENT_STARTED = 'agent_started';
+    case AGENT_STOPPED = 'agent_stopped';
+    case AGENT_FAILED = 'agent_failed';
+    case PERMISSION_REQUESTED = 'permission_requested';
+    case HIGH_SEVERITY_FINDING = 'high_severity_finding';
 }

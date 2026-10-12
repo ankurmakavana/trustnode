@@ -277,10 +277,11 @@ class ScanLocalJob implements ShouldQueue, TenantAwareJob
             $this->scan->update(['progress' => 90]);
 
             // 5. Generate HTML report
-            $reportTitle = 'Local Directory Vulnerability Assessment - '.$this->scan->target;
+            $targetName = basename(str_replace('\\', '/', $this->scan->target));
+            $reportTitle = 'Local Directory Vulnerability Assessment - '.$targetName;
             $viewName = view()->exists('reports.local_scan') ? 'reports.local_scan' : 'reports.repository_scan';
             $htmlContent = view($viewName, [
-                'target' => $this->scan->target,
+                'target' => $targetName,
                 'scan' => $this->scan,
                 'repository' => null,
                 'findings' => $savedFindings,

@@ -45,7 +45,7 @@
         .finding-header { border-bottom: 1px solid #e5e7eb; padding-bottom: 10px; margin-bottom: 15px; }
         .finding-title { font-size: 18px; font-weight: bold; margin: 0; color: #111827; }
         .finding-badge-container { float: right; margin-top: -30px; }
-        .code-block { background-color: #1e293b; color: #f8fafc; padding: 15px; font-family: 'Courier New', Courier, monospace; border-radius: 4px; overflow-x: auto; margin: 15px 0; font-size: 14px; }
+        .code-block { background-color: #1e293b; color: #f8fafc; padding: 15px; font-family: 'Courier New', Courier, monospace; border-radius: 4px; overflow-x: auto; margin: 15px 0; font-size: 14px; word-wrap: break-word; white-space: pre-wrap; word-break: break-all; }
         .section-desc { color: #4b5563; font-style: italic; margin-bottom: 20px; }
     </style>
 </head>
@@ -53,7 +53,13 @@
     <!-- COVER PAGE -->
     <div class="cover-page page">
         <div class="cover-header">
-            <div class="cover-logo">TrustNode</div>
+            <div class="cover-logo">
+                @if(file_exists(base_path('trustnode.png')))
+                    <img src="data:image/png;base64,{{ base64_encode(file_get_contents(base_path('trustnode.png'))) }}" alt="TrustNode" style="max-height: 120px; max-width: 100%; object-fit: contain;">
+                @else
+                    TRUSTNODE
+                @endif
+            </div>
             <div class="cover-title">Vulnerability Assessment Report</div>
             <div class="cover-target">{{ $repository->name }}</div>
         </div>
@@ -88,7 +94,13 @@
     <!-- REPORT CONTENT -->
     <div class="page">
         <div class="report-header">
-            <div class="report-logo">TrustNode</div>
+            <div class="report-logo">
+                @if(file_exists(base_path('trustnode.png')))
+                    <img src="data:image/png;base64,{{ base64_encode(file_get_contents(base_path('trustnode.png'))) }}" alt="TrustNode" style="max-height: 40px; max-width: 100%; object-fit: contain;">
+                @else
+                    TRUSTNODE
+                @endif
+            </div>
             <div style="font-size: 18px; color: #4b5563; margin-top: 5px;">Repository Vulnerability Assessment Report</div>
         </div>
 
@@ -188,40 +200,54 @@
         @if (count($findings) === 0)
             <p style="text-align: center; color: green; font-weight: bold; margin: 40px 0; padding: 20px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">No vulnerabilities detected in this repository.</p>
         @else
-            @foreach ($findings as $f)
-                <div class="finding-card">
-                    <div class="finding-header">
-                        <div class="finding-title">{{ $f->title }}</div>
-                        <div class="finding-badge-container">
-                            @if ($f->lifecycle_status)
-                                <span class="badge" style="background-color: #e0e7ff; color: #3730a3; margin-right: 5px;">{{ strtoupper($f->lifecycle_status->value ?? $f->lifecycle_status) }}</span>
+            @php
+                $groupedFindings = [];
+                foreach ($findings as $f) {
+                    $sev = strtolower($f->severity->value ?? $f->severity);
+                    $groupedFindings[$sev][] = $f;
+                }
+                $order = ['critical', 'high', 'medium', 'low', 'info'];
+            @endphp
+
+            @foreach ($order as $sev)
+                @if (!empty($groupedFindings[$sev]))
+                    <h3 style="margin-top: 30px; border-bottom: 2px solid #e5e7eb; padding-bottom: 5px;">{{ ucfirst($sev) }} Severity Findings</h3>
+                    @foreach ($groupedFindings[$sev] as $f)
+                        <div class="finding-card">
+                            <div class="finding-header">
+                                <div class="finding-title">{{ $f->title }}</div>
+                                <div class="finding-badge-container">
+                                    @if ($f->lifecycle_status)
+                                        <span class="badge" style="background-color: #e0e7ff; color: #3730a3; margin-right: 5px;">{{ strtoupper($f->lifecycle_status->value ?? $f->lifecycle_status) }}</span>
+                                    @endif
+                                    <span class="badge badge-{{ strtolower($f->severity->value ?? $f->severity) }}">{{ $f->severity->value ?? $f->severity }}</span>
+                                </div>
+                            </div>
+
+                            <p><strong>Category:</strong> {{ $f->category }}</p>
+                            @if ($f->cwe)
+                                <p><strong>CWE:</strong> {{ $f->cwe }}</p>
                             @endif
-                            <span class="badge badge-{{ strtolower($f->severity->value ?? $f->severity) }}">{{ $f->severity->value ?? $f->severity }}</span>
+                            <p><strong>File Location:</strong> <code>{{ $f->technical_details ?? $f->url }}</code></p>
+                            @if ($f->cvss_score)
+                                <p><strong>CVSS Score:</strong> {{ $f->cvss_score }}</p>
+                            @endif
+
+                            <p><strong>Description:</strong></p>
+                            <p style="word-wrap: break-word;">{{ $f->description }}</p>
+
+                            @if ($f->evidence)
+                                <p><strong>Evidence (Masked):</strong></p>
+                                <div class="code-block">{{ $f->evidence }}</div>
+                            @endif
+
+                            @if ($f->remediation)
+                                <p><strong>Remediation Guidance:</strong></p>
+                                <p style="word-wrap: break-word;">{{ $f->remediation }}</p>
+                            @endif
                         </div>
-                    </div>
-                    
-                    <p><strong>Category:</strong> {{ $f->category }}</p>
-                    @if ($f->cwe)
-                        <p><strong>CWE:</strong> {{ $f->cwe }}</p>
-                    @endif
-                    <p><strong>File Location:</strong> <code>{{ $f->technical_details ?? $f->url }}</code></p>
-                    @if ($f->cvss_score)
-                        <p><strong>CVSS Score:</strong> {{ $f->cvss_score }}</p>
-                    @endif
-                    
-                    <p><strong>Description:</strong></p>
-                    <p>{{ $f->description }}</p>
-
-                    @if ($f->evidence)
-                        <p><strong>Evidence (Masked):</strong></p>
-                        <div class="code-block">{{ $f->evidence }}</div>
-                    @endif
-
-                    @if ($f->remediation)
-                        <p><strong>Remediation Guidance:</strong></p>
-                        <p>{{ $f->remediation }}</p>
-                    @endif
-                </div>
+                    @endforeach
+                @endif
             @endforeach
         @endif
 

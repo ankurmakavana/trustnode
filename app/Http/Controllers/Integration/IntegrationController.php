@@ -109,7 +109,7 @@ class IntegrationController extends Controller
                 IntegrationCredential::create([
                     'integration_id' => $integration->id,
                     'key' => 'password',
-                    'value' => bcrypt($validated['password']),
+                    'value' => \Illuminate\Support\Facades\Crypt::encryptString($validated['password']),
                 ]);
             }
 

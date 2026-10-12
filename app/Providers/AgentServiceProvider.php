@@ -22,7 +22,7 @@ class AgentServiceProvider extends ServiceProvider
                 config('agent.version')
             );
         });
-        
+
         $this->app->singleton(\App\Contracts\AgentQueueInterface::class, \App\Services\AgentQueue::class);
         $this->app->singleton(\App\Contracts\AgentCapabilityRegistryInterface::class, function ($app) {
             $registry = new \App\Services\AgentCapabilityRegistry();
@@ -51,6 +51,10 @@ class AgentServiceProvider extends ServiceProvider
             $registry->register($app->make(\App\Capabilities\AgentScanNetworkCapability::class));
             $registry->registerOperation('agent:scan_network', 'agent:scan_network');
 
+            // Phase C - Email Read
+            $registry->register($app->make(\App\Capabilities\AgentEmailReadCapability::class));
+            $registry->registerOperation('agent:email_read', 'agent:email_read');
+
             return $registry;
         });
 
@@ -63,6 +67,8 @@ class AgentServiceProvider extends ServiceProvider
             $registry->register($app->make(\App\Handlers\AgentCapabilityTaskHandler::class));
             return $registry;
         });
+
+        $this->app->singleton(\App\Contracts\EmailReaderInterface::class, \App\Services\Mail\ImapEmailReaderAdapter::class);
         $this->app->singleton(\App\Contracts\AgentApprovalServiceInterface::class, \App\Services\AgentApprovalService::class);
         $this->app->singleton(\App\Contracts\AgentSecurityBoundaryInterface::class, \App\Services\AgentSecurityBoundary::class);
         $this->app->singleton(\App\Contracts\DeepSeekHarnessAdapterInterface::class, \App\Services\DeepSeekHarnessAdapter::class);
@@ -85,7 +91,7 @@ class AgentServiceProvider extends ServiceProvider
             }
         }
     }
-    
+
     /**
      * Start the agent service.
      *
@@ -94,10 +100,10 @@ class AgentServiceProvider extends ServiceProvider
     protected function startAgent()
     {
         $agent = $this->app->make(AgentService::class);
-        
+
         // Start the agent
         $agent->start();
-        
+
         $registry = $this->app->make(\App\Contracts\AgentCapabilityRegistryInterface::class);
         $agentId = $agent->getAgentId();
         $registry->addGrant($agentId, 'agent:report');
@@ -107,7 +113,7 @@ class AgentServiceProvider extends ServiceProvider
         // Handle shutdown signals for graceful termination
         $this->handleShutdownSignals($agent);
     }
-    
+
     protected function handleShutdownSignals(AgentService $agent)
     {
         // Register shutdown function for clean exit
@@ -119,26 +125,26 @@ class AgentServiceProvider extends ServiceProvider
                 $agent->setStoppedAt(now());
             }
         });
-        
+
         // Handle SIGTERM and SIGINT if pcntl is available
         if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
             pcntl_async_signals(true);
-            
+
             $handler = function () use ($agent) {
                 if ($agent->isRunning()) {
                     Log::info('Shutdown signal received. Initiating graceful drain.');
                     $agent->drain();
-                    
+
                     $timeout = config('agent.queue.drain_timeout', 15);
                     if (function_exists('pcntl_alarm') && $timeout > 0) {
                         pcntl_alarm($timeout);
                     }
                 }
             };
-            
+
             pcntl_signal(SIGTERM, $handler);
             pcntl_signal(SIGINT, $handler);
-            
+
             if (function_exists('pcntl_alarm')) {
                 pcntl_signal(SIGALRM, function () {
                     Log::warning('Drain timeout exceeded. Exiting forcefully.');

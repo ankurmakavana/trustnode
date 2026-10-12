@@ -172,23 +172,54 @@ class ScanController extends Controller
         return response()->json($report);
     }
 
-    public function downloadReport(Scan $scan)
+    public function downloadReport($scanId)
     {
+        $scan = Scan::withoutGlobalScopes()->findOrFail($scanId);
+        
+        // A scan the caller cannot see returns 404, as on every other endpoint, so its existence is not revealed.
+        $userId = \Illuminate\Support\Facades\Auth::id() ?? \App\Services\TenantContext::currentUserId();
+        if (!$userId) {
+            abort(404, 'Scan report not found.');
+        }
+        if ($scan->organization_id) {
+            $orgIds = \App\Models\Team::whereHas('users', fn($q) => $q->whereKey($userId))->pluck('organization_id')->toArray();
+            if (!in_array($scan->organization_id, $orgIds)) {
+                abort(404, 'Scan report not found.');
+            }
+        } elseif ((int) $scan->created_by !== (int) $userId) {
+            abort(404, 'Scan report not found.');
+        }
+
         $this->authorize('viewAny', Scan::class);
 
         $report = ScanReport::where('scan_id', $scan->id)->where('status', 'completed')->latest()->first();
 
-        if (! $report || ! $report->file_path || ! Storage::disk('local')->exists($report->file_path)) {
-            return response()->json(['message' => 'Report not available or still generating.'], 404);
-        }
-
         $date = $scan->created_at ? $scan->created_at->format('Y-m-d') : date('Y-m-d');
-        $safeRepoName = str_replace(['/', '\\', '_'], '-', $scan->target ?? 'repo');
+        
+        $targetName = basename(str_replace('\\', '/', $scan->target ?? 'repo'));
+        $safeRepoName = str_replace(['/', '\\', '_'], '-', $targetName);
         $filename = "trustnode-{$safeRepoName}-scan-{$date}.pdf";
 
-        return Storage::disk('local')->download($report->file_path, $filename, [
-            'Content-Type' => 'application/pdf',
-        ]);
+        if ($report && $report->file_path && Storage::disk('local')->exists($report->file_path)) {
+            return Storage::disk('local')->download($report->file_path, $filename, [
+                'Content-Type' => 'application/pdf',
+            ]);
+        }
+
+        $appReport = \App\Models\Report::where('options->scan_id', $scan->id)->latest()->first();
+        if ($appReport && isset($appReport->options['html_report'])) {
+            ini_set('memory_limit', '512M');
+            set_time_limit(120);
+            
+            // Stored HTML may predate server-side redaction, so it is redacted again before rendering.
+            $pdf = Pdf::loadHTML(\App\Services\SecretRedactor::redact($appReport->options['html_report']));
+            return response($pdf->output(), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            ]);
+        }
+
+        return response()->json(['message' => 'Report not available or still generating.'], 404);
     }
     public function storeLocal(Request $request): JsonResponse
     {

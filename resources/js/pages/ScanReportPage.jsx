@@ -152,15 +152,30 @@ export default function ScanReportPage({ scanId, onBack, onViewDetail }) {
                                 setIsDownloading(true);
                                 try {
                                     const response = await axios.get(`/api/scans/${scan.id}/report/download`, {
-                                        responseType: 'blob'
+                                        responseType: 'blob',
+                                        headers: {
+                                            'Accept': 'application/pdf'
+                                        }
                                     });
-                                    const url = window.URL.createObjectURL(new Blob([response.data]));
+                                    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
                                     const link = document.createElement('a');
                                     link.href = url;
-                                    link.setAttribute('download', `trustnode-${(scan.target || '').replace(/[\/\\_]/g, '-')}-scan.pdf`);
+                                    
+                                    // Extract filename from Content-Disposition if present
+                                    let filename = `trustnode-${(scan.target || '').replace(/[\/\\_]/g, '-')}-scan.pdf`;
+                                    const disposition = response.headers['content-disposition'];
+                                    if (disposition && disposition.indexOf('filename=') !== -1) {
+                                        const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+                                        if (matches != null && matches[1]) {
+                                            filename = matches[1].replace(/['"]/g, '');
+                                        }
+                                    }
+                                    
+                                    link.setAttribute('download', filename);
                                     document.body.appendChild(link);
                                     link.click();
                                     link.parentNode.removeChild(link);
+                                    window.URL.revokeObjectURL(url);
                                 } catch (err) {
                                     console.error('Failed to download PDF', err);
                                     alert('Failed to download PDF. Please try again.');

@@ -76,12 +76,18 @@ class AgentObserveEnvTaskHandler implements AgentTaskHandlerInterface
             $startedAt = now();
             $agentId = $this->agentService->getAgentId();
 
-            $systemUserId = \Illuminate\Support\Facades\Schema::hasTable('users') ? \App\Models\User::query()->value('id') : null;
+            $systemUserId = \App\Services\TenantContext::currentUserId();
+            if (!$systemUserId) {
+                throw new \RuntimeException("Missing tenant context for observe env.");
+            }
 
             // Create real Scan record tracking execution state if database is available
             $scan = null;
             if (\Illuminate\Support\Facades\Schema::hasTable('scans')) {
                 try {
+                    $user = \App\Models\User::find($systemUserId);
+                    $organizationId = $user ? $user->organizations()->first()?->id : null;
+
                     $scan = \App\Models\Scan::create([
                         'uuid' => (string) \Illuminate\Support\Str::uuid(),
                         'name' => 'Agent Security Observation: ' . basename($target),
@@ -93,6 +99,7 @@ class AgentObserveEnvTaskHandler implements AgentTaskHandlerInterface
                         'progress' => 50,
                         'started_at' => $startedAt,
                         'created_by' => $systemUserId,
+                        'organization_id' => $organizationId,
                     ]);
                 } catch (\Throwable $e) {
                     Log::warning("AgentObserveEnvTaskHandler: Unable to persist scan record.", ['error' => $e->getMessage()]);

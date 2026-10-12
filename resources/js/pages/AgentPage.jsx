@@ -13,17 +13,20 @@ import { formatRelativeTime, formatHumanDateTime } from '../utils/dateUtils';
 export default function AgentPage() {
     const [telemetry, setTelemetry] = useState(null);
     const [findings, setFindings] = useState([]);
+    const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [lastRefreshed, setLastRefreshed] = useState(null);
 
     const fetchConsoleData = useCallback(async () => {
         try {
-            const [consoleRes, findingsRes] = await Promise.all([
+            const [consoleRes, findingsRes, projectsRes] = await Promise.all([
                 axios.get('/api/agent/console'),
-                axios.get('/api/findings', { params: { per_page: 5 } })
+                axios.get('/api/findings', { params: { per_page: 5 } }),
+                axios.get('/api/projects')
             ]);
             setTelemetry(consoleRes.data);
             setFindings(findingsRes.data.data || []);
+            setProjects(projectsRes.data.data || []);
             setLastRefreshed(new Date());
         } catch (err) {
             console.error('Failed to load agent console telemetry', err);
@@ -372,6 +375,56 @@ export default function AgentPage() {
                     );
                 })}
             </div>
+
+            {/* 5B. CODEBASE PROJECTS SECTION */}
+            <Card padding={false}>
+                <CardHeader
+                    title="Codebase Projects"
+                    subtitle="Registered workspace directories for continuous monitoring"
+                    icon={<Database className="w-4 h-4 text-brand-500" />}
+                />
+                <div className="overflow-x-auto">
+                    {projects.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-slate-400 flex flex-col items-center">
+                            <span>No Codebase Projects configured.</span>
+                            <Link to="/projects/new" className="mt-2 text-brand-600 hover:underline">Add your first project</Link>
+                        </div>
+                    ) : (
+                        <table className="w-full text-left text-xs">
+                            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px]">
+                                <tr>
+                                    <th className="px-4 py-2.5">Project Name</th>
+                                    <th className="px-4 py-2.5">Workspace Path</th>
+                                    <th className="px-4 py-2.5">Status</th>
+                                    <th className="px-4 py-2.5">Continuous Scan</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 font-mono">
+                                {projects.map((p) => (
+                                    <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
+                                        <td className="px-4 py-2.5 font-sans font-semibold text-slate-900">
+                                            {p.name}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-slate-600">
+                                            <MonoChip>{p.path}</MonoChip>
+                                        </td>
+                                        <td className="px-4 py-2.5">
+                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                                p.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                                            }`}>
+                                                {p.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-2.5 text-slate-400 font-sans">
+                                            {p.continuous_scan_enabled ? 'Enabled' : 'Disabled'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </Card>
 
             {/* 6. RECENT SCANS SECTION */}
             <Card padding={false}>

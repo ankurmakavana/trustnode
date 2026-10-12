@@ -47,17 +47,23 @@ class FindingManagementTest extends TestCase
         $adminRole = Role::where('slug', 'administrator')->first();
         $operatorRole = Role::where('slug', 'operator')->first();
 
+        $org = \App\Models\Organization::factory()->create();
+        $team = \App\Models\Team::factory()->create(['organization_id' => $org->id]);
+
         $this->admin = User::factory()->create([
             'role_id' => $adminRole->id,
         ]);
+        $team->users()->attach($this->admin->id);
 
         $this->operator = User::factory()->create([
             'role_id' => $operatorRole->id,
         ]);
+        $team->users()->attach($this->operator->id);
 
         $this->asset = Asset::create([
             'name' => 'SSO Firewall Edge',
             'type' => AssetType::IPV4,
+            'organization_id' => $org->id,
             'value' => '10.10.1.254',
             'criticality' => AssetCriticality::CRITICAL,
             'status' => AssetStatus::ACTIVE,
@@ -71,6 +77,7 @@ class FindingManagementTest extends TestCase
             'environment' => TargetEnvironment::PRODUCTION,
             'criticality' => TargetCriticality::CRITICAL,
             'status' => TargetStatus::ACTIVE,
+            'organization_id' => $org->id,
             'created_by' => $this->admin->id,
         ]);
 
@@ -81,6 +88,7 @@ class FindingManagementTest extends TestCase
             'target' => '10.10.1.254',
             'status' => ScanStatus::QUEUED,
             'progress' => 0,
+            'organization_id' => $org->id,
             'created_by' => $this->admin->id,
         ]);
     }
@@ -109,6 +117,7 @@ class FindingManagementTest extends TestCase
             'cvss_score' => 8.8,
             'severity' => 'high',
             'status' => 'open',
+            'lifecycle_status' => 'new',
             'category' => 'web_application',
             'cwe' => 'CWE-200',
             'description' => 'Auth middleware exposes access token inside response header values.',
@@ -147,6 +156,7 @@ class FindingManagementTest extends TestCase
             'status' => FindingStatus::OPEN,
             'category' => 'web_application',
             'asset_id' => $this->asset->id,
+            'scan_id' => $this->scan->id,
             'created_by' => $this->admin->id,
         ]);
 
@@ -190,6 +200,7 @@ class FindingManagementTest extends TestCase
             'status' => FindingStatus::OPEN,
             'category' => 'web_application',
             'asset_id' => $this->asset->id,
+            'scan_id' => $this->scan->id,
             'created_by' => $this->admin->id,
         ]);
 
@@ -214,6 +225,7 @@ class FindingManagementTest extends TestCase
             'evidence' => 'Here is the password: mysecretpassword123!',
             'technical_details' => 'Found token="supersecrettoken"',
             'asset_id' => $this->asset->id,
+            'scan_id' => $this->scan->id,
             'created_by' => $this->admin->id,
         ]);
 

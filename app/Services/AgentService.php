@@ -112,6 +112,22 @@ class AgentService
             'agent_id' => $this->getAgentId(),
             'state' => $this->getState()
         ]);
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('agent_activity_logs')) {
+            \App\Models\AgentActivityLog::create([
+                'agent_id' => $this->getAgentId(),
+                'action' => 'started',
+                'properties' => ['message' => 'Agent started successfully'],
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+        }
+
+        \App\Services\Notification\NotificationRouter::dispatch(
+            \App\Enums\Notification\NotificationType::AGENT_STARTED,
+            new \App\Services\Notification\NotificationContext(),
+            new \App\Notifications\AgentLifecycleNotification($this->getAgentId(), 'started', 'Agent successfully started.')
+        );
     }
     
     protected function acquireOwnership()
@@ -217,6 +233,22 @@ class AgentService
             'state' => $this->getState(),
             'stopped_at' => $this->getStoppedAt()
         ]);
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('agent_activity_logs')) {
+            \App\Models\AgentActivityLog::create([
+                'agent_id' => $this->getAgentId(),
+                'action' => 'stopped',
+                'properties' => ['message' => 'Agent stopped successfully'],
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+        }
+
+        \App\Services\Notification\NotificationRouter::dispatch(
+            \App\Enums\Notification\NotificationType::AGENT_STOPPED,
+            new \App\Services\Notification\NotificationContext(),
+            new \App\Notifications\AgentLifecycleNotification($this->getAgentId(), 'stopped', 'Agent has safely shut down.')
+        );
     }
     
     public function heartbeat()

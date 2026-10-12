@@ -10,8 +10,23 @@ use App\Contracts\AgentTaskHandlerRegistryInterface;
 use App\Contracts\AgentTaskHandlerInterface;
 use Illuminate\Support\Facades\Config;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
 class AgentResourceGuardrailTest extends TestCase
 {
+    use RefreshDatabase;
+
+    protected $testUserId;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->artisan('db:seed', ['--class' => 'RolePermissionSeeder']);
+        $adminRole = \App\Models\Role::where('slug', \App\Enums\UserRole::ADMINISTRATOR->value)->firstOrFail();
+        $user = \App\Models\User::factory()->create(['role_id' => $adminRole->id]);
+        $this->testUserId = $user->id;
+    }
+
     public function test_memory_limit_is_applied_from_configuration()
     {
         // We can test if the configuration is accessible
@@ -35,6 +50,7 @@ class AgentResourceGuardrailTest extends TestCase
         $queue = $this->createMock(AgentQueueInterface::class);
         $queue->method('dequeue')->willReturn([
             'id' => 'task-1',
+            'user_id' => $this->testUserId,
             'type' => 'test.type',
             'payload' => []
         ]);

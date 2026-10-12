@@ -32,6 +32,8 @@ class AgentObserveEnvTaskHandlerTest extends TestCase
         }
         
         app()->setBasePath($this->testBasePath);
+
+        \App\Services\TenantContext::setUserId(1);
     }
 
     protected function tearDown(): void

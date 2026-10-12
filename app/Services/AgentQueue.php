@@ -53,6 +53,7 @@ class AgentQueue implements AgentQueueInterface
             DB::table($this->table)->insert([
                 'id' => $id,
                 'agent_id' => $agentId,
+                'user_id' => \App\Services\TenantContext::currentUserId() ?? \Illuminate\Support\Facades\Auth::id(),
                 'type' => $type,
                 'payload' => json_encode($payload),
                 'status' => self::STATUS_PENDING,

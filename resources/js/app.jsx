@@ -23,6 +23,8 @@ import FindingFormPage from './pages/FindingFormPage';
 import FindingDetailPage from './pages/FindingDetailPage';
 import ReportsPage from './pages/ReportsPage';
 import ReportDetailPage from './pages/ReportDetailPage';
+import ProjectsPage from './pages/ProjectsPage';
+import ProjectFormPage from './pages/ProjectFormPage';
 import { Loader2 } from 'lucide-react';
 
 const pageLabels = {
@@ -30,7 +32,8 @@ const pageLabels = {
     scans:     'Scans',
     findings:  'Findings',
     reports:   'Reports',
-    agent:     'Agent',
+    agent:     'Agent Console',
+    projects:  'Codebase Projects',
     permissions: 'Permissions',
     settings:  'Settings',
 };
@@ -94,6 +97,7 @@ function MainAppLayout() {
         if (path.startsWith('/scans')) return 'scans';
         if (path.startsWith('/findings')) return 'findings';
         if (path.startsWith('/reports')) return 'reports';
+        if (path.startsWith('/projects')) return 'projects';
         if (path.startsWith('/agent')) return 'agent';
         if (path.startsWith('/permissions')) return 'permissions';
         if (path.startsWith('/settings')) return 'settings';
@@ -161,6 +165,10 @@ function MainAppLayout() {
                             {/* Reports */}
                             <Route path="/reports" element={<ReportsPage onNavigateToCreate={() => {}} onNavigateToEdit={(id) => navigate(`/reports/${id}/edit`)} onNavigateToDetail={(id) => navigate(`/reports/${id}`)} />} />
                             <Route path="/reports/:id" element={<ReportDetailRoute />} />
+
+                            {/* Projects */}
+                            <Route path="/projects" element={<ProjectsPage onNavigateToCreate={() => navigate('/projects/new')} onNavigateToDetail={() => {}} />} />
+                            <Route path="/projects/new" element={<ProjectFormPage onSave={() => navigate('/projects')} onCancel={() => navigate('/projects')} />} />
 
                             {/* Agent */}
                             <Route path="/agent" element={<AgentPage />} />

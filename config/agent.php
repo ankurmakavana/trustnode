@@ -148,4 +148,41 @@ return [
 
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Scan Mount Directory
+    |--------------------------------------------------------------------------
+    |
+    | The designated host directory mounted into the agent for scanning.
+    | This acts as the secure boundary for codebase scanning outside TrustNode.
+    |
+    */
+    'scan_mount_dir' => env('SCAN_HOST_DIR', '/mnt/trustnode-scan'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Continuous Scanning
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for session-based repeated scanning of authorized folders.
+    | When enabled, the scheduler will periodically enqueue a codebase scan
+    | task for the configured scan mount directory while the agent is running.
+    |
+    */
+    'continuous_scan' => [
+
+        /*
+        | Enable or disable periodic automatic scanning.
+        | Set AGENT_CONTINUOUS_SCAN=false in .env to disable.
+        */
+        'enabled' => env('AGENT_CONTINUOUS_SCAN', true),
+
+        /*
+        | Interval in minutes between automatic scans.
+        | Minimum: 5 minutes. Maximum: 1440 minutes (24 hours).
+        */
+        'interval_minutes' => max(5, min(1440, (int) env('AGENT_SCAN_INTERVAL', 30))),
+
+    ],
+
 ];

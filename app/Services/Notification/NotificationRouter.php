@@ -54,8 +54,21 @@ class NotificationRouter
                 $recipients = $recipients->merge(self::getUsersByRole(UserRole::ADMINISTRATOR->value));
                 break;
                 
-            // Note: CRITICAL_FINDING and HIGH_RISK_FINDING do not exist in NotificationType enum yet.
-            // When added, they would route to repository owner, scan initiator, administrators, etc.
+            case NotificationType::AGENT_STARTED:
+            case NotificationType::AGENT_STOPPED:
+            case NotificationType::AGENT_FAILED:
+            case NotificationType::PERMISSION_REQUESTED:
+                // Admins and the initiator (e.g. developer who started agent)
+                $recipients = $recipients->merge(self::getScanInitiators($context));
+                $recipients = $recipients->merge(self::getUsersByRole(UserRole::ADMINISTRATOR->value));
+                break;
+
+            case NotificationType::HIGH_SEVERITY_FINDING:
+                $recipients = $recipients->merge(self::getScanInitiators($context));
+                $recipients = $recipients->merge(self::getRepositoryOwners($context));
+                // High severity should alert administrators
+                $recipients = $recipients->merge(self::getUsersByRole(UserRole::ADMINISTRATOR->value));
+                break;
         }
 
         // Deduplicate by ID and filter out inactive/disabled users.
