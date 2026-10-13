@@ -690,3 +690,29 @@ Owner decisions: canonical `trustnode_fresh`; `trustnode` kept read-only as arch
 - Rotation of the two credentials and any change to the `.env` observer.
 - Setting `AGENT_CONTINUOUS_SCAN=false` (documented in section 4b; not applied).
 - Any push. Deleting the two failed-job rows. Retiring `trustnode`.
+
+## Session log 10 — observer guard, credential inventory, recovery blocked on approval (2026-10-13)
+
+**Guard (fail-closed; code committed locally; not deployed):**
+- Switch: `observe_env.enabled` = `env('AGENT_OBSERVE_ENV_ENABLED', false) === true`. Only the word `true` enables it.
+- Three guard points: schedule closure (`routes/console.php`), enqueue chokepoint (`AgentScheduledTasks::enqueueAsLocalAdministrator`), handler (`AgentObserveEnvTaskHandler::handle()`, before the file is read).
+- Independent of `AGENT_CONTINUOUS_SCAN` (the observer never depended on it).
+- Report handler: Secret-category evidence stored as `[REDACTED: <rule id>]` regardless of sender.
+- Tests: `AgentObserveEnvGuardTest` (6), `SecretRedactionTest` new test (1). Focused set 74/74. Full suite: 750 tests, 2 errors, 7 deprecations, 3 skipped, 1 incomplete. The 2 errors are in ScanE2ETest (teams.slug UNIQUE collision during the full run). That file passes alone (3 tests). Whether the errors occur before this change is not verified.
+- Test-harness finding: PHPUnit converts a literal `true` env value to `1`, which the strict check rejects. The harness uses `(true)`. `AgentHealthApiTest` overrides the whole `agent` config and now sets the flag itself.
+
+**Corrections to earlier entries (verified this session with `git ls-files --eol` and byte counts):**
+- Repository line endings are **LF** (`attr/text=auto eol=lf`). My earlier "CRLF 212/212 preserved" claim for `compose.dev.yaml` came from a broken shell check. The commit `bb20d68` is LF throughout, and its 4+/4- diff is correct.
+- `.env` has **2 CRLF lines and 75 lines in total**, not "75 of 75 CRLF". The runbook's `sed` lesson (two CR bytes removed) matches this.
+
+**Scans 4–6 and credentials:**
+- Finding 1 evidence and `agent_tasks` payloads hold the masked shape of two values: `DB_PASSWORD` (line 28) and `TRUSTNODE_API_TOKEN` (line 75). Counts only: two occurrences in the `trustnode_fresh` dump, none in `trustnode`, none in the config `.env` copy, none in the log copies, none in the repo or `storage/`.
+- The config backup `.env` holds every `.env` value unmasked. Restrict access; do not rewrite it.
+- `DB_PASSWORD` in `.env` is overridden in containers by the committed `root` in `compose.dev.yaml`. Rotating `.env` alone changes no runtime value.
+
+**Stack recovery (blocked):**
+- Stack still stopped. Nothing started. The MySQL startup command and health check are in runbook section 6a, step 1 detail. Not run: starting is a live action, and the approval scope is not clear enough to run it without asking.
+- Crash recovery is expected (no `Shutdown complete` line before the kill on 2026-10-12).
+- Scans 2–3 recheck and any SQL: blocked until MySQL is healthy. The SQL was not run.
+
+**Not done (each needs approval):** starting the stack; the scans 2–3 UPDATE; the `findings:remediate-legacy-masks --apply` run; payload redaction in `agent_tasks`; credential rotation; enabling the observer; push; deleting failed-job rows; retiring `trustnode`.

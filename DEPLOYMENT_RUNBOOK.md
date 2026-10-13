@@ -261,7 +261,7 @@ about hourly and Compose restarts it. Eight restarts over about 9.9 h fits that 
 - *Credential exposure.* Finding 1's `evidence` stores a masked value that keeps the first 4 and last 4 characters. The same masked values appear in both `agent_tasks` payloads in the snapshot, and in both dumps under `C:\tn_backups`. `.env` was not read, and the full values were not seen. So partial values (8 characters each) of two credentials reached the database and backup files. **Treat both credentials as exposed and rotate them** (owner action). Full masking would keep no characters. The title and description contain no credential-shaped text (earlier regex check).
 - *Authorization.* No user requested these scans, and no approval record covers them. The observer is designed behaviour: it scans only the app's own `.env`, and no path-boundary error was logged for that target. Whether it should run at all is an owner decision. Preserve all three scans and their rows. Do not delete or rescan.
 - *Continuous project scan.* `AGENT_CONTINUOUS_SCAN` (default `true`; not set in the host `.env`) and `AGENT_SCAN_INTERVAL` (default 30) control only project scans (`enqueueProjectScans`). They do **not** control `agent.observe_env`. No project is registered (`codebase_projects` = 0), so nothing is enqueued today. Before any project is registered (section 7), the owner must decide whether to disable it. Proposed change, **not applied**: add `AGENT_CONTINUOUS_SCAN=false` to the host `.env` with a byte-exact edit that keeps CRLF, then restart `worker`, `scheduler` and `agent`. Verify with `printenv AGENT_CONTINUOUS_SCAN` in each. Rollback: remove the line (the default is `true`), then restart the same services.
-- *Observer decision.* Disabling `agent.observe_env` is a code change (remove the schedule in `routes/console.php`, or gate it on a config flag). It is not a configuration switch.
+- *Observer guard (2026-10-13).* Implemented and default off: `AGENT_OBSERVE_ENV_ENABLED` must be the word `true` to enable it. Section 4c has the details.
 - *Finding check.* A regex check over the title and description found no credential-shaped text. The masked evidence above is the exception. This is a regex check, not a full review.
 - *Still open:* the cause of scan 4; the 63 s scan 5 discrepancy; whether Redis still holds the `.env` hash (Redis is stopped, so it cannot be read now).
 
@@ -279,6 +279,57 @@ about hourly and Compose restarts it. Eight restarts over about 9.9 h fits that 
 not be applied` warnings in `storage/logs/laravel.log` (2026-10-12 20:37:50, 20:43:11, 20:47:28 UTC) came from my own host
 `artisan` checks, which were refused connections (`SQLSTATE[HY000] [2002]`), not from the worker. Read-only checks
 confirm that the `php`, `worker`, `scheduler` and `agent` containers read the `settings` table without error.
+
+## 4c. .env observer guard and credential remediation (2026-10-13)
+
+**Guard (code committed locally; nothing live changed).**
+- `config/agent.php` sets `observe_env.enabled` to `env('AGENT_OBSERVE_ENV_ENABLED', false) === true`. The observer is off unless the value is the word `true`. `1`, `yes`, `on` and any other value leave it off.
+- Three guard points, each checked before anything is read, enqueued or stored: the schedule closure in `routes/console.php` (every minute); `AgentScheduledTasks::enqueueAsLocalAdministrator` (the only enqueue path for `agent.observe_env`); and `AgentObserveEnvTaskHandler::handle()`, which refuses tasks already in the queue without reading the file.
+- The guard is independent of `AGENT_CONTINUOUS_SCAN`. Disabling continuous scanning never disabled the observer, and enabling the observer does not depend on it.
+- Redaction: `AgentReportFindingTaskHandler` replaces any Secret-category evidence with `[REDACTED: <rule id>]`, whatever the sender sends. `SecretScanner` already did this since `323b040` (2026-10-12 18:45 +05:30). The partial mask came from agent code that was still running before that commit.
+- Tests: `tests/Unit/AgentObserveEnvGuardTest.php` (6 tests: strict parse, the word `true` only, policy, continuous-scan independence, queued task refused without reading the file, enqueue refused) and `SecretRedactionTest::test_secret_category_evidence_from_an_agent_is_never_stored_as_text`. The focused set (8 files, 74 tests) passes. Full suite: 750 tests, 2 errors, 7 deprecations, 3 skipped, 1 incomplete. The 2 errors are in ScanE2ETest (teams.slug UNIQUE collision during the full run). That file passes alone (3 tests). Whether the errors occur before this change is not verified.
+- `phpunit.xml` sets the flag to `(true)` so the existing observer tests stay on. PHPUnit turns a literal `true` into `1`, which the strict check correctly rejects. `AgentHealthApiTest` replaces the whole `agent` config array, so its setUp now states the flag explicitly.
+- **Not deployed.** The containers are stopped. When the stack starts, the bind-mounted code applies at once, and the observer stays off unless `AGENT_OBSERVE_ENV_ENABLED=true` is set.
+- To re-enable later (owner decision): set `AGENT_OBSERVE_ENV_ENABLED=true` in `.env` (byte-exact edit), then restart `scheduler` and `agent`. To disable: remove the line.
+
+**Stored locations (names and counts only; no values recorded).**
+
+| Location | What it holds | Action | Approval |
+|---|---|---|---|
+| `findings` row 1 (live `trustnode_fresh`) | Masked evidence for two `.env` values (lines 28 and 75) | `php artisan findings:remediate-legacy-masks`: dry run, then `--apply`. The command matches only the legacy shape and has tests (`LegacyMaskRemediationTest`). | Yes |
+| `agent_tasks`, type `agent.report_finding` (live) | Masked evidence in `payload`. Two tasks in the 20:19 snapshot, plus the scan 5 and 6 tasks, which are not in it | Guarded payload update, one row per task ID, after a table dump. Or leave as history. | Yes |
+| `C:\tn_backups\20261013-014935\trustnode_fresh.sql` | Two masked-evidence occurrences (finding insert and task payloads) | Preserve. Do not rewrite. Restrict access. | Owner |
+| `C:\tn_backups\20261013-014935\trustnode.sql` | 0 occurrences | None | Not needed |
+| `C:\tn_backups\config-20261013-021259\.env` | A full copy of `.env`, every key and value, **unmasked** | Preserve. Restrict access (owner). Treat its values as exposed for rotation. | Owner |
+| `C:\tn_scratch\evidence-20261013\agent-logs\laravel.log`, `agent-stdout.log` | 0 occurrences of the masked shape. Contains log text | Preserve. Handle with care. | Not needed |
+| `C:\tn_backups\investigation-20261013\` | 0 occurrences | Preserve | Not needed |
+| Repository and host `storage/` (excluding `vendor`, `node_modules`, `.git`) | 0 files | None | Not needed |
+| `reports` table | 0 rows in the snapshot. The observer creates no reports | None | Not needed |
+| `trustnode-storage` volume logs | Not checked. Containers are stopped. Only the agent copy was checked | Count-only check after start | Not needed |
+| Redis (`agent_observe_env_hash_*`) | A SHA-256 of the file, not its text | None | Not needed |
+
+**Credential names and safe rotation (no values shown).**
+
+| Name | Where its value appears | Consumer | Notes |
+|---|---|---|---|
+| `DB_PASSWORD` (`.env` line 28) | `.env`; `findings` and `agent_tasks` evidence (masked); backups | Containers get `DB_PASSWORD: root` from the tracked `compose.dev.yaml`, which overrides `.env`. The host CLI cannot reach MySQL. | **Rotating the `.env` value changes nothing at runtime.** The effective database password is the committed `root`, and MySQL's root password is also `root` (`MYSQL_ROOT_PASSWORD`). That is a separate hardening item (secret injection, then a live `ALTER USER`, which needs approval). |
+| `TRUSTNODE_API_TOKEN` (`.env` line 75) | Same locations | Host CLI (`cli/src/Config/ConfigManager.php`) and MCP clients (`mcp/README.md`). It is a Sanctum personal access token. | Revoke the old token on the platform after the new one is in place. Then update the CLI and MCP configs. |
+| `APP_KEY`, `REDIS_PASSWORD`, `MAIL_PASSWORD`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | `.env` and the full `config` backup copy only. The scanner did not flag them, and they are not in findings or tasks | Containers and config | Rotation is the owner's decision. The config backup holds them in full, so treat them as exposed if that backup is. `APP_KEY` rotation breaks existing encrypted data unless a re-encryption plan exists. Do not rotate it casually. |
+
+**Rotation procedure (owner; the assistant does not rotate or edit `.env`):**
+1. Confirm consumers by name only (`grep -rn "<NAME>" app config cli/src mcp`). Done for the two flagged names.
+2. Create the new value at its source first (MySQL user, Sanctum token, AWS IAM key). Keep the old value valid.
+3. Stop the services that read the value, once the stack start is approved, so none still holds the old value.
+4. Edit `.env` byte by byte, with a match-count assertion. Never `sed -i`: the file has 2 CRLF lines and 75 lines in total, and `sed -i` removed the CR bytes once already (section 4).
+5. Start the services. Confirm the variable is read by name only, then run the health checks.
+6. Revoke the old value at its source. Leave the backups unchanged, and note that the values in them are revoked.
+7. Clear the stored masked evidence (table above), with approval.
+
+Revoke only after the new value works. Stop condition: any service fails to start with the new value.
+
+**Stack state.** The stack stays stopped. Starting it is a live action (section 6a).
+
+---
 
 ## 5. Migrations **[APPROVAL]**
 
@@ -345,11 +396,14 @@ the prior configuration restores them. Code rollback needs a new commit or branc
 | Evidence | Agent logs copied to `C:\tn_scratch\evidence-20261013\` (outside the repo; contains log text, so handle with care). Observer timeline and the scans 2–3 before-state are in `C:\tn_backups\investigation-20261013\`. |
 
 **Preconditions** (verify live in step 2; any failure stops the run):
+- **Guard present (verified locally 2026-10-13):** `AGENT_OBSERVE_ENV_ENABLED` is not set to `true` in `.env`, so the `.env` observer stays off (section 4c). Confirm with the flag check (name and value `true`/other only), not by printing `.env`.
 - `jobs` = 0 and `job_batches` = 0.
 - `agent_tasks` has no `pending` or `processing` row. A pending row is claimable by the agent after restart; review it before step 5.
 - `agent_states` for `trustnode-local-agent-1` is not `running`, or its heartbeat is older than `agent.heartbeat.timeout` (90 s).
 - Scans 2 and 3 are unchanged, or the approved SQL in `scans-2-3-proposal.sql` has been applied first.
 - C1 and C2 checksums still match.
+
+**Step 1 detail (mysql only; needs approval; not run).** Exact command: `docker compose -f compose.dev.yaml up -d mysql`. Health check: `docker inspect -f '{{.State.Health.Status}}' trustnode-mysql-1` returns `healthy` within 120 s. Log check: `docker logs trustnode-mysql-1 2>&1 | tail -50` shows InnoDB recovery and `ready for connections`, and no `[ERROR]` or `Assertion` line. Stop if the log shows unresolved corruption (for example `InnoDB: Database page corruption` or a failed recovery) or the container exits. Do not run migrations, change data, clear jobs or run the scans 2–3 SQL during recovery.
 
 **Command sequence (for approval; run from `C:\xampp\htdocs\trustnode`):**
 
@@ -421,7 +475,7 @@ the prior configuration restores them. Code rollback needs a new commit or branc
 | Finding 1 (legacy partial mask) | dry run matches 1 | `findings:remediate-legacy-masks --apply` after reviewing the dry run | Yes |
 | Scan 2 (running, created 2026-10-10, no org) | orphaned (no job) | Guarded `UPDATE` to `failed` after a table backup, or leave. Procedure in section 4b; SQL with the STEP 0 recheck and rollback in `C:\tn_backups\investigation-20261013\scans-2-3-proposal.sql`. | Yes; owner chooses |
 | Scan 3 (queued, created 2026-10-10, no org) | never started | Guarded `UPDATE` to `cancelled`, or leave. Section 4b. | Yes; owner chooses |
-| Scans 4, 5, 6 (`.env` observer, not uploads; section 4b) | completed | Not user-requested. Rotate the two credentials exposed in finding 1 (owner). Decide whether the `.env` observer should run (code change). No deletion. | Owner decision and rotation |
+| Scans 4, 5, 6 (`.env` observer, not uploads; section 4b) | completed | Not user-requested. The observer is now off by default (section 4c). Rotate the two credentials (owner). Clear the masked evidence after rotation (section 4c). No deletion. | Owner decision and rotation |
 | Organization ownership backfill | audit clean on `trustnode_fresh` | Run `trustnode:backfill-organization-ownership` **without `--force`**, and answer the prompt interactively | Yes |
 
 **Rollback checkpoint C6:** the C1 dumps, taken before any of these.
@@ -508,7 +562,8 @@ being approved.
 9. **Retire the non-canonical database**: only after the data review; irreversible.
 10. **Push** of local commits, and review of `76bb8da` and `5b100f1`. Publishes history.
 11. **Scans 2 and 3 status update** (section 4b; SQL in `C:\tn_backups\investigation-20261013\scans-2-3-proposal.sql`): the recheck needs the mysql service running. **Not approved.**
-12. **Credential rotation and observer decision** (section 4b, scans 4–6): rotation of the two `.env` credentials is an owner action. Whether `agent.observe_env` should run is an owner decision (code change). **Not approved.**
-13. **Continuous project scan setting** (section 4b): proposed `AGENT_CONTINUOUS_SCAN=false`, documented, **not applied**. Decide before any project registration (group 6).
+12. **Credential rotation** (section 4c): rotating `DB_PASSWORD` and `TRUSTNODE_API_TOKEN` is an owner action. The assistant does not rotate or edit `.env`. **Not approved.**
+13. **Continuous project scan setting** (section 4b): proposed `AGENT_CONTINUOUS_SCAN=false`, documented, **not applied**. Decide before any project registration (group 6). It does not control the `.env` observer.
+14. **Observer enablement** (section 4c): the guard is implemented and default off. Turning it on is an owner decision, and recovery does not need it. **Not approved.**
 
 Phase 6 and Phase 9 live checks follow from groups 5–7 and need no separate approval once those are granted.
