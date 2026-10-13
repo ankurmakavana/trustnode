@@ -33,7 +33,7 @@ services:
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_DATABASE: trustnode_fresh
+      DB_DATABASE: ${DB_DATABASE:-trustnode_fresh}
       DB_USERNAME: root
       DB_PASSWORD: root
       REDIS_HOST: redis
@@ -117,7 +117,7 @@ services:
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_DATABASE: trustnode_fresh
+      DB_DATABASE: ${DB_DATABASE:-trustnode_fresh}
       DB_USERNAME: root
       DB_PASSWORD: root
       REDIS_HOST: redis
@@ -147,7 +147,7 @@ services:
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_DATABASE: trustnode_fresh
+      DB_DATABASE: ${DB_DATABASE:-trustnode_fresh}
       DB_USERNAME: root
       DB_PASSWORD: root
       REDIS_HOST: redis
@@ -178,7 +178,7 @@ services:
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_DATABASE: trustnode_fresh
+      DB_DATABASE: ${DB_DATABASE:-trustnode_fresh}
       DB_USERNAME: root
       DB_PASSWORD: root
       REDIS_HOST: redis
