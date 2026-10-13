@@ -730,3 +730,60 @@ Owner decisions: canonical `trustnode_fresh`; `trustnode` kept read-only as arch
 - **Caveat:** a regex query for the strict masked shape returned blank because of shell escaping. It is not used here.
 - **Observer:** still off (`AGENT_OBSERVE_ENV_ENABLED` not set to `true`). The agent, scheduler and worker are not running, so nothing reads `.env`.
 - **Not done:** scans 2–3 UPDATE; `findings:remediate-legacy-masks --apply`; payload redaction; credential rotation; enabling the observer; stack services other than MySQL; any push.
+
+## Session log 12 — runtime state and first live acceptance pass (2026-10-13, 06:14 UTC)
+
+**Runtime state (verified):**
+- All eight containers are running. I did not start the services 05:51–05:52 UTC; the source of that start is unknown and was not investigated.
+- Healthy: `mysql`, `php`, `redis`. Recreated by me: `php` (06:0x), `worker` (after an image rebuild), `scheduler`, `agent`. No restarts recorded.
+- Web UI: `http://127.0.0.1:8000/` returns 200. `/api/setup/status` returns `setup_required: false`.
+- MySQL: XA crash recovery completed cleanly at 05:34 UTC (no errors).
+
+**Changes made in this session (committed locally, none pushed):**
+- `ef9c947` `compose.dev.yaml`: `SCAN_HOST_DIR: /mnt/trustnode-scan` for php, worker, scheduler, agent. Root cause: `.env` holds the Windows host path, so inside containers the continuous scan logged "Scan mount directory not found" and enqueued nothing.
+- Worker image rebuilt from `docker/php/Dockerfile`: the existing image (2026-09-29) predated the GD line, so PDF generation failed with "The PHP GD extension is required".
+
+**Credentials: NOT rotated (blocked).**
+- The permission layer denied the write step (MySQL root change + `.env` write + compose change). The denial was not bypassed.
+- Verified without displaying values: MySQL accepts the container's current root credential (authentication succeeds).
+- `personal_access_tokens` in `trustnode_fresh` and `trustnode` is empty, so the `TRUSTNODE_API_TOKEN` in `.env` matches no record.
+- Pre-rotation backup: `C:\tn_backups\rotation-20261013-054221\trustnode_fresh.sql` (SHA-256 verified).
+- Until rotation is done, the stack runs with the exposed database credential, and the exposed token remains in `.env`.
+
+**Observer:** `AGENT_OBSERVE_ENV_ENABLED` is absent from `.env`, so the guard is off. No `.env` scan since 2026-10-12 20:48:31 (scans 4–6 only).
+
+**Acceptance results (live):**
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| UI loads | PASS | HTTP 200 on `127.0.0.1:8000` |
+| First-admin authentication | NOT VERIFIED | Admin exists (`setup_required: false`). Password login needs the owner's password. |
+| Setup idempotency | PASS (unit/feature) | `SetupTest` 10 tests; live `setup_required` false after restarts |
+| Agent connected and stays connected | PASS (connection), reconnect partial | State `running`; heartbeat advanced 06:06:00 → 06:06:30. Start after recreate waited about 5 minutes before ownership (longer than the 120 s design deadline; not explained) |
+| Approved project registered | PASS (synthetic fixture) | Project id 1, path `tn-acceptance-fixture`, under the scan mount. Created by me; not an owner-named project |
+| Continuous scan runs | PASS, triggered by `schedule:test` | Task `agent.capability.execute` completed; scan 7 completed at 100% (06:07:03). The natural */30 cron has not been observed |
+| Findings persisted | PASS | Finding 2 (scan 7), severity high, placeholder evidence |
+| Findings visible in UI | NOT VERIFIED | Needs login |
+| No duplicate findings | PASS | Second scan (8, 06:13:32) added no row. Finding 2 moved to scan 8 (last observer) |
+| Notification routing | PASS | `HighSeverityFindingNotification` to user 1 at 06:07:04, unread |
+| Approval enforcement (server side) | PASS | `agent:restricted_action`: denied → pending approval id 1 → approved → allowed. Approval expires after 5 minutes |
+| PDF report | PASS | Report 2, completed; file `storage/app/private/reports/2/…pdf`; PDF header; 4 pages; fixture secret absent from content |
+| Masked-secret remediation | NOT DONE (by design) | Finding 1 still has the legacy masked value; two `agent_tasks` payloads still contain it. Clearing needs approval |
+
+**Blockers remaining:**
+1. Credential rotation (needs the owner's manual action or a permitted write; procedure below).
+2. First-admin login and UI check of findings and approvals (needs the owner's password).
+3. Legacy masked evidence in finding 1 and two task payloads (needs approval).
+4. Unexplained ~5-minute lease wait after recreate.
+
+**Manual rotation procedure (owner shell, Git Bash in the repo; do not paste values into chat):**
+1. `NEWPW=$(openssl rand -hex 24)`
+2. `docker compose -f compose.dev.yaml exec -T -e NEWPW="$NEWPW" mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -e "ALTER USER \"root\"@\"%\" IDENTIFIED BY \"$NEWPW\"; ALTER USER \"root\"@\"localhost\" IDENTIFIED BY \"$NEWPW\"; FLUSH PRIVILEGES;"'`
+3. Verify: `docker compose -f compose.dev.yaml exec -T -e NEWPW="$NEWPW" mysql sh -c 'MYSQL_PWD="$NEWPW" mysql -uroot -N -e "SELECT 1"'` prints `1`.
+4. Replace only the `DB_PASSWORD=` line in `.env` with the new value (keep the two CRLF lines as they are; use byte-level replacement, never `sed -i`).
+5. In `compose.dev.yaml`, replace the four `DB_PASSWORD: root` lines with `DB_PASSWORD: ${DB_PASSWORD}` and `MYSQL_ROOT_PASSWORD: root` with `MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}`. Commit locally.
+6. Recreate one at a time, checking health: `up -d --no-deps --force-recreate mysql`, then `php`, `worker`, `scheduler`, `agent`.
+7. Token: `docker compose -f compose.dev.yaml exec -T php php artisan tinker --execute='echo \App\Models\User::find(1)->createToken("trustnode-mcp", ["scans:read","findings:read","reports:read","notifications:read"])->plainTextToken;' > "$TMPDIR/tn-token.txt"`; put the value into the `TRUSTNODE_API_TOKEN=` line of `.env`; delete the temp file. Check with `curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $(cat "$TMPDIR/tn-token.txt")" http://127.0.0.1:8000/api/scans` (expect 200) before deleting the file.
+8. Keep the pre-rotation backup in `C:\tn_backups\rotation-20261013-054221\`.
+
+**Not done:** nothing pushed; no live findings or task payloads changed; scans 2–3 untouched; `failed_jobs` (2) preserved; no migrations.
