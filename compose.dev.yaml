@@ -34,6 +34,7 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       DB_DATABASE: ${DB_DATABASE:-trustnode_fresh}
+      SCAN_HOST_DIR: /mnt/trustnode-scan
       DB_USERNAME: root
       DB_PASSWORD: root
       REDIS_HOST: redis
@@ -118,6 +119,7 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       DB_DATABASE: ${DB_DATABASE:-trustnode_fresh}
+      SCAN_HOST_DIR: /mnt/trustnode-scan
       DB_USERNAME: root
       DB_PASSWORD: root
       REDIS_HOST: redis
@@ -148,6 +150,7 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       DB_DATABASE: ${DB_DATABASE:-trustnode_fresh}
+      SCAN_HOST_DIR: /mnt/trustnode-scan
       DB_USERNAME: root
       DB_PASSWORD: root
       REDIS_HOST: redis
@@ -179,6 +182,7 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       DB_DATABASE: ${DB_DATABASE:-trustnode_fresh}
+      SCAN_HOST_DIR: /mnt/trustnode-scan
       DB_USERNAME: root
       DB_PASSWORD: root
       REDIS_HOST: redis
