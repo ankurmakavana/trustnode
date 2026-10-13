@@ -9,11 +9,9 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Periodic agent heartbeat — uses configured heartbeat interval
-Schedule::call(function () {
-    $agent = app(AgentService::class);
-    $agent->heartbeat();
-})->everyThirtySeconds()->name('agent.heartbeat');
+// No scheduled heartbeat. The agent process is the only heartbeat owner: AgentRunCommand heartbeats from its
+// own loop. A heartbeat from the scheduler process is a second writer that does not hold the lease. It logged
+// "Agent instance usurped" once a minute and kept a dead agent looking online.
 
 // Periodic agent security observation
 Schedule::call(function () {

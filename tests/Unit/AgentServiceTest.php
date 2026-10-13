@@ -544,58 +544,46 @@ class AgentServiceTest extends TestCase
 
     // Heartbeat tests — periodic mechanism
 
-    public function test_periodic_heartbeat_schedule_exists()
+    // The scheduler must not write heartbeats. Only the agent process owns the lease and heartbeats it.
+    public function test_scheduler_does_not_schedule_a_heartbeat()
     {
         $schedule = app(\Illuminate\Console\Scheduling\Schedule::class);
-        $events = $schedule->events();
 
-        $heartbeatEvent = null;
-        foreach ($events as $event) {
-            if ($event->description === 'agent.heartbeat') {
-                $heartbeatEvent = $event;
-                break;
-            }
+        foreach ($schedule->events() as $event) {
+            $this->assertNotSame('agent.heartbeat', $event->description, 'The scheduler must not heartbeat the agent lease.');
         }
-
-        $this->assertNotNull($heartbeatEvent, 'Agent heartbeat schedule event not found');
     }
 
-    public function test_periodic_heartbeat_schedule_invokes_heartbeat()
+    public function test_heartbeat_from_a_non_owner_process_does_not_refresh_the_lease()
     {
         // Use fixed agent ID so callback instance loads same state
         config(['agent.id' => 'test-agent-heartbeat']);
 
-        // Use container singleton for consistent state
-        $agent = $this->app->make(AgentService::class);
-        $agent->setState('stopped');
-        $agent->setState('starting');
-        $agent->setState('running');
+        $owner = $this->app->make(AgentService::class);
+        $owner->setState('stopped');
+        $owner->setState('starting');
+        $owner->setState('running');
+        $owner->heartbeat();
+        $ownerCache = Cache::get('trustnode_agent_heartbeat_' . $owner->getAgentId());
+        $this->assertNotNull($ownerCache);
 
-        // Ensure agent is in running state and heartbeat has been set
-        $agent->heartbeat();
-        $beforeCache = Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId());
+        // Another runtime now holds the lease. This process must not refresh its heartbeat.
+        $stateKey = 'trustnode_agent_state_' . $owner->getAgentId();
+        $state = Cache::get($stateKey);
+        $state['instance_id'] = 'other-runtime-instance';
+        Cache::forever($stateKey, $state);
 
-        // Advance time for distinct timestamp
-        \Illuminate\Support\Carbon::setTestNow(now()->addSecond());
+        \Illuminate\Support\Carbon::setTestNow(now()->addSeconds(5));
+        $owner->heartbeat();
 
-        // Run the heartbeat schedule event
-        $schedule = app(\Illuminate\Console\Scheduling\Schedule::class);
-        $ran = false;
-        foreach ($schedule->events() as $event) {
-            if ($event->description === 'agent.heartbeat') {
-                $event->run($this->app);
-                $ran = true;
-                break;
-            }
-        }
-
-        $this->assertTrue($ran, 'Heartbeat schedule event did not run');
-
-        // The schedule callback should have updated the cache
-        $afterCache = Cache::get('trustnode_agent_heartbeat_' . $agent->getAgentId());
-        $this->assertNotNull($afterCache, 'Heartbeat cache was not updated by schedule');
-        $this->assertNotEquals($beforeCache, $afterCache, 'Heartbeat cache should change after schedule run');
+        $this->assertSame(
+            $ownerCache,
+            Cache::get('trustnode_agent_heartbeat_' . $owner->getAgentId()),
+            'A non-owner heartbeat must not refresh the lease.'
+        );
+        $this->assertSame('other-runtime-instance', Cache::get($stateKey)['instance_id'], 'The lease owner must not change.');
     }
+
     // TASK 8 — Stale heartbeat detection and health status evaluation
 
     /**
