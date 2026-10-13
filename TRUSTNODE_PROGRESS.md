@@ -835,3 +835,82 @@ Owner decisions: canonical `trustnode_fresh`; `trustnode` kept read-only as arch
 **Real project acceptance (blocked on the owner's path):** no project beyond the synthetic fixture (`tn-acceptance-fixture`, project id 1) has been registered. The fixture stays registered with continuous scanning on, so it scans every 30 minutes. Recommended: disable it (`status`/`continuous_scan_enabled`) before real registration. Not done: this is a live write, and it needs your go-ahead.
 
 **Timed run confirmed:** scan 9 (`Project Scan: Acceptance fixture (synthetic)`) was created at 06:30:04 UTC by the `*/30` cron, with no manual trigger. Earlier timed run: 06:00:02 UTC (pre-fix).
+
+## Session log 14 — heartbeat fix, reviewed procedures, UI checklist (2026-10-13)
+
+**Status: production readiness NOT claimed.** Blockers are listed at the end.
+
+### Completed (verified locally)
+
+- **Scheduler heartbeat fix.** Commit `0bbbadc`. The scheduler's `agent.heartbeat` closure was removed from `routes/console.php`. The agent's own loop (`AgentRunCommand`) remains the only heartbeat source.
+  - Evidence for the defect: the php/scheduler log shows `Agent instance usurped by another runtime. Stopping heartbeat.` about once a minute from 05:53 to at least 06:19 UTC, with `Refusing to persist state` each time.
+  - Tests: `AgentServiceTest::test_scheduler_does_not_schedule_a_heartbeat` (fails on the old code) and `test_heartbeat_from_a_non_owner_process_does_not_refresh_the_lease` (guards the usurp path). The two replaced tests asserted the removed closure as the design.
+  - Result: `phpunit` on `AgentServiceTest`, `AgentServiceTakeoverTest`, `AgentStartRetryTest`, `AgentServiceBootstrapTest`, `AgentHealthApiTest`, `AgentGracefulShutdownTest`, `AgentOrchestrationTest`, `AgentScheduledTasksTest`, `AgentObserveEnvGuardTest`: **137 tests, 361 assertions, OK**.
+  - Not verified live. The fix needs a recreate of `scheduler` (and of `agent` for the same code). Neither was done, as instructed.
+
+- **Remediation backup (no live row changed).** `C:\tn_backups\remediation-20261013-065125\findings-agent_tasks.sql`, SHA-256 verified. Contains `findings`, `agent_tasks`, `agent_activity_logs` and `finding_activity_logs`. Both affected task IDs and finding 1 are present (one occurrence each).
+
+### Credential rotation (session 12 steps 1–8): nothing performed by the assistant
+
+- Steps that write a secret (MySQL root change, `.env` `DB_PASSWORD` and `TRUSTNODE_API_TOKEN`, compose literal replacement, token creation) need the owner's shell. The permission layer denied these writes in an earlier session, and they were not attempted again.
+- Steps the assistant can verify once the owner has rotated: MySQL login with the new value returns `1`; the token gets HTTP 200 on a read-only endpoint; all services show healthy. Nothing is claimed until those checks pass.
+- Current state: the database root credential and `TRUSTNODE_API_TOKEN` are **unchanged**. The token has no matching `personal_access_tokens` row in either database.
+
+### UI acceptance checklist (for the administrator, run locally; no password handled by the assistant)
+
+URL: `http://127.0.0.1:8000/`
+
+1. Login page loads. Sign in with the administrator account. Do not paste the password into chat.
+2. Findings list shows two Secret findings: finding 1 (masked value still present until remediation) and the fixture finding (placeholder).
+3. Notifications: one unread high-severity finding notification.
+4. Reports: the scan 7 report (or a newer one) downloads as a PDF. Expect a few pages and no secret text.
+5. Approvals: no pending items; approval id 1 is approved and expired.
+6. Record pass or fail for each item, with the time and the page visited. Do not record any secret value.
+
+### Proposed, NOT executed: disable the synthetic fixture's recurring scans
+
+- Current row (read-only): `codebase_projects` id 1, `status=active`, `continuous_scan_enabled=1`, `organization_id=1`, `path=tn-acceptance-fixture`, `updated_at=2026-10-13 05:57:59`.
+- Reversible change (only the recurring flag; the project and its scans stay): see `UPDATE` below. Expect 1 row changed.
+- Pre-check: `SELECT id,status,continuous_scan_enabled,path FROM codebase_projects WHERE id=1;`
+- Change: `UPDATE codebase_projects SET continuous_scan_enabled=0, updated_at=NOW() WHERE id=1 AND path='tn-acceptance-fixture' AND continuous_scan_enabled=1;`
+- Post-check: the `*/30` cron then skips the project; `SELECT MAX(created_at) FROM scans WHERE name LIKE 'Project Scan:%';` stays fixed past the next 30-minute boundary.
+- Rollback: `UPDATE codebase_projects SET continuous_scan_enabled=1, updated_at=NOW() WHERE id=1 AND path='tn-acceptance-fixture' AND continuous_scan_enabled=0;`
+- Alternative, rejected: `status=archived` also stops scans but changes project visibility; the flag is the smaller change.
+
+### Proposed, NOT executed: masked-value remediation (reviewed)
+
+Backup (done): `C:\tn_backups\remediation-20261013-065125\findings-agent_tasks.sql` (SHA-256 verified).
+
+Preconditions (read-only, must hold immediately before the change):
+- Dry run `php artisan findings:remediate-legacy-masks` reports exactly 1 finding (finding 1).
+- `SELECT id FROM agent_tasks WHERE type='agent.report_finding' AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.finding.evidence')) LIKE '%********%';` returns exactly `a2f6bec5-cdf4-4a23-9ea0-c6ae7d73da80` and `a2f6bec6-0aee-4da2-aec9-8abc0a9b9c4e`.
+- Finding 1 `category` is `Secret` and its `evidence` matches the 4+26+4 shape (the command's own check).
+- The backup checksum still verifies.
+
+Steps:
+1. Finding 1: `docker compose -f compose.dev.yaml exec -T php php artisan findings:remediate-legacy-masks --apply`. Expect `Applied to 1 finding(s).` The command writes a `legacy_evidence_redacted` activity-log row.
+2. Tasks, in one transaction; expect 2 rows changed:
+   `UPDATE agent_tasks SET payload = JSON_SET(payload, '$.finding.evidence', '[REDACTED: SEC-SECRET-GENERIC]') WHERE type='agent.report_finding' AND id IN ('a2f6bec5-cdf4-4a23-9ea0-c6ae7d73da80','a2f6bec6-0aee-4da2-aec9-8abc0a9b9c4e') AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.finding.evidence')) LIKE '%********%';`
+
+Post-checks (counts only):
+- `SELECT COUNT(*) FROM findings WHERE evidence LIKE '%********%';` → 0.
+- `SELECT COUNT(*) FROM agent_tasks WHERE payload LIKE '%********%';` → 0.
+- `SELECT COUNT(*) FROM agent_tasks WHERE type='agent.report_finding';` → 8 (unchanged).
+
+Rollback: restore the three affected rows from the step-0 dump (finding 1 and the two task IDs) using `REPLACE INTO` from the dump rows selected by ID. Do not use `DELETE`, and do not change the schema. Backups under `C:\tn_backups` keep the masked values; they are preserved and access should be restricted.
+
+### Remaining blockers (exact)
+
+1. Credential rotation: owner action in the owner's shell (session 12 steps 1–8). Assistant write access is denied.
+2. UI acceptance: administrator run of the checklist above.
+3. Real project: the owner's authorized project path is still not supplied. The synthetic fixture is not the owner's project.
+4. Scheduler fix: needs `scheduler` and `agent` recreated and verified live. Approval needed.
+5. Masked remediation: needs owner approval for the live change above.
+6. Fixture recurring scans: need owner approval to disable (procedure above).
+
+### Verification commands
+
+- Tests: `C:\xampp\php\php.exe vendor\bin\phpunit tests/Unit/AgentServiceTest.php tests/Unit/AgentServiceTakeoverTest.php tests/Unit/AgentStartRetryTest.php tests/Unit/AgentServiceBootstrapTest.php tests/Feature/AgentHealthApiTest.php tests/Feature/AgentGracefulShutdownTest.php tests/Feature/AgentOrchestrationTest.php tests/Feature/AgentScheduledTasksTest.php tests/Unit/AgentObserveEnvGuardTest.php` (137 tests, OK).
+- Backup check: `cd /c/tn_backups/remediation-20261013-065125 && sha256sum -c SHA256SUMS.txt`.
+- Heartbeat after recreate: `docker logs --since 5m trustnode-scheduler-1 2>&1 | grep -c "usurped"` → expect 0 (checked from the php container log: `docker compose -f compose.dev.yaml exec -T php sh -c 'grep -c usurped storage/logs/laravel.log'` for the window).
+- Schedule: `docker compose -f compose.dev.yaml exec -T php php artisan schedule:list` → no `agent.heartbeat` line.
