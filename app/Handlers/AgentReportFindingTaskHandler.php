@@ -64,6 +64,12 @@ class AgentReportFindingTaskHandler implements AgentTaskHandlerInterface
             $evidence = mb_substr($evidence, 0, 2000) . '... [truncated]';
         }
 
+        // Secret-category evidence is never stored as text, whatever the sender. Older agent builds kept the
+        // first and last characters of a credential, so the whole value is replaced here.
+        if (strcasecmp((string) ($normalized->category ?? $payload['category'] ?? ''), 'Secret') === 0) {
+            $evidence = '[REDACTED: ' . ($findingData['scannerRuleId'] ?? 'secret') . ']';
+        }
+
         $scanId = $payload['scan_id'] ?? $task['scan_id'] ?? null;
         $agentId = $payload['agent_id'] ?? $task['agent_id'] ?? null;
 

@@ -214,6 +214,39 @@ class SecretRedactionTest extends TestCase
         }
     }
 
+    public function test_secret_category_evidence_from_an_agent_is_never_stored_as_text()
+    {
+        // Older agent builds sent the first and last four characters of a credential. The stored value must
+        // not contain any part of it, whatever the sender sends.
+        $partialMask = substr(self::FAKE_PASSWORD, 0, 4) . str_repeat('*', 26) . substr(self::FAKE_PASSWORD, -4);
+
+        app(AgentReportFindingTaskHandler::class)->handle([
+            'id' => 'task-secret-evidence-1',
+            'agent_id' => 'agent-env',
+            'payload' => [
+                'agent_id' => 'agent-env',
+                'created_by' => $this->admin->id,
+                'finding' => [
+                    'title' => 'Exposed Private Token or Secret',
+                    'severity' => 'high',
+                    'category' => 'Secret',
+                    'scanner' => 'RepositoryScanner',
+                    'scannerRuleId' => 'SEC-SECRET-GENERIC',
+                    'evidence' => $partialMask,
+                    'description' => 'An API token, private key, or password was found hardcoded in the source code.',
+                    'technicalDetails' => 'Vulnerability found in .env on line 28.',
+                    'remediation' => 'Move hardcoded credentials to configuration environment variables.',
+                ],
+            ],
+        ]);
+
+        $stored = (string) DB::table('findings')->where('title', 'Exposed Private Token or Secret')->value('evidence');
+
+        $this->assertSame('[REDACTED: SEC-SECRET-GENERIC]', $stored);
+        $this->assertStringNotContainsString(substr(self::FAKE_PASSWORD, 0, 4), $stored);
+        $this->assertStringNotContainsString(substr(self::FAKE_PASSWORD, -4), $stored);
+    }
+
     public function test_api_response_redacts_token_shapes_in_non_secret_category_findings()
     {
         $scan = \App\Models\Scan::create([

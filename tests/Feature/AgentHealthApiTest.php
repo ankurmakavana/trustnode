@@ -34,7 +34,11 @@ class AgentHealthApiTest extends TestCase
                 ],
                 'heartbeat' => [
                     'timeout' => 60
-                ]
+                ],
+                // This setUp replaces the whole agent array, so the observer flag must be stated here.
+                'observe_env' => [
+                    'enabled' => true,
+                ],
             ]
         ]);
 

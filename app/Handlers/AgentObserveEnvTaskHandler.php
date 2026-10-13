@@ -4,6 +4,7 @@ namespace App\Handlers;
 
 use App\Contracts\AgentTaskHandlerInterface;
 use App\Contracts\AgentQueueInterface;
+use App\Services\AgentObserveEnvPolicy;
 use App\Services\AgentService;
 use App\Services\Scan\Scanners\SecretScanner;
 use Illuminate\Support\Facades\Cache;
@@ -29,6 +30,13 @@ class AgentObserveEnvTaskHandler implements AgentTaskHandlerInterface
 
     public function handle(array $task): void
     {
+        // Fail-closed: a queued observe task is refused, and the file is not read, unless the observer is enabled.
+        if (! AgentObserveEnvPolicy::enabled()) {
+            Log::info('AgentObserveEnvTaskHandler: observer disabled by configuration; task skipped.');
+
+            return;
+        }
+
         $payloadTarget = $task['payload']['target'] ?? null;
         if ($payloadTarget !== null && !is_string($payloadTarget)) {
             Log::warning("AgentObserveEnvTaskHandler: Malformed target payload.");

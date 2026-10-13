@@ -161,6 +161,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | .env Observer (agent.observe_env)
+    |--------------------------------------------------------------------------
+    |
+    | Hashes the project .env on a schedule. When the file changes, it creates a scan record and
+    | reports the secrets it contains. Fail-closed: it runs only when AGENT_OBSERVE_ENV_ENABLED is
+    | exactly the word true (any other value, including 1 or yes, leaves it off).
+    | This is independent of continuous_scan. Disabling continuous scanning does NOT stop it.
+    |
+    */
+    'observe_env' => [
+        'enabled' => env('AGENT_OBSERVE_ENV_ENABLED', false) === true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Continuous Scanning
     |--------------------------------------------------------------------------
     |

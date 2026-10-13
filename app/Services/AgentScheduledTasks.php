@@ -46,6 +46,10 @@ class AgentScheduledTasks
 
     public function enqueueAsLocalAdministrator(string $agentId, string $type, array $payload): ?string
     {
+        if ($type === 'agent.observe_env' && ! AgentObserveEnvPolicy::enabled()) {
+            return null;
+        }
+
         $ownerId = $this->localAdministratorId();
 
         if ($ownerId === null) {

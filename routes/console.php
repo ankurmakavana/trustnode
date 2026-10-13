@@ -17,6 +17,11 @@ Schedule::call(function () {
 
 // Periodic agent security observation
 Schedule::call(function () {
+    // Fail-closed: the .env observer is off unless agent.observe_env.enabled is true.
+    if (! \App\Services\AgentObserveEnvPolicy::enabled()) {
+        return;
+    }
+
     $activeAgent = \Illuminate\Support\Facades\DB::table('agent_states')
         ->where('state->state', 'running')
         ->first();
