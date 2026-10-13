@@ -716,3 +716,17 @@ Owner decisions: canonical `trustnode_fresh`; `trustnode` kept read-only as arch
 - Scans 2–3 recheck and any SQL: blocked until MySQL is healthy. The SQL was not run.
 
 **Not done (each needs approval):** starting the stack; the scans 2–3 UPDATE; the `findings:remediate-legacy-masks --apply` run; payload redaction in `agent_tasks`; credential rotation; enabling the observer; push; deleting failed-job rows; retiring `trustnode`.
+
+## Session log 11 — MySQL started (approved), read-only checks (2026-10-13)
+
+- **Approval:** the user replied "1" to the question listing "approve starting MySQL". Only `mysql` was started, with `docker compose -f compose.dev.yaml up -d mysql`. No other service was started.
+- **Health:** `healthy`. Startup ran XA crash recovery, which finished cleanly. No `[ERROR]`, corruption or assertion lines. Recovery is now verified, not expected.
+- **Scans 2 and 3 (live, read-only):** scan 2 `running`, progress 65, `updated_at` = `created_at` (2026-10-10 17:07:17). Scan 3 `queued`, progress 0, `started_at` NULL. Both match the proposal's guards. The proposal SQL was **not** run.
+- **Jobs:** `jobs` 0, `job_batches` 0, `failed_jobs` 2 (preserved, not cleared).
+- **agent_tasks:** 562 completed, 44 failed, 0 pending, 0 processing.
+- **Scans 4–6:** `Agent Security Observation: .env`, all completed, created 2026-10-12 12:01:02, 20:45:35 and 20:48:31 UTC (scan 5's `created_at` confirms the 20:45:35 value from the runbook).
+- **Finding 1:** `scan_id` 6, updated 20:48:48. Six `agent.report_finding` tasks exist: two for scan 4, two for scan 5, two for scan 6. All completed.
+- **Masked evidence (counts only):** one finding row has an 8+ asterisk run in `evidence`. Two `agent_tasks` payloads contain such a run. The other four `report_finding` payloads do not match that pattern. Their contents were not inspected further, so their state is unverified.
+- **Caveat:** a regex query for the strict masked shape returned blank because of shell escaping. It is not used here.
+- **Observer:** still off (`AGENT_OBSERVE_ENV_ENABLED` not set to `true`). The agent, scheduler and worker are not running, so nothing reads `.env`.
+- **Not done:** scans 2–3 UPDATE; `findings:remediate-legacy-masks --apply`; payload redaction; credential rotation; enabling the observer; stack services other than MySQL; any push.
