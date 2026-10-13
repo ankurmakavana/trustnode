@@ -787,3 +787,49 @@ Owner decisions: canonical `trustnode_fresh`; `trustnode` kept read-only as arch
 8. Keep the pre-rotation backup in `C:\tn_backups\rotation-20261013-054221\`.
 
 **Not done:** nothing pushed; no live findings or task payloads changed; scans 2–3 untouched; `failed_jobs` (2) preserved; no migrations.
+
+## Session log 13 — acceptance gaps: reconnect, scheduler, remediation plan (2026-10-13)
+
+**Reconnect timing (corrected; verified from the php container log):**
+- The earlier "about five minutes" was a misreading. My reading of the state row was taken before the new owner had written it.
+- Old owner's last heartbeat: 06:00:56 UTC (agent recreate at about 06:00). Ownership acquired by the new agent: **06:02:30 UTC**. Gap: **94 s**. This equals the 90 s lease timeout plus the 5 s retry step, so it matches the design.
+- Mechanism: `AgentService::start()` refuses while `isHeartbeatStale()` is false. Staleness reads the heartbeat cache key (TTL = `heartbeat.timeout`, 90 s). `AgentStartRetry::attempt()` retries every 5 s and gives up after 120 s. Ownership is taken by CAS on the `agent_states` row. The lease semantics were not changed.
+
+**Defect found: scheduler heartbeat usurpation (not a blocker for acceptance; must be fixed before production):**
+- `routes/console.php` runs `AgentService::heartbeat()` every 30 s **in the scheduler process**. That process has its own instance id, so each call sees the agent's instance id in the state and logs `Agent instance usurped by another runtime. Stopping heartbeat.` plus `Refusing to persist state`. Log evidence: about 1 per minute from 05:53 UTC to at least 06:19 UTC.
+- The refused write does not change the database row. The `agent.heartbeat` in the scheduler still touches the in-memory state and skips the cache refresh. The agent process refreshes its own heartbeat, so the lease is not affected.
+- Proposed fix (not applied): remove the scheduler's `agent.heartbeat` closure, since the agent process already heartbeats in its loop. Add a test that the scheduler does not call `heartbeat()`. Owner approval needed before code changes.
+
+**Continuous scan timing (verified):**
+- `routes/console.php`: `cron("*/30 * * * *")`, gated on `agent.continuous_scan.enabled` (default true). `schedule:list` at 06:21:02 UTC: next due in 8 minutes (06:30).
+- A timed run at **06:00:02 UTC** appears in the php log (`agent.continuous_scan: Scan mount directory not found`). This was before the `SCAN_HOST_DIR` fix and before any manual trigger. Manual triggers were at about 05:58, 06:07 and 06:13 UTC.
+- The 06:30 cron result is checked in the next entry.
+
+**Stored masked evidence (counts only; classified from live rows):**
+- `agent_tasks` `agent.report_finding`: 8 rows. 2 with the masked run (the two scan-4 tasks, ids `a2f6bec5-cdf4-4a23-9ea0-c6ae7d73da80` and `a2f6bec6-0aee-4da2-aec9-8abc0a9b9c4e`). 6 with placeholders (scans 5–8 and the fixture). The earlier "four unmatched" was wrong: they are placeholders.
+- `findings` (category Secret): 2 rows. Finding 1 has the masked run. Finding 2 (fixture) has the placeholder.
+- The legacy dry run (`php artisan findings:remediate-legacy-masks`, no `--apply`) reports 1 finding matched. No change.
+
+**Remediation procedure (prepared; NOT executed; needs owner approval):**
+1. Backup (no change): `mysqldump --single-transaction` of `findings` and `agent_tasks` into `C:\tn_backups\remediation-<UTC timestamp>\`. Record SHA-256. Confirm the dump is non-empty.
+2. Pre-check (read-only): the dry run above (1 finding); and `SELECT id FROM agent_tasks WHERE type='agent.report_finding' AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.finding.evidence')) LIKE '%********%';` returns exactly the two ids above.
+3. Finding 1: `docker compose -f compose.dev.yaml exec -T php php artisan findings:remediate-legacy-masks --apply`. Writes a `legacy_evidence_redacted` activity-log row per finding. Expect `Applied to 1 finding(s).`
+4. Tasks (guarded, one transaction, row count must be 2):
+   `UPDATE agent_tasks SET payload = JSON_SET(payload, '$.finding.evidence', '[REDACTED: SEC-SECRET-GENERIC]') WHERE type='agent.report_finding' AND id IN ('a2f6bec5-cdf4-4a23-9ea0-c6ae7d73da80','a2f6bec6-0aee-4da2-aec9-8abc0a9b9c4e') AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.finding.evidence')) LIKE '%********%';`
+   Expect 2 rows changed. Commit only after the check.
+5. Post-check (counts only): no `findings` or `agent_tasks` row matches `%********%`. Both `Secret` findings show placeholders.
+6. Rollback: restore the two task rows and finding 1 from the step-1 dump (rows selected by id). No `DELETE`, no schema change.
+- Backups under `C:\tn_backups` still contain the masked runs (2 task rows; finding 1). They are preserved, not rewritten. Restrict access.
+
+**Credential rotation (owner action; the assistant does not rotate):** follow session 12, steps 1–8. Verification after the owner completes it: (a) MySQL login with the new value prints `1` (no value shown); (b) `TRUSTNODE_API_TOKEN` returns 200 on a read-only endpoint; (c) `docker compose ... ps` shows all services healthy. Until (a) and (b) pass, credentials are **not** rotated.
+
+**UI acceptance checklist (owner, in a browser):**
+- URL: http://127.0.0.1:8000/
+1. Login page loads; sign in with the existing administrator account (owner enters the password; do not paste it here).
+2. Findings list shows the fixture finding (scan 8) and finding 1 (scan 6). Finding 1 shows a masked value until remediation; finding 2 shows a placeholder.
+3. Notifications: one unread high-severity finding notification.
+4. Reports: scan 7 report, status completed, downloads a PDF.
+5. Approvals: no pending items expected (approval id 1 is approved and expires; the test approval will show as expired).
+- Expected results and pass/fail are recorded by the owner.
+
+**Real project acceptance (blocked on the owner's path):** no project beyond the synthetic fixture (`tn-acceptance-fixture`, project id 1) has been registered. The fixture stays registered with continuous scanning on, so it scans every 30 minutes. Recommended: disable it (`status`/`continuous_scan_enabled`) before real registration. Not done: this is a live write, and it needs your go-ahead.
