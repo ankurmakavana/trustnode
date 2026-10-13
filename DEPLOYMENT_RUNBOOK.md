@@ -28,7 +28,8 @@ Companion documents: `TRUSTNODE_IMPLEMENTATION_PLAN.md` (phase gates), `TRUSTNOD
 | `agent_tasks` in `trustnode_fresh` | 556 rows at read time: 512 completed, 44 failed (`user_id` NULL, attempts 5, created 2026-10-10 to 2026-10-12 11:59). No pending or processing rows. Live: the agent keeps writing |
 | Legacy masks dry run | `findings:remediate-legacy-masks` (no `--apply`): 1 finding matched; no change |
 | Backfill audit | `trustnode:backfill-organization-ownership` (no `--force`): audit reports deterministic ownership; the confirmation prompt was answered "no" by the empty stdin, so nothing was written |
-| Services | agent, mysql, nginx, node, php, redis, scheduler, worker all running |
+| Services (**corrected 2026-10-13 05:00 UTC**) | **All stopped.** Every `trustnode-*` container is `exited`. `mysql`, `worker`, `scheduler`, `agent` and `node` exited with code 137; `php`, `redis` and `nginx` with code 0. All stopped between 2026-10-12 21:23:47 and 21:24:02 UTC, in the order of a `docker compose stop`. The cause is not recorded. The earlier "all running" text was stale. Nothing was started or changed in this review. The container environment values in this table were verified before the shutdown. |
+| MySQL shutdown | The log ends at `Received SHUTDOWN from user <via user signal>` (21:23:58 UTC). There is no `Shutdown complete` line before the kill at 21:24:02. Treat it as an unclean stop. Expect InnoDB crash recovery on the next start (not yet observed). |
 
 ---
 
@@ -123,7 +124,7 @@ into a database that has been dropped or renamed, with approval.
 - `compose.dev.yaml` lines 36, 120, 150 and 181: `DB_DATABASE: trustnode_fresh` → `DB_DATABASE: ${DB_DATABASE:-trustnode_fresh}`.
 
 Backup (C2): `C:\tn_backups\config-20261013-021259\` (`compose.dev.yaml`, `.env`, `SHA256SUMS.txt`, checksums OK).
-Verified: host CLI resolves `trustnode_fresh`; rendered Compose shows `trustnode_fresh` four times; the four running containers still hold their old environment (no recreate, no restart). `compose.dev.yaml` is a tracked file and is **not committed** (section 6a).
+Verified: host CLI resolves `trustnode_fresh`; rendered Compose shows `trustnode_fresh` four times; the four running containers still hold their old environment (no recreate, no restart). `compose.dev.yaml` is committed locally as `bb20d68` (not pushed; the commit contains only the four-line change).
 
 **Lesson recorded:** the first attempt used `sed -i`. It removed two carriage-return bytes from `.env` (its `AGENT_ID` and `SCAN_HOST_DIR` lines), which the backup held. The file was restored from the backup and edited again with byte-exact replacement that asserts the match count. Use the same method for any further edit to `.env`.
 
@@ -209,12 +210,10 @@ about hourly and Compose restarts it. Eight restarts over about 9.9 h fits that 
 - *Action:* none. An hourly clean exit is expected. A worker without a healthcheck cannot report a stuck process, so
   consider one later.
 
-**Agent restarts (not resolved).** `trustnode-agent-1`: `RestartCount` 9 since creation (2026-10-12 10:36 UTC). Its last
-exit was code 0 at 12:30:06 UTC, and it has been up since 12:30:32. Between roughly 10:50 and 12:30 the log repeats
-`TrustNode Agent process started.` followed by `Failed to acquire agent ownership or agent is not in RUNNING state.
-Exiting.`, with no error or exception line. The activity log shows an agent `failed` event about every 15 minutes in the
-same window. The message text is not in `app/`, `cli/src/`, `mcp/`, `config/`, `routes/` or `bootstrap/`. I did not find its
-source. Cause: **unknown**. The agent is stable now, so no action is taken. The recreate must wait for the lease (6a, step 4).
+**Agent restarts (cause identified 2026-10-13).** `trustnode-agent-1` `RestartCount` 9. Docker's stdout log (`docker logs`) has 11 `TrustNode Agent process started.` lines: one at 10:37:03 UTC (first start), then nine cycles between 12:29:05 and 12:30:37 UTC (about 92 s). Each cycle ends with `Failed to acquire agent ownership or agent is not in RUNNING state. Exiting.`. The run at 12:30:32 started and ran until shutdown. The earlier text placed the loop between 10:50 and 12:30. The stdout log does not show that window, so that statement is withdrawn.
+- *Cause.* The exit text comes from commit `e47f9d7`. The process exits at once when the previous owner's lease is still valid. The nine cycles match that lease expiring at about 12:30 UTC (heartbeat timeout 90 s plus one 30 s interval). Commit `e1776b1` (2026-10-12 15:27 UTC) replaced the immediate exit with a bounded wait (`AgentStartRetry`). The old message is no longer in the source.
+- *Consequence.* The agent container started at 12:30:32 UTC and ran until shutdown on code from before `e1776b1`. The bounded wait has never run in a container. Its first run is recreate step 5 (section 6a).
+- *Related errors.* The container's `laravel.log` has 208 `Task ownership context is missing` lines between 10:00 and 12:59 UTC. The timing is consistent with the 44 failed `agent_tasks` rows (`user_id` NULL, created up to 11:59 UTC on 2026-10-12). That link is not proven. The last `AgentWorker: Task execution failed` line is at 12:00:16 UTC.
 
 **Worker failed jobs.** `failed_jobs` in `trustnode_fresh` has two rows (2026-10-12 12:01:03 and 12:01:04 UTC),
 `HighSeverityFindingNotification`: "Object of class App\Enums\Finding\FindingSeverity could not be converted to string".
@@ -244,19 +243,27 @@ source. Cause: **unknown**. The agent is stable now, so no action is taken. The 
   3. Do not touch `trustnode`'s scans, because that database stays read-only as the archive. Do not send `SCAN_FAILED`
      (the job hook path), because nothing failed in a live run. The update bypasses the hook on purpose.
 - *Alternative:* leave both rows as they are. This is safe, because nothing reads them to decide work.
+- *Preparation (2026-10-13; nothing applied).* The before-state of both rows was taken from the 20:19:54 UTC snapshot into `C:\tn_backups\investigation-20261013\scans-2-3-before-state.txt`. The guarded SQL is in `scans-2-3-proposal.sql`: a STEP 0 recheck, one transaction with a one-row check on each UPDATE, a post-check, and a rollback. The live recheck (no active job; scan status unchanged) cannot run until the mysql service is started, so it is still open. The snapshot shows `jobs` and `job_batches` empty. That is a snapshot, not a live check.
 
-**Scans 4, 5 and 6: local uploads, origin unconfirmed.** This is new information, and the owner must confirm it.
-- All three are `local` / `repositoryscanner`, organization 1, created by user 1, and all `completed`. Their `target` is `.env`.
-- They were created through `POST /api/scans/local` (`ScanController::storeLocal`). Scan 4 was created 12:01:02, scan 5
-  20:45:35 and scan 6 20:48:31. Scans 5 and 6 were created during this session by no command of mine.
-- `agent_activity_logs` has no entry after 12:30 UTC, so the log does not show who created scans 5 and 6.
-- *Not a continuous scan.* `codebase_projects` has zero rows, so `enqueueProjectScans` enqueues nothing. The continuous
-  scan is on by default in config (`agent.continuous_scan.enabled` defaults to `true`, every 30 minutes). Registering a
-  project would start automatic scans. Decide that setting before any project is registered.
-- *Finding check.* The one finding (`findings.id` 1, `scan_id` 6, `open`, `high`, `RepositoryScanner`) has no
-  credential-shaped text in its title or description (regex count 0 over both). This is a regex check, not a full review.
-- *Unresolved inconsistency:* the agent tasks that created the finding reference scan 4 (12:01:02–03), while
-  `findings.scan_id` is 6. This needs an explanation before the report is accepted as evidence.
+**Scans 4, 5 and 6: created by the agent's `.env` observer, not by an upload (corrected 2026-10-13).** The earlier note that they came from `POST /api/scans/local` is wrong. The name (`Agent Security Observation: .env`), engine (`repositoryscanner`) and description match `AgentObserveEnvTaskHandler`, which creates them.
+- *Mechanism.* `routes/console.php` enqueues `agent.observe_env` for `base_path('.env')` **every minute**, if an agent is `running` and none is pending. No config setting disables it. The handler hashes the whole file. If the hash differs from the cached value (Redis in the containers), it creates a scan, marks it `completed` after scanning, and enqueues one `agent.report_finding` task per detected secret. Any change to `.env` causes a scan, even a one-line change.
+- *Timeline (UTC; container `laravel.log` and the 20:19 snapshot).*
+
+| Scan | Created | Change detected (log) | Findings reported (log) | Trigger |
+|---|---|---|---|---|
+| 4 | 12:01:02 | 12:01:02 | Two tasks, both `scan_id` 4 (`.env` lines 28 and 75), stored at 12:01:03 | Not established. Either a `.env` change, or the first observation with an empty cache (a missing hash counts as a change). |
+| 5 | 20:45:35 (earlier live read) | 20:44:32 | Two, at 20:45:58 | Phase 1 `.env` edit (see below) |
+| 6 | 20:48:31 | 20:48:31 | Two, at 20:48:48 and 20:48:49 | Phase 1 `.env` edit (see below) |
+
+- *Attribution (my earlier work).* Scans 5 and 6 were triggered by my own edits to `.env` during Phase 1 (section 4): the `sed -i` attempt, the restore from backup, and the byte-exact re-edit. The earlier statement that they were created "by no command of mine" was wrong. The timing fits, but the file state at each observation was not recorded, so this is strongly indicated, not proven. The scan 5 time differs by 63 s between the earlier live read and the log. That discrepancy is unresolved.
+- *Why finding 1 is linked to scan 6.* `AgentReportFindingTaskHandler` finds an existing finding by fingerprint and overwrites `scan_id` with the reporting scan's id. Scan 4 created finding 1. Scans 5 and 6 reported the same fingerprint, so each overwrote `scan_id`; the last one is 6. `findings.scan_id` therefore records the most recent observer, not the origin. The origin task belongs to scan 4. At the 20:19:54 UTC snapshot, finding 1 had `scan_id` 4.
+- *The two secrets merged.* Lines 28 and 75 share one fingerprint, so they merged into finding 1. The row keeps line 28's evidence. The line 75 value has no finding row. Its only record is the `agent_tasks` payload.
+- *Credential exposure.* Finding 1's `evidence` stores a masked value that keeps the first 4 and last 4 characters. The same masked values appear in both `agent_tasks` payloads in the snapshot, and in both dumps under `C:\tn_backups`. `.env` was not read, and the full values were not seen. So partial values (8 characters each) of two credentials reached the database and backup files. **Treat both credentials as exposed and rotate them** (owner action). Full masking would keep no characters. The title and description contain no credential-shaped text (earlier regex check).
+- *Authorization.* No user requested these scans, and no approval record covers them. The observer is designed behaviour: it scans only the app's own `.env`, and no path-boundary error was logged for that target. Whether it should run at all is an owner decision. Preserve all three scans and their rows. Do not delete or rescan.
+- *Continuous project scan.* `AGENT_CONTINUOUS_SCAN` (default `true`; not set in the host `.env`) and `AGENT_SCAN_INTERVAL` (default 30) control only project scans (`enqueueProjectScans`). They do **not** control `agent.observe_env`. No project is registered (`codebase_projects` = 0), so nothing is enqueued today. Before any project is registered (section 7), the owner must decide whether to disable it. Proposed change, **not applied**: add `AGENT_CONTINUOUS_SCAN=false` to the host `.env` with a byte-exact edit that keeps CRLF, then restart `worker`, `scheduler` and `agent`. Verify with `printenv AGENT_CONTINUOUS_SCAN` in each. Rollback: remove the line (the default is `true`), then restart the same services.
+- *Observer decision.* Disabling `agent.observe_env` is a code change (remove the schedule in `routes/console.php`, or gate it on a config flag). It is not a configuration switch.
+- *Finding check.* A regex check over the title and description found no credential-shaped text. The masked evidence above is the exception. This is a regex check, not a full review.
+- *Still open:* the cause of scan 4; the 63 s scan 5 discrepancy; whether Redis still holds the `.env` hash (Redis is stopped, so it cannot be read now).
 
 **Owner and identity.** The same application identity exists in both databases.
 - The administrator (user id 1, role Administrator, active, email verified) has the same SHA-256 email fingerprint
@@ -291,6 +298,8 @@ would break it.
 
 ## 6. Coordinated service restart **[APPROVAL]**
 
+> Superseded for the current state by section 6a. Since 2026-10-12 21:23 UTC, every container is stopped, so there is nothing to stop first.
+
 Writers to `agent_tasks`: `scheduler` (`schedule:work`, through `AgentScheduledTasks`), the web app
 (`AgentController`), and capability handlers. The consumer is `agent` (`agent:run`). Stopping `agent` alone does
 not stop new rows; the scheduler keeps enqueuing. Pending rows are safe: they carry `agent_id`, and a restarted agent
@@ -314,52 +323,70 @@ the prior configuration restores them. Code rollback needs a new commit or branc
 
 ---
 
-## 6a. Service recreate plan (proposed; not executed; awaiting approval)
+## 6a. Service recreate plan (revised 2026-10-13; not executed; awaiting approval)
 
-**Key point:** the recreate changes no runtime value. All four services already hold `DB_DATABASE=trustnode_fresh`
-(verified). The recreate only makes the running containers read the Compose interpolation. You may skip it: the change
-then takes effect at the next recreate for another reason. Skipping is the lower-risk choice if there is no window.
+**What changed.** The plan was written for running services. Since 2026-10-12 21:23 UTC every `trustnode-*` container has been stopped (section 0). There is nothing to stop, so the sequence now **starts** the stack on the committed configuration (`bb20d68`). Starting is a live action and needs approval (group 5).
 
-**Proposed Compose diff** (the only change; `compose.dev.yaml`, uncommitted):
-```diff
--      DB_DATABASE: trustnode_fresh          (lines 36, 120, 150, 181)
-+      DB_DATABASE: ${DB_DATABASE:-trustnode_fresh}
-```
-With `.env` line 26 as `trustnode_fresh`. The rendered value is `trustnode_fresh` in all four services (verified).
+**Compose change (committed locally as `bb20d68`, not pushed).** Four `DB_DATABASE` values now read `${DB_DATABASE:-trustnode_fresh}`. Rendered value: `trustnode_fresh` for all four services (verified 2026-10-13 with `docker compose config`). Host `.env` value: `trustnode_fresh`.
 
-**Live versus rendered (verified).** Every env key declared by Compose is present in each live container. The live
-containers also carry image-defined `PHP_*` variables, which are expected. Bind mounts match, and the scan folder is
-mounted read-only. The labels on the live containers name a file, `compose.yaml`, that does not exist in the repo. The
-recreate will relabel them to `compose.dev.yaml`.
+**State captured before this plan (read-only; nothing started):**
 
-**Preconditions (all must hold):**
-- `jobs` row count is 0 in `trustnode_fresh`.
-- `agent_tasks` has no `pending` or `processing` row.
-- No scan is `running` through a live job (scan 2 is an orphan, section 4b).
-- `php` is `healthy`.
-- The backup in `C:\tn_backups\config-20261013-021259\` exists and matches its checksums.
+| Item | State |
+|---|---|
+| Containers | All `exited` (section 0). |
+| Restart counts | `worker` 8, `agent` 9, all others 0 (`docker inspect`). |
+| Health at shutdown | `mysql`, `php`, `redis` `unhealthy`. `nginx`, `node`, `worker`, `scheduler`, `agent` have no healthcheck. |
+| MySQL shutdown | Log ends at `Received SHUTDOWN from user <via user signal>` (21:23:58 UTC). No `Shutdown complete` line before the kill (21:24:02). Expect InnoDB crash recovery on start. Not yet observed. |
+| Agent | Last start 12:30:32 UTC, on code from before `e1776b1`. Stdout ends with the shutdown. |
+| Ownership lease (`agent_states`) | Not readable while mysql is down. The heartbeat stopped at about 21:23 UTC, more than seven hours ago. The lease is far past its 90 s timeout, so it should be expired. Confirm in step 2. |
+| Queue (`agent_tasks`) | 20:19 UTC snapshot: 0 pending, 0 processing. Live count unknown. |
+| `jobs`, `job_batches` | Empty in the 20:19 snapshot. Live count unknown. |
+| Backups | C1 `C:\tn_backups\20261013-014935\` and C2 `C:\tn_backups\config-20261013-021259\`: `sha256sum -c` OK on 2026-10-13. |
+| Evidence | Agent logs copied to `C:\tn_scratch\evidence-20261013\` (outside the repo; contains log text, so handle with care). Observer timeline and the scans 2–3 before-state are in `C:\tn_backups\investigation-20261013\`. |
 
-**Service order and commands** (agent and scheduler are stopped first, so no new task is enqueued and none is consumed mid-change):
+**Preconditions** (verify live in step 2; any failure stops the run):
+- `jobs` = 0 and `job_batches` = 0.
+- `agent_tasks` has no `pending` or `processing` row. A pending row is claimable by the agent after restart; review it before step 5.
+- `agent_states` for `trustnode-local-agent-1` is not `running`, or its heartbeat is older than `agent.heartbeat.timeout` (90 s).
+- Scans 2 and 3 are unchanged, or the approved SQL in `scans-2-3-proposal.sql` has been applied first.
+- C1 and C2 checksums still match.
 
-| Step | Command (from `C:\xampp\htdocs\trustnode`) | Health check before continuing |
+**Command sequence (for approval; run from `C:\xampp\htdocs\trustnode`):**
+
+| Step | Command | Check before the next step |
 |---|---|---|
-| 1 | `docker compose -f compose.dev.yaml stop scheduler agent` | `agent_tasks` `processing` = 0 |
-| 2 | `docker compose -f compose.dev.yaml up -d --no-deps --force-recreate php` | `php` healthy within 120 s; `printenv DB_DATABASE` = `trustnode_fresh` |
-| 3 | `docker compose -f compose.dev.yaml up -d --no-deps --force-recreate worker` | `printenv DB_DATABASE`; no `FATAL` in `docker logs trustnode-worker-1`; `RestartCount` 0 |
-| 4 | Wait until the previous lease has expired (heartbeat timeout 90 s plus one 30 s interval; `agent_states` for `trustnode-local-agent-1` not `RUNNING` or stale), then `docker compose -f compose.dev.yaml up -d --no-deps --force-recreate agent` | Agent log shows `agent:run` starting, with no `Failed to acquire agent ownership` line; `config('agent.id')` = `trustnode-local-agent-1`; `RestartCount` stays 0 for two minutes |
-| 5 | `docker compose -f compose.dev.yaml up -d --no-deps --force-recreate scheduler` | `printenv DB_DATABASE`; `docker compose ps` shows all four running |
+| 1 | `docker compose -f compose.dev.yaml up -d mysql` | Only `mysql` starts; its configuration did not change. `docker logs trustnode-mysql-1` shows crash recovery, then `ready for connections`, with no `[ERROR]`. Healthy within 120 s. |
+| 2 | `docker compose -f compose.dev.yaml up -d redis`, then SELECT-only checks through `docker compose exec -T mysql` for the preconditions above | All preconditions hold. Otherwise stop. |
+| 3 | `docker compose -f compose.dev.yaml up -d --no-deps php` | `php` healthy within 120 s. `docker compose exec -T php printenv DB_DATABASE` = `trustnode_fresh`. |
+| 4 | `docker compose -f compose.dev.yaml up -d --no-deps worker` | `printenv DB_DATABASE`. No `FATAL` in `docker logs trustnode-worker-1`. `RestartCount` 0 after 2 min. |
+| 5 | `docker compose -f compose.dev.yaml up -d --no-deps agent` | `TrustNode Agent process started.` once, then `ownership acquired`. No `Exiting` line and no loop. `RestartCount` 0 after 2 min. |
+| 6 | `docker compose -f compose.dev.yaml up -d --no-deps scheduler` | `printenv DB_DATABASE`. The scheduler log shows no error from `agent.observe_env`. |
+| 7 | `docker compose -f compose.dev.yaml up -d --no-deps nginx`; `node` only if approved | `nginx` serves the app. `docker compose exec -T php php artisan tinker --execute='echo config("database.connections.mysql.database");'` prints `trustnode_fresh`. |
+| 8 | `docker compose -f compose.dev.yaml ps` | Required services running; no restart loop. Re-run the scan count query: no new `.env` observer scan unless `.env` changed on purpose. |
 
-After step 5, confirm the database in each container with `php artisan tinker --execute='echo config("database.connections.mysql.database");'` (expect `trustnode_fresh`). Confirm `docker compose -f compose.dev.yaml ps` shows no restart loop.
+`--no-deps` keeps the order above as the only order. Do not run `docker compose up` for the whole stack.
 
-**Expected impact:** the web app may return 502 for seconds during the `php` recreate. The agent is offline for about a minute. The scheduler's cron clock restarts. No data change, no migration, no task loss (nothing is pending). The worker's hourly cycle restarts.
+**Expected impact:**
+- The database goes from stopped to running, and MySQL runs crash recovery.
+- The queue and observers resume. The scheduler enqueues `agent.observe_env` every minute.
+- An observer scan is created only if the `.env` hash differs from the Redis cache. If the Redis cache was lost, one extra scan is expected (it would be scan 7, with its findings merged into finding 1). If the cache persisted, none is expected.
+- The agent runs the current startup code (`e1776b1`) for the first time in a container. Its lease should already be expired.
+- The web app is unavailable until `nginx` starts.
+- No migration, no data change, no deletion.
 
-**Stop conditions:** `php` not healthy within 120 s; `agent` not running within 120 s; any `DB_DATABASE` other than `trustnode_fresh`; a `RestartCount` rising after recreate.
+**Stop conditions:**
+- `mysql` not healthy within 120 s, or `[ERROR]` in its log.
+- Any precondition in step 2 fails.
+- `DB_DATABASE` other than `trustnode_fresh` in any container.
+- Any service's `RestartCount` rises within 2 min, or `agent` exits twice within 5 min.
+- A new `.env` observer scan appears, unless `.env` was changed on purpose.
+- A `pending` agent task appears that cannot be explained.
 
 **Rollback:**
-1. Restore the files first, Compose before `.env`, so no container ever reads a value that does not exist:
-   `cp -p /c/tn_backups/config-20261013-021259/compose.dev.yaml .` then `cp -p /c/tn_backups/config-20261013-021259/.env .` (Git Bash). Check the SHA-256 sums against `SHA256SUMS.txt`.
-2. Re-run steps 2–5 with the restored file. Runtime values stay `trustnode_fresh`, so rollback only reverts the text.
-3. If a container will not start, `docker compose -f compose.dev.yaml logs --tail 200 <service>` before any further change.
+1. Stop what this run started, in reverse: `docker compose -f compose.dev.yaml stop node nginx scheduler agent worker php redis mysql` (omit `node` if it was not started). Stop does not remove containers or volumes. This returns the stack to the state in section 0.
+2. Config: the Compose change is the committed `bb20d68`. Its values equal the previous ones, so no restore is needed. Reverting it is a new commit (`git revert`), which needs approval. Do not rewrite history. If the `.env` or Compose file must be restored, use `cp -p` from C2 (Compose first, then `.env`) and verify the checksums.
+3. Do not run `migrate:rollback`. Do not drop or restore a database unless the C1 dump restore is approved.
+4. If mysql fails crash recovery: stop it, leave the `trustnode-db-data` volume untouched, and wait for approval before any restore from C1 into a new database.
 
 ## 7. Live project registration and acceptance scan **[APPROVAL: exact path and project]**
 
@@ -392,9 +419,9 @@ After step 5, confirm the database in each container with `php artisan tinker --
 | Item | State | Action | Approval |
 |---|---|---|---|
 | Finding 1 (legacy partial mask) | dry run matches 1 | `findings:remediate-legacy-masks --apply` after reviewing the dry run | Yes |
-| Scan 2 (running, created 2026-10-10, no org) | orphaned (no job) | Guarded `UPDATE` to `failed` after a table backup, or leave. Procedure in section 4b. | Yes; owner chooses |
+| Scan 2 (running, created 2026-10-10, no org) | orphaned (no job) | Guarded `UPDATE` to `failed` after a table backup, or leave. Procedure in section 4b; SQL with the STEP 0 recheck and rollback in `C:\tn_backups\investigation-20261013\scans-2-3-proposal.sql`. | Yes; owner chooses |
 | Scan 3 (queued, created 2026-10-10, no org) | never started | Guarded `UPDATE` to `cancelled`, or leave. Section 4b. | Yes; owner chooses |
-| Scans 4, 5, 6 (local uploads, target `.env`) | completed | Owner to confirm they were intended (section 4b). Not a removal decision. | Confirmation only |
+| Scans 4, 5, 6 (`.env` observer, not uploads; section 4b) | completed | Not user-requested. Rotate the two credentials exposed in finding 1 (owner). Decide whether the `.env` observer should run (code change). No deletion. | Owner decision and rotation |
 | Organization ownership backfill | audit clean on `trustnode_fresh` | Run `trustnode:backfill-organization-ownership` **without `--force`**, and answer the prompt interactively | Yes |
 
 **Rollback checkpoint C6:** the C1 dumps, taken before any of these.
@@ -472,13 +499,16 @@ being approved.
 
 1. **Backups and restore check** (section 3): done (C1 verified).
 2. **Canonical database** (section 1): **decided: `trustnode_fresh`** (2026-10-13). `trustnode` kept read-only as archive.
-3. **Configuration alignment** (section 4): **done** for `.env` and `compose.dev.yaml` (2026-10-13, backup C2). `compose.dev.yaml` is uncommitted.
+3. **Configuration alignment** (section 4): **done** for `.env` and `compose.dev.yaml` (2026-10-13, backup C2). `compose.dev.yaml` is committed locally as `bb20d68` (not pushed).
 4. **Migrations on `trustnode`** (section 5): only if Option T; schema change.
-5. **Service restart** (section 6, plan in 6a): recreates containers. **Not approved yet.** Optional: skip (no runtime value changes).
+5. **Start the stack and recreate services** (section 6a, revised 2026-10-13): every container is stopped, so this starts them on the committed configuration. **Not approved.**
 6. **Project registration and acceptance scan** (section 7): exact path.
 7. **Legacy remediation** (section 9): finding 1, scans 2 and 3 (method), backfill; one approval each.
 8. **IMAP installation** (section 10): installs a package.
 9. **Retire the non-canonical database**: only after the data review; irreversible.
 10. **Push** of local commits, and review of `76bb8da` and `5b100f1`. Publishes history.
+11. **Scans 2 and 3 status update** (section 4b; SQL in `C:\tn_backups\investigation-20261013\scans-2-3-proposal.sql`): the recheck needs the mysql service running. **Not approved.**
+12. **Credential rotation and observer decision** (section 4b, scans 4–6): rotation of the two `.env` credentials is an owner action. Whether `agent.observe_env` should run is an owner decision (code change). **Not approved.**
+13. **Continuous project scan setting** (section 4b): proposed `AGENT_CONTINUOUS_SCAN=false`, documented, **not applied**. Decide before any project registration (group 6).
 
 Phase 6 and Phase 9 live checks follow from groups 5–7 and need no separate approval once those are granted.

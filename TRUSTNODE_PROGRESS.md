@@ -654,3 +654,39 @@ Owner decisions: canonical `trustnode_fresh`; `trustnode` kept read-only as arch
 - **Recreate plan:** runbook 6a. Not executed. Proposed sequence: stop scheduler and agent; recreate php, worker, agent, scheduler, each with health checks. Recreate is optional, since no runtime value changes.
 - **Agent restarts (unresolved):** `RestartCount` 9. Between about 10:50 and 12:30 UTC the log repeats `Failed to acquire agent ownership or agent is not in RUNNING state. Exiting.` with exit 0. The text is not in `app/`, `cli/src/`, `mcp/`, `config/`, `routes/` or `bootstrap/`. Stable since 12:30:32 UTC. Recreate must wait for the lease to expire.
 - **Not done (approval needed):** service recreate; scan status updates; deletion of failed-job rows; owner confirmation of scans 4–6; continuous-scan setting; committing `compose.dev.yaml`.
+
+## Session log 9 — investigation of scans 4–6, scan 2–3 preparation, compose commit, recreate plan (2026-10-13)
+
+**Corrections to session log 8 (made here, with evidence):**
+- **Scans 4–6 were not created by `POST /api/scans/local`.** They come from the agent's `.env` observer (`AgentObserveEnvTaskHandler`, scheduled every minute in `routes/console.php`). Scans 5 and 6 were triggered by my own Phase 1 `.env` edits. The earlier statement that they were created by no command of mine was wrong.
+- **The stack is stopped, not running.** All `trustnode-*` containers exited between 2026-10-12 21:23:47 and 21:24:02 UTC. MySQL's log ends at the shutdown request with no `Shutdown complete` line (unclean stop; crash recovery expected).
+- **The agent restart cause is identified.** The nine exits happened at 12:29:05–12:30:37 UTC, not spread across 10:50–12:30. The exit text is from `e47f9d7`; commit `e1776b1` (15:27 UTC) replaced it with a bounded lease wait. The running container started at 12:30:32 and never loaded `e1776b1`.
+
+**Scans 4–6 (`trustnode_fresh`), verified:**
+- Each scan was created when the observer found a change in the hash of `.env`. Log times: 12:01:02, 20:44:32 and 20:48:31 UTC.
+- Finding 1 keeps its origin task (scan 4). Its `scan_id` is now 6 because `AgentReportFindingTaskHandler` overwrites `scan_id` on every fingerprint match, so it records the latest observer.
+- Two `.env` secret findings (lines 28 and 75) merged into finding 1. The stored evidence keeps the first 4 and last 4 characters of two credentials, in the database, in the `agent_tasks` payloads and in the backup dumps. **Owner action: rotate both credentials.** Not checked: the full values (`.env` not read).
+- Cause of scan 4 not established. Scan 5's time differs from the log by 63 s, unresolved.
+- Preserved: all three scans and their rows. Nothing was deleted or rescanned.
+
+**Scans 2 and 3 (preparation only; nothing applied):**
+- Before-state taken from the 20:19:54 UTC snapshot: `C:\tn_backups\investigation-20261013\scans-2-3-before-state.txt`.
+- Guarded SQL, STEP 0 recheck, one transaction with one-row checks, post-check and rollback: `scans-2-3-proposal.sql` in the same folder.
+- The live recheck is still open (the stack is stopped). `cancelled` and `failed` are both valid `ScanStatus` values.
+- Nothing in `app/` dispatches scans from their `schedule` column.
+
+**compose.dev.yaml (committed locally):**
+- Commit `bb20d68`, not pushed. The diff is the four `DB_DATABASE` lines only. CRLF count is unchanged (212/212). Rendered value `trustnode_fresh` ×4.
+
+**Agent exits (resolved):**
+- stdout: 11 starts, 9 exits at 12:29:05–12:30:37 UTC, exit code 0. Runbook section 4b rewritten.
+- The 208 `Task ownership context is missing` lines (10:00–12:59 UTC) are consistent with the 44 failed `agent_tasks` rows. Not proven.
+
+**Backups:** C1 and C2 re-verified with `sha256sum -c` on 2026-10-13 (all OK). Evidence checksums in `C:\tn_backups\investigation-20261013\SHA256SUMS.txt`.
+
+**Not done (each needs approval, see runbook section 15):**
+- Starting the stack (section 6a, revised). No container was started or recreated.
+- The scans 2–3 UPDATE.
+- Rotation of the two credentials and any change to the `.env` observer.
+- Setting `AGENT_CONTINUOUS_SCAN=false` (documented in section 4b; not applied).
+- Any push. Deleting the two failed-job rows. Retiring `trustnode`.
