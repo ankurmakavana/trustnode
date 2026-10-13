@@ -833,3 +833,5 @@ Owner decisions: canonical `trustnode_fresh`; `trustnode` kept read-only as arch
 - Expected results and pass/fail are recorded by the owner.
 
 **Real project acceptance (blocked on the owner's path):** no project beyond the synthetic fixture (`tn-acceptance-fixture`, project id 1) has been registered. The fixture stays registered with continuous scanning on, so it scans every 30 minutes. Recommended: disable it (`status`/`continuous_scan_enabled`) before real registration. Not done: this is a live write, and it needs your go-ahead.
+
+**Timed run confirmed:** scan 9 (`Project Scan: Acceptance fixture (synthetic)`) was created at 06:30:04 UTC by the `*/30` cron, with no manual trigger. Earlier timed run: 06:00:02 UTC (pre-fix).
