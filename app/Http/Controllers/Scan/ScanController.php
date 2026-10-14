@@ -231,9 +231,20 @@ class ScanController extends Controller
         $request->validate([
             'archive' => 'required|file|mimes:zip|max:102400', // max 100MB
             'target' => 'required|string',
+            'project_id' => 'nullable|integer',
         ]);
 
         $targetDir = $request->input('target');
+        $projectId = $request->input('project_id');
+
+        // If project_id is provided, verify it exists and is active
+        $codebaseProject = null;
+        if ($projectId) {
+            $codebaseProject = \App\Models\CodebaseProject::find($projectId);
+            if (!$codebaseProject || $codebaseProject->status !== \App\Enums\CodebaseProject\CodebaseProjectStatus::ACTIVE) {
+                return response()->json(['message' => 'Project authorization has been revoked or is inactive.'], 422);
+            }
+        }
 
         // 1. Create a LocalProject record for stable identity
         $localProject = \App\Models\LocalProject::firstOrCreate(
@@ -248,7 +259,7 @@ class ScanController extends Controller
         );
 
         // 2. Create a Scan record
-        $scan = Scan::create([
+        $scanData = [
             'repository_id' => null,
             'local_project_id' => $localProject->id,
             'organization_id' => $request->user()->current_organization_id ?? $request->user()->teams()->first()?->organization_id,
@@ -259,7 +270,13 @@ class ScanController extends Controller
             'status'        => \App\Enums\Scan\ScanStatus::QUEUED,
             'uuid' => (string) \Illuminate\Support\Str::uuid(),
             'created_by' => $request->user()->id,
-        ]);
+        ];
+
+        if ($codebaseProject && \Illuminate\Support\Facades\Schema::hasColumn('scans', 'codebase_project_id')) {
+            $scanData['codebase_project_id'] = $codebaseProject->id;
+        }
+
+        $scan = Scan::create($scanData);
 
         // 2. Store the uploaded archive
         $path = $request->file('archive')->storeAs('local-scans', "scan-{$scan->id}.zip", 'local');

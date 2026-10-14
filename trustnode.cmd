@@ -15,17 +15,65 @@ if /I "!CMD!"=="update" (
 
 if /I "!CMD!"=="start" (
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d
-    exit /b !ERRORLEVEL!
+    set "START_EC=!ERRORLEVEL!"
+    if !START_EC! EQU 0 (
+        for /f "delims=" %%I in ('where.exe php 2^>nul') do (
+            if not defined HOST_PHP set "HOST_PHP=%%I"
+        )
+        if not defined HOST_PHP (
+            if exist "C:\xampp\php\php.exe" set "HOST_PHP=C:\xampp\php\php.exe"
+        )
+        if defined HOST_PHP (
+            if exist "!INSTALL_DIR!\cli\bin\trustnode" (
+                "!HOST_PHP!" "!INSTALL_DIR!\cli\bin\trustnode" agent:service start >nul 2>&1
+            )
+        )
+    )
+    exit /b !START_EC!
 )
 if /I "!CMD!"=="stop" (
+    for /f "delims=" %%I in ('where.exe php 2^>nul') do (
+        if not defined HOST_PHP set "HOST_PHP=%%I"
+    )
+    if not defined HOST_PHP (
+        if exist "C:\xampp\php\php.exe" set "HOST_PHP=C:\xampp\php\php.exe"
+    )
+    if defined HOST_PHP (
+        if exist "!INSTALL_DIR!\cli\bin\trustnode" (
+            "!HOST_PHP!" "!INSTALL_DIR!\cli\bin\trustnode" agent:service stop >nul 2>&1
+        )
+    )
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" stop
     exit /b !ERRORLEVEL!
 )
 if /I "!CMD!"=="restart" (
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" restart
-    exit /b !ERRORLEVEL!
+    set "RESTART_EC=!ERRORLEVEL!"
+    for /f "delims=" %%I in ('where.exe php 2^>nul') do (
+        if not defined HOST_PHP set "HOST_PHP=%%I"
+    )
+    if not defined HOST_PHP (
+        if exist "C:\xampp\php\php.exe" set "HOST_PHP=C:\xampp\php\php.exe"
+    )
+    if defined HOST_PHP (
+        if exist "!INSTALL_DIR!\cli\bin\trustnode" (
+            "!HOST_PHP!" "!INSTALL_DIR!\cli\bin\trustnode" agent:service restart >nul 2>&1
+        )
+    )
+    exit /b !RESTART_EC!
 )
 if /I "!CMD!"=="down" (
+    for /f "delims=" %%I in ('where.exe php 2^>nul') do (
+        if not defined HOST_PHP set "HOST_PHP=%%I"
+    )
+    if not defined HOST_PHP (
+        if exist "C:\xampp\php\php.exe" set "HOST_PHP=C:\xampp\php\php.exe"
+    )
+    if defined HOST_PHP (
+        if exist "!INSTALL_DIR!\cli\bin\trustnode" (
+            "!HOST_PHP!" "!INSTALL_DIR!\cli\bin\trustnode" agent:service stop >nul 2>&1
+        )
+    )
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" down
     exit /b !ERRORLEVEL!
 )
@@ -50,6 +98,20 @@ if /I "!CMD!"=="doctor" (
     echo Checking Services...
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" ps | findstr "php" >nul
     if !ERRORLEVEL! EQU 0 ( echo [OK] Services are running ) else ( echo [FAIL] Services are stopped )
+
+    echo Checking Host Local Agent Daemon...
+    for /f "delims=" %%I in ('where.exe php 2^>nul') do (
+        if not defined HOST_PHP set "HOST_PHP=%%I"
+    )
+    if not defined HOST_PHP (
+        if exist "C:\xampp\php\php.exe" set "HOST_PHP=C:\xampp\php\php.exe"
+    )
+    if defined HOST_PHP (
+        "!HOST_PHP!" "!INSTALL_DIR!\cli\bin\trustnode" agent:service status
+    ) else (
+        echo [WARN] Host PHP runtime not found in PATH or standard location. Local Agent daemon cannot run directly on host.
+    )
+
     echo.
     echo Run 'trustnode repair' to attempt safe automated fixes.
     exit /b 0
@@ -61,6 +123,19 @@ if /I "!CMD!"=="repair" (
         exit /b 1
     )
     docker compose -f "!INSTALL_DIR!\compose.dev.yaml" up -d
+
+    echo Repairing Host Local Agent Daemon...
+    for /f "delims=" %%I in ('where.exe php 2^>nul') do (
+        if not defined HOST_PHP set "HOST_PHP=%%I"
+    )
+    if not defined HOST_PHP (
+        if exist "C:\xampp\php\php.exe" set "HOST_PHP=C:\xampp\php\php.exe"
+    )
+    if defined HOST_PHP (
+        "!HOST_PHP!" "!INSTALL_DIR!\cli\bin\trustnode" agent:service install
+        "!HOST_PHP!" "!INSTALL_DIR!\cli\bin\trustnode" agent:service restart
+    )
+
     echo Repair completed. Run 'trustnode doctor' to verify.
     exit /b 0
 )
@@ -130,7 +205,26 @@ if /I "!CMD!"=="help" (
     echo   status
     echo   activate ^<license-key^>
     echo   license
+    echo.
+    echo Agent Daemon:
+    echo   agent:service [install^|start^|stop^|restart^|status^|uninstall]
+    echo   agent:watch [--path=DIR] [--interval=SEC] [--debounce=SEC]
     exit /b 0
+)
+
+rem Route agent:* commands directly to host PHP so the daemon runs on the host machine
+echo !CMD! | findstr /i "^agent:" >nul
+if !ERRORLEVEL! EQU 0 (
+    for /f "delims=" %%I in ('where.exe php 2^>nul') do (
+        if not defined HOST_PHP set "HOST_PHP=%%I"
+    )
+    if not defined HOST_PHP (
+        if exist "C:\xampp\php\php.exe" set "HOST_PHP=C:\xampp\php\php.exe"
+    )
+    if defined HOST_PHP (
+        "!HOST_PHP!" "!INSTALL_DIR!\cli\bin\trustnode" %*
+        exit /b !ERRORLEVEL!
+    )
 )
 
 docker compose -f "!INSTALL_DIR!\compose.dev.yaml" ps | findstr "php" >nul

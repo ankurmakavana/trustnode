@@ -914,3 +914,658 @@ Rollback: restore the three affected rows from the step-0 dump (finding 1 and th
 - Backup check: `cd /c/tn_backups/remediation-20261013-065125 && sha256sum -c SHA256SUMS.txt`.
 - Heartbeat after recreate: `docker logs --since 5m trustnode-scheduler-1 2>&1 | grep -c "usurped"` → expect 0 (checked from the php container log: `docker compose -f compose.dev.yaml exec -T php sh -c 'grep -c usurped storage/logs/laravel.log'` for the window).
 - Schedule: `docker compose -f compose.dev.yaml exec -T php php artisan schedule:list` → no `agent.heartbeat` line.
+
+## Session log 16 — stack start, folder-picker fix, live checks halted by permission (2026-10-13)
+
+**Root cause of the empty folder picker (verified):** a frontend/API contract mismatch, not a mount problem.
+- `CodebaseProjectController::workspaceDirectories` returns `{"directories": [...]}`. `ProjectFormPage.jsx` read `data.data`, which is `undefined`, so the list fell back to `[]` and the page showed "No readable directories found".
+- The mount was correct: `${SCAN_HOST_DIR}` (host `C:\xampp\htdocs\external-project`) is visible inside `php` and `agent` at `/mnt/trustnode-scan`, and `tn-acceptance-fixture` is listed there.
+
+**Files changed (uncommitted):**
+- `resources/js/pages/ProjectFormPage.jsx`: `data.data || []` → `data.directories || []`. Vite HMR reloaded it (`public/hot` present; the served module contains `data.directories`). No rebuild required.
+- `tests/Feature/CodebaseProjectApiTest.php`: two new tests, `test_empty_workspace_returns_an_empty_directories_list` and `test_workspace_listing_excludes_a_symlink_that_escapes_the_mount`. The second uses a Windows directory junction when symlinks are not permitted, so it does not skip silently. Its cleanup removes the link before the target.
+- `TRUSTNODE_PROGRESS.md` (this log).
+
+**Tests (local):**
+- Command: `C:\xampp\php\php.exe vendor/bin/phpunit tests/Feature/CodebaseProjectApiTest.php`
+- Result: **20 tests, 41 assertions, OK**, no skips. Traversal, file-path, nonexistent-path and unavailable-mount cases were already covered by existing tests.
+- No frontend test runner exists in `package.json`. Adding one needs a dependency install, which is not approved. The frontend fix is verified by the HMR evidence above and by the existing backend contract test, not by a browser run.
+- Two empty `trustnode_test_outside_*` temp directories left by an earlier skipped run were removed after confirming they were empty.
+
+**Stack (verified at the time of each read):**
+- Docker engine up. `mysql` healthy after start (clean start log; no errors). `redis` healthy. `php` healthy. `nginx` running. `web` returns 200; `/api/system/status` Healthy, database Connected, queue Available; `/api/setup/status` `setup_required: false`.
+- `worker`, `scheduler`, `agent`, `node` started by Compose dependencies; all `running`.
+- `agent` restarted 3 times after start, from a MySQL-not-ready boot error (connection refused). Since its last start (11:23:46 UTC) it has run with no further restarts observed.
+- Heartbeat fix `0bbbadc` (committed 06:51 UTC) predates the 11:23 container starts, so the running scheduler and agent loaded it. `schedule:list` shows no `agent.heartbeat` (checked in session 15, before this start).
+- Last `usurped` log line before this session: session 14 window. Post-start count was not re-read; the last read was blocked (see below).
+
+**Blocked by the permission layer (not bypassed):**
+- **Masked-value remediation (`findings:remediate-legacy-masks --apply`) was denied** by the auto-mode classifier ("Modify Shared Resources"). Preconditions were met immediately before: backup checksum OK; dry run = 1 finding (finding 1); the task query returned exactly `a2f6bec5-cdf4-4a23-9ea0-c6ae7d73da80` and `a2f6bec6-0aee-4da2-aec9-8abc0a9b9c4e`. Nothing was applied. The task `UPDATE` was not attempted.
+- **Fixture recurring-scan disable (`codebase_projects.id = 1`) was not attempted**, as it is the same class of live database write. Last read (session 13): `status=active`, `continuous_scan_enabled=1`, `organization_id=1`, path `tn-acceptance-fixture`. The `*/30` cron is still active.
+- **Post-start DB and log reads** (heartbeat advance, scan counts, `usurped` count since start) were denied when issued through `docker compose exec` to MySQL and PHP.
+- Last values read before the denials (verified): `agent_states` updated 11:44:52 UTC; `scans` 15 (latest 11:30:02, the fixture's recurring scan); `codebase_projects` 1 (fixture, active, continuous on); `findings` 2; `failed_jobs` 3 (new one is the pre-rebuild GD error from 06:08 UTC, kept); `agent_tasks` failed 44 (historical `agent.observe_env`).
+
+**Credential rotation: NOT done.** Your instructions say not to rotate automatically. Session 12 steps 1–8 remain the owner's manual procedure.
+
+**Real project:** not registered. The host workspace folder is `C:\xampp\htdocs\external-project`. It currently holds the fixture `tn-acceptance-fixture` and a file `config.php` at its root. Do not register the mount root (it would include `config.php`). Place the authorized project in its own subfolder of that directory and tell me its name.
+
+**Remaining owner or approval actions:**
+1. Approve the masked-value remediation (finding 1 and two task payloads) in the form that allows a live database write, or perform steps 1–2 of session 14 yourself.
+2. Approve disabling the fixture's recurring scans (procedure B, session 15).
+3. Sign in at `http://127.0.0.1:8000/` and check the picker, which should now list `tn-acceptance-fixture`, then the findings, notification, and PDF checklist (sessions 13–14).
+4. Credential rotation per session 12 (owner's shell).
+5. Place an authorized project folder under `C:\xampp\htdocs\external-project` and name it.
+
+**Rollback:** the frontend change is one line (`data.directories || []` → `data.data || []`). The test additions can be removed independently.
+
+## Session log 17 — local test verification, UI picker check guidance, acceptance preparation (2026-10-13)
+
+**Safe local work & test verification (verified):**
+- Uncommitted frontend fix preserved: `resources/js/pages/ProjectFormPage.jsx` (`data.directories || []`).
+- Contract regression tests preserved: `tests/Feature/CodebaseProjectApiTest.php` (`test_empty_workspace_returns_an_empty_directories_list` and `test_workspace_listing_excludes_a_symlink_that_escapes_the_mount`).
+- Focused test executions:
+  1. `CodebaseProjectApiTest.php`: **20 tests, 41 assertions, OK**.
+  2. Capabilities and scheduled project scans: `tests/Unit/AgentScanCodebaseCapabilityTest.php`, `tests/Unit/CodebaseProjectTest.php`, `tests/Feature/AgentOrchestrationTest.php`, `tests/Feature/AgentScheduledTasksTest.php`, `tests/Unit/AgentObserveEnvGuardTest.php` → **69 tests, 180 assertions, OK**.
+  3. Agent lifecycle, lease, takeover, start-retry, bootstrap, health API, and graceful shutdown: `tests/Unit/AgentServiceTest.php`, `tests/Unit/AgentServiceTakeoverTest.php`, `tests/Unit/AgentStartRetryTest.php`, `tests/Unit/AgentServiceBootstrapTest.php`, `tests/Feature/AgentHealthApiTest.php`, `tests/Feature/AgentGracefulShutdownTest.php` → **97 tests, 241 assertions, OK**.
+  4. Total focused tests run in this session: **186 tests, 462 assertions, 0 errors, 0 failures**.
+- Diff hygiene: `git diff --check` passed cleanly. No new dependencies added; no Git commit, reset, push, or stash executed.
+
+**UI verification status for Project Picker:**
+- Automated browser access is not used/unavailable. No visual UI pass is claimed.
+- Manual verification steps for administrator provided:
+  1. Open `http://127.0.0.1:8000/` in Chrome/browser.
+  2. Sign in with the administrator account.
+  3. Navigate to **Codebase Projects** → click **Add Codebase Project** (or navigate to `/projects/create`).
+  4. Inspect the **Workspace Directory** dropdown / selector.
+  5. Verify that `tn-acceptance-fixture` is listed as an available selectable directory (and not showing "No readable directories found").
+  6. Confirm that the parent workspace directory root itself (`external-project`) and root-level files like `config.php` are NOT shown as selectable project directories.
+
+**Real-project acceptance readiness:**
+- Authorized host mount: `C:\xampp\htdocs\external-project`.
+- The mount root must not be registered directly.
+- Awaiting the explicit project-folder name from the user. Once provided:
+  - Subfolder containment inside `/mnt/trustnode-scan` will be verified against directory traversal and junction/symlink escape.
+  - Registration will be performed via read-only project registration.
+  - Verification will cover findings persistence, tenant UI visibility, notification delivery, server-enforced approval, and PDF report download.
+
+**Live database changes pending explicit approval:**
+- Change A (Disable recurring continuous scan for fixture `id = 1`): Pending explicit user approval.
+- Change B (Remediate Finding 1 and the two `agent_tasks` payloads): Pending explicit user approval. Backup at `C:\tn_backups\remediation-20261013-065125\findings-agent_tasks.sql` is preserved.
+
+**Credential rotation & scheduler deployment status:**
+- Credential rotation (session 12, steps 1–8) remains an administrator manual procedure in the host shell.
+- Scheduler heartbeat fix `0bbbadc` remains local and verified in code/tests.
+
+## Session log 18 — Windows host project access audit & verification (2026-10-13)
+
+**Root cause & path analysis (verified):**
+1. **Host-to-container mount alignment:**
+   - Host directory: `C:\xampp\htdocs\external-project` (defined via `.env` `SCAN_HOST_DIR=C:\xampp\htdocs\external-project`).
+   - Container target: `/mnt/trustnode-scan:ro` across all relevant services (`php`, `worker`, `scheduler`, `agent`).
+   - Docker inspect verification: `trustnode-php-1` has bind mount Source `C:\xampp\htdocs\external-project` -> Destination `/mnt/trustnode-scan` (mode `ro`). `trustnode-agent-1` has matching mount `/run/desktop/mnt/host/c/xampp/htdocs/external-project` -> `/mnt/trustnode-scan` (mode `ro`).
+2. **Subdirectory propagation (verified):**
+   - When a new folder is created on the Windows host under `C:\xampp\htdocs\external-project\<project-folder>`, Docker Desktop's filesystem share immediately reflects it inside `/mnt/trustnode-scan` in both the `php` and `agent` containers.
+   - Tested live with temporary folder creation: immediately visible in `php` and `agent` with identical permissions; removed cleanly afterward.
+3. **Discovery scoping:**
+   - `CodebaseProjectController::workspaceDirectories` scans immediate subdirectories of `/mnt/trustnode-scan`, skips files (`config.php`), validates containment against symlink/junction escapes, and returns relative folder names.
+4. **Duplicate path constraint:**
+   - Selecting `tn-acceptance-fixture` produces `The path has already been taken` because row `id=1` is already registered for this organization with `path = "tn-acceptance-fixture"`. This is the intended database uniqueness rule (`Rule::unique('codebase_projects', 'path')->where('organization_id', $orgId)`).
+   - Any new folder created by the user under `C:\xampp\htdocs\external-project\<name>` is distinct, discoverable, selectable, and registers cleanly without duplicate errors.
+5. **Container path resolution agreement:**
+   - Both `CodebaseProjectController` (web/API) and `AgentScanCodebaseCapability` (agent worker) resolve `$project->path` using identical logic: `config('agent.scan_mount_dir', '/mnt/trustnode-scan') . DIRECTORY_SEPARATOR . $project->path`.
+6. **No container recreation required:**
+   - The mount configuration and container state are healthy and active. No Compose recreation or service restart is needed.
+
+**Tests (verified locally and in container):**
+- Added regression test `test_newly_created_workspace_subdirectory_becomes_discoverable_and_registers_distinct_from_fixture` in `tests/Feature/CodebaseProjectApiTest.php`.
+- Results:
+  - Local `CodebaseProjectApiTest`: **21 tests, 51 assertions, OK**.
+  - Local `AgentScanCodebaseCapabilityTest`: **10 tests, 20 assertions, OK**.
+  - Container-based `php artisan test --filter=CodebaseProjectApiTest`: **20 tests passed** (prior to adding the 21st test locally).
+- `git diff --check` passes cleanly with no trailing whitespace or extra blank lines.
+
+**Exact user instructions:**
+- Create the target project folder on Windows at `C:\xampp\htdocs\external-project\<your-folder-name>` (e.g. `C:\xampp\htdocs\external-project\my-project`).
+- Refresh `http://127.0.0.1:8000/projects/create` and select `<your-folder-name>` in the Workspace Directory dropdown.
+
+## Session log 19 — Architecture Audit: Cross-Platform Local Project Scanning (2026-10-13)
+
+### 1. Audit of Existing Components & Reuse Feasibility
+- **TrustNode Core Scanners (`app/Services/Scan/RepositoryScanner.php`, `Scanners/*`):**
+  - Completely platform-neutral PHP filesystem inspection using `Symfony\Component\Finder\Finder`.
+  - Scans SAST patterns, Secrets, SCA (Composer, NPM, Yarn, PNPM lockfiles with OSV API), Dockerfile/Container, and Kubernetes manifests.
+  - Skips binary files, VCS `.git`, and files > 1 MB. Completely read-only (uses `file_get_contents`).
+  - Reusable directly on any operating system (Windows, macOS, Linux) without alteration.
+- **Agent Orchestration & Security Boundaries (`app/Services/AgentService.php`, `AgentWorker.php`, `AgentSecurityBoundary.php`):**
+  - Manages agent state (`idle`, `running`, `executing`, `waiting_approval`), heartbeats, and queue task processing.
+  - Grants and capability execution model (`agent:scan_codebase`, `agent:observe`, `agent:report_finding`).
+  - Sensitive evidence redaction (`SecretRedactor.php`) and server-side approval enforcement (`AgentApprovalService.php`).
+- **Archive Upload / Zip Ingestion Pipeline (`app/Jobs/ScanLocalJob.php`, `POST /api/scans/local`):**
+  - Already implemented in backend for CLI `scan:local-upload`.
+  - Handles zip verification, Zip Slip directory traversal prevention, max file limit (50,000 files), max size (200 MB), and exclusion of symlinks.
+  - Dispatches `ScanLocalJob` which extracts to an isolated sandbox and runs `RepositoryScanner`.
+- **CLI Client Architecture (`cli/bin/trustnode`, `cli/src/*`):**
+  - Lightweight Symfony Console application executable via standard PHP CLI on Windows, macOS, and Linux.
+  - Communicates securely outbound over HTTP/HTTPS with TrustNode API using Sanctum Bearer tokens (`TrustNodeClient`).
+- **Web UI & Modern Browser APIs:**
+  - Standard HTML5 / Web File System Access API (`showDirectoryPicker()` / `<input type="file" webkitdirectory>`) allows modern browsers on Windows, macOS, and Linux to select arbitrary local folders securely without the server having filesystem access.
+
+### 2. Remote vs. Local Deployment Boundary
+- **Remote TrustNode Server:**
+  - A remote web server (cloud, VPS, shared team instance) CANNOT directly access a developer's local filesystem paths (`/Users/...`, `C:\Users\...`, `/home/...`).
+  - Direct server path access is only possible when the developer runs TrustNode locally and mounts a host volume into Docker.
+- **Cross-Platform Target Architecture:**
+  1. **Mode A: Local Direct Agent (Self-Hosted / Developer Machine):**
+     - Developer runs TrustNode locally via Docker or native PHP.
+     - Projects reside on host filesystem.
+  2. **Mode B: Connected Local Agent / CLI (Remote or Containerized Server):**
+     - Developer connects an authenticated local client/agent via personal access token (`POST /api/auth/tokens` or `trustnode login`).
+     - Local agent inspects/packages or directly scans the chosen local project folder read-only.
+     - Outbound connection to TrustNode server streams or packages findings/metadata or authorized project archive to `/api/scans/local`.
+     - Findings, reports, timelines, and approvals populate in TrustNode central UI.
+  3. **Mode C: Browser-Assisted Folder Selection & Upload (Zero global runtime install):**
+     - In the web UI, developer uses native OS directory picker (`webkitdirectory` / File System Access API) to select any local folder on Windows, macOS, or Linux.
+     - The browser packages authorized project files in-memory (applying standard exclusions like `.git`, `node_modules`, `vendor`, large files) into a zip stream sent directly to `POST /api/scans/local`.
+     - The server processes the scan via `ScanLocalJob`, records findings, notifies the user, and generates PDF reports without requiring Docker host mounts or global language runtimes.
+  4. **Mode D: Compatibility Mode (Preserved):**
+     - The current workspace mount (`${SCAN_HOST_DIR}:/mnt/trustnode-scan:ro`) and `CodebaseProjectController` remain 100% functional and preserved.
+
+### 3. Platform Support Matrix & Native Considerations
+| Platform | Filesystem Pathing | Folder Selection Mechanism | Scanner & Symlink Safety | Status |
+|---|---|---|---|---|
+| **Windows 10/11** | Drive letters (`C:\`), backslashes, junctions | Native Explorer dialog via Browser / CLI File picker | Path normalization (`str_replace('\\', '/')`), junction escape prevention (`realpath`) | Supported & Verified |
+| **macOS (Intel/Apple Silicon)** | POSIX paths (`/Users/...`), case-insensitive HFS+/APFS | Native macOS Finder dialog via Browser / CLI File picker | Traversal check (`realpath`), symlink escape prevention | Architecture verified |
+| **Linux (Ubuntu, Debian, Fedora, etc.)** | Standard POSIX (`/home/...`), case-sensitive ext4/btrfs | Native GTK/file chooser via Browser / CLI File picker | Traversal check (`realpath`), symlink escape prevention | Architecture verified |
+
+### 4. Security Controls & Guardrails
+- Scans are strictly read-only (`file_get_contents`, no write streams).
+- Traversal protection: paths normalized and verified against directory escapes.
+- Sensitive exclusions: `.env`, private keys (`.pem`, `.key`, `id_rsa`), credential files, and binary files are excluded from raw capture; server-side `SecretRedactor` masks any matching tokens.
+- Server-enforced authorization: revoked project access halts immediate and queued scans.
+
+## Session log 20 — Cross-Platform Local Project Scanning Implementation (2026-10-14)
+
+### 1. Implementation Summary
+Implemented true cross-platform local project scanning (Windows, macOS, Linux) without requiring project folders to reside in a fixed Docker-mounted workspace (`/mnt/trustnode-scan`).
+
+#### A. Web UI (`resources/js/pages/ProjectFormPage.jsx` & `resources/js/utils/zipPackager.js`)
+- Added two distinct workflow tabs:
+  1. **"Scan a folder from this computer" (Default / Recommended):**
+     - Native OS folder selector supporting `webkitdirectory` / standard directory inputs across Windows, macOS, and Linux.
+     - In-browser file packaging via `zipPackager.js` using pure JavaScript PKZip format.
+     - Strict client-side exclusion filters: excludes `.git`, `node_modules`, `vendor`, `.env*`, `*.pem`, `*.key`, `id_rsa*`, and binaries.
+     - Enforces 100MB archive size limits and displays live eligible file counts, selected directory names, and upload progress bar.
+     - Directly uploads packaged project to `POST /api/scans/local`, creates scan tracking, and routes directly to the real-time scan progress page.
+  2. **"Docker Workspace Mount":**
+     - Preserved 100% backward compatibility for Docker container volume mounts (`${SCAN_HOST_DIR}:/mnt/trustnode-scan:ro`).
+- Frontend assets compiled cleanly via `npm run build` (`public/build/assets/app-ClXawhSo.js`).
+
+#### B. Cross-Platform CLI Client (`cli/bin/trustnode`, `cli/src/Commands/ScanCommand.php`, `LocalDirectoryPackager.php`)
+- Created `TrustNode\Cli\Services\LocalDirectoryPackager`:
+  - Recursively traverses any local folder on Windows, macOS, or Linux.
+  - Automatically filters `.git`, `node_modules`, `vendor`, `.env`, private keys, and binary files.
+  - Enforces 100MB uncompressed limit and traversal safety.
+- Updated `cli/src/Commands/ScanCommand.php`:
+  - When invoked with `trustnode scan <path>` or `trustnode scan .`:
+    - If `<path>` is a local directory, automatically packages the directory via `LocalDirectoryPackager` and uploads it to `POST /api/scans/local`.
+    - Handles Windows backslashes, drive letters, and UNIX relative/absolute paths.
+    - Displays interactive packaging stats and live scan status.
+- Fixed Windows STDIN hidden password hang in `ScanStartCommand.php`.
+
+### 2. Exact CLI Commands by Operating System
+
+#### Windows (PowerShell or Command Prompt):
+```powershell
+# Authenticate CLI with server
+php cli/bin/trustnode login
+
+# Scan current working directory
+php cli/bin/trustnode scan .
+
+# Scan arbitrary Windows folder path
+php cli/bin/trustnode scan "C:\Projects\my-app"
+```
+
+#### macOS (Terminal):
+```bash
+# Authenticate CLI with server
+./cli/bin/trustnode login
+
+# Scan current working directory
+./cli/bin/trustnode scan .
+
+# Scan arbitrary macOS project path
+./cli/bin/trustnode scan "/Users/developer/Projects/my-app"
+```
+
+#### Linux (Bash / Zsh):
+```bash
+# Authenticate CLI with server
+./cli/bin/trustnode login
+
+# Scan current working directory
+./cli/bin/trustnode scan .
+
+# Scan arbitrary Linux project path
+./cli/bin/trustnode scan "/home/developer/src/my-app"
+```
+
+### 3. Verification Evidence & Test Results
+- **End-to-End Scan Pipeline (`tests/Feature/LocalScanEndToEndTest.php`):**
+  - Synthesized code fixture with hardcoded credential in zip archive.
+  - Uploaded via `POST /api/scans/local`, processed through `ScanLocalJob` and `RepositoryScanner`.
+  - Verified:
+    - Status set to `completed`, progress `100%`, `duration` recorded.
+    - Scoped findings created and linked to `FindingIdentity` and `Scan`.
+    - Automated `Report` generated with HTML assessment report.
+    - Temporary sandbox workspace cleanly deleted.
+  - Result: **1 passed (12 assertions)**.
+- **Archive Security & Traversal Protection (`tests/Feature/ArchiveSecurityTest.php`):**
+  - Validated: valid archives pass, Zip Slip Unix rejected, Zip Slip Windows rejected, absolute Unix paths rejected, absolute Windows drive paths rejected, UNC paths rejected, mixed separators rejected, file count limits enforced, file size limits enforced.
+  - Result: **9 passed (18 assertions)**.
+- **API Endpoint Validation (`tests/Feature/ScanLocalApiTest.php`):**
+  - Authenticated upload, unauthenticated rejection (401), missing parameter validation (422), non-zip file rejection (422).
+  - Result: **4 passed (16 assertions)**.
+- **CLI Packaging Unit Tests (`cli/tests/LocalDirectoryPackagerTest.php`):**
+  - Verified directory packaging, exclusions (`.git`, `.env`, keys), and inclusion of eligible source files.
+  - Result: **2 passed (25 assertions)**.
+- **CLI Workflow Tests (`cli/tests/ProjectWorkflowTest.php`):**
+  - Result: **13 passed (37 assertions)**.
+- **Whitespace & Hygiene Checks:**
+  - `git diff --check` passed with 0 warnings or trailing whitespace errors.
+  - No unintended temporary debug scripts left behind.
+
+---
+
+## Session 21 — Persistent Cross-Platform Local Agent Scanning
+
+### 1. Executive Summary & Objective
+
+In accordance with product requirements, persistent local project monitoring has been implemented and strictly differentiated from one-time ZIP uploads and Docker workspace mounts.
+
+The three distinct project onboarding options are now clearly separated and operational in the system and UI:
+1. **Connect Local Agent / Add Local Folder** (Persistent Local Agent daemon monitoring, debounced change detection, scheduled scanning, outbound heartbeats, and immediate revocation gate).
+2. **Scan a folder once using browser upload** (Client-side ZIP packaging and upload for ad-hoc inspection without ongoing monitoring).
+3. **Use Docker Workspace Mount** (Shared host-container volume mounts under `/mnt/trustnode-scan`).
+
+### 2. Architecture & Implementation
+
+#### A. Database & Model Schema
+- Added `source_type` (`workspace_mount` | `agent`, default `workspace_mount`) and `agent_id` (string, nullable) to `codebase_projects` table via migration `2026_10_14_010000_add_source_type_and_agent_id_to_codebase_projects.php`.
+- Updated [CodebaseProject.php](file:///c:/xampp/htdocs/trustnode/app/Models/CodebaseProject.php) fillable and casts.
+- Updated [CodebaseProjectResource.php](file:///c:/xampp/htdocs/trustnode/app/Http/Resources/CodebaseProject/CodebaseProjectResource.php) to return `source_type` and `agent_id`.
+
+#### B. Backend API & Authorization
+- **`POST /api/projects`:** Updated [CodebaseProjectController.php](file:///c:/xampp/htdocs/trustnode/app/Http/Controllers/Api/CodebaseProjectController.php) and [StoreCodebaseProjectRequest.php](file:///c:/xampp/htdocs/trustnode/app/Http/Requests/CodebaseProject/StoreCodebaseProjectRequest.php):
+  - When `source_type === 'agent'`, the project path represents an authorized local directory resolved by the local Agent on Windows (`C:\...`), macOS (`/Users/...`), or Linux (`/home/...`).
+  - Path traversal sequences (`..`) and null bytes are rejected. System roots and root drive paths are forbidden.
+  - Bypasses Docker container mount validation for agent-owned projects while preserving strict container mount validation for workspace mount projects.
+- **`POST /api/agent/heartbeat` & `GET /api/agent/list`:**
+  - Added in [AgentController.php](file:///c:/xampp/htdocs/trustnode/app/Http/Controllers/AgentController.php) and [routes/api.php](file:///c:/xampp/htdocs/trustnode/routes/api.php).
+  - Outbound agent heartbeat mechanism: local agents post heartbeat every 30 seconds to announce online status, OS, hostname, and version.
+  - Heartbeat status is stored with TTL in cache (`trustnode_agent_heartbeat_{agent_id}`) and persisted to `agent_states`.
+- **Immediate Revocation Gate:**
+  - Soft-deleting/destroying a project sets status to `archived` and soft-deletes the record.
+  - Subsequent scan requests immediately return 404/422.
+  - The local Agent verifies project authorization before every scheduled/change scan and exits immediately if revoked.
+
+#### C. Cross-Platform Local Agent Daemon (`trustnode agent:watch`)
+- Implemented [cli/src/Services/DirectoryWatcher.php](file:///c:/xampp/htdocs/trustnode/cli/src/Services/DirectoryWatcher.php):
+  - Computes directory snapshot digests (`mtime:size`) across eligible files.
+  - Excludes `.env`, `.env.*`, `.git`, `node_modules`, `vendor`, private keys (`.pem`, `.key`, `id_rsa`), certificates, and binaries.
+  - Detects added, modified, and deleted files cross-platform.
+- Implemented [cli/src/Commands/AgentWatchCommand.php](file:///c:/xampp/htdocs/trustnode/cli/src/Commands/AgentWatchCommand.php):
+  - Registered command `agent:watch` in CLI application.
+  - Supports `--path` (`-p`), `--name`, `--agent-id`, `--interval`, `--debounce`, `--schedule`, and `--once`.
+  - Automatically performs:
+    1. Outbound heartbeat check-in.
+    2. Server project registration and authorization check.
+    3. Initial baseline scan.
+    4. Continuous change detection with configurable debouncing (default 10s quiet period) to prevent duplicate scans during large file saves.
+    5. Periodic scheduled scans.
+    6. Revocation checks preventing future or queued work if access is revoked.
+    7. Read-only operation with zero source file modification.
+
+#### D. Web UI Dashboard Integration
+- Refactored [resources/js/pages/ProjectFormPage.jsx](file:///c:/xampp/htdocs/trustnode/resources/js/pages/ProjectFormPage.jsx):
+  - Displays 3 clear mode tabs:
+    1. **Connect Local Agent / Add Local Folder** (shows live connected agents, online/offline badge, OS, auto-detection, local path input, profile selection, continuous monitoring checkbox, and background CLI run instructions).
+    2. **Scan a folder once using browser upload** (in-browser ZIP packaging and ad-hoc upload).
+    3. **Use Docker Workspace Mount** (Docker container workspace directory dropdown).
+  - Successfully compiled via Vite production build (`npm run build`).
+
+### 3. Cross-Platform Run Instructions
+
+#### Windows (PowerShell / Command Prompt):
+```powershell
+# Authenticate CLI
+php cli/bin/trustnode login
+
+# Run Local Agent in foreground
+php cli/bin/trustnode agent:watch -p "C:\Projects\my-app"
+
+# Run Local Agent in background (PowerShell)
+Start-Process -NoNewWindow php -ArgumentList "cli/bin/trustnode agent:watch -p 'C:\Projects\my-app'"
+```
+
+#### macOS (Terminal):
+```bash
+# Authenticate CLI
+./cli/bin/trustnode login
+
+# Run Local Agent in foreground
+./cli/bin/trustnode agent:watch -p "/Users/developer/Projects/my-app"
+
+# Run Local Agent in background
+nohup ./cli/bin/trustnode agent:watch -p "/Users/developer/Projects/my-app" > agent.log 2>&1 &
+```
+
+#### Linux (Bash / Systemd):
+```bash
+# Authenticate CLI
+./cli/bin/trustnode login
+
+# Run Local Agent in foreground
+./cli/bin/trustnode agent:watch -p "/home/developer/src/my-app"
+
+# Run Local Agent in background
+nohup ./cli/bin/trustnode agent:watch -p "/home/developer/src/my-app" > agent.log 2>&1 &
+```
+
+### 4. Verification & Test Evidence
+- **Feature Tests (`tests/Feature/PersistentAgentScanTest.php`):**
+  - `test_agent_heartbeat_and_listing_workflow`: 100% passed.
+  - `test_register_persistent_agent_project`: 100% passed.
+  - `test_agent_project_rejects_traversal_paths`: 100% passed.
+  - `test_project_revocation_prevents_subsequent_scans`: 100% passed.
+  - Result: **4 passed (18 assertions)**.
+- **CodebaseProject Regression Suite (`tests/Feature/CodebaseProjectApiTest.php`):**
+  - Result: **21 passed (51 assertions)**.
+- **Workflow & Capability Verification (`tests/Feature/ProjectScanWorkflowTest.php`):**
+  - Result: **1 passed (6 assertions)**.
+- **Frontend Compilation:**
+  - `npm run build` ran cleanly with 0 errors (`public/build/assets/app-Df1kAMwY.js`, 564.63 kB).
+
+---
+
+## Session 22 — Verification, Protocol Hardening & Synthetic End-to-End Execution (Completed)
+
+### 1. Protocol & Contract Hardening
+- **Host Port Detection:** Fixed [cli/src/Config/ConfigManager.php](file:///c:/xampp/htdocs/trustnode/cli/src/Config/ConfigManager.php) so that `http://localhost` or `http://127.0.0.1` without an explicit port automatically maps to port 8000 when the CLI runs on the host against Docker Nginx.
+- **Sanctum Abilities Authorization:** Updated [app/Http/Middleware/CheckTokenAbilities.php](file:///c:/xampp/htdocs/trustnode/app/Http/Middleware/CheckTokenAbilities.php) and [app/Http/Controllers/Auth/TokenController.php](file:///c:/xampp/htdocs/trustnode/app/Http/Controllers/Auth/TokenController.php) to grant `agent:read` and `agent:write` permissions, resolving the 403 error on `POST /api/agent/heartbeat`.
+- **Soft-Deleted Project Re-Authorization:** Updated [app/Http/Controllers/Api/CodebaseProjectController.php](file:///c:/xampp/htdocs/trustnode/app/Http/Controllers/Api/CodebaseProjectController.php) `store` method to restore and reactivate soft-deleted/archived projects when re-authorized, preventing MySQL unique constraint violations.
+- **Scan Ingestion Security & Revocation Gate:** Validated in [app/Http/Controllers/Scan/ScanController.php](file:///c:/xampp/htdocs/trustnode/app/Http/Controllers/Scan/ScanController.php) `storeLocal` that inactive or revoked projects are rejected with 422 before queueing any work.
+- **Report & PDF Workflow:** Added full end-to-end PDF download verification (`/api/scans/{id}/report/download`) in `PersistentAgentScanTest.php`.
+
+### 2. Full Test Suite Results (100% Pass)
+- **Agent & Project Feature Tests:**
+  - `tests/Feature/PersistentAgentScanTest.php`: **5 passed (32 assertions)**.
+  - `tests/Feature/AgentHealthApiTest.php`: **11 passed (79 assertions)**.
+  - `tests/Feature/CodebaseProjectApiTest.php`: **21 passed (51 assertions)**.
+  - `tests/Feature/ProjectScanWorkflowTest.php`: **1 passed (6 assertions)**.
+  - Combined feature tests: **38 passed (168 assertions)**.
+- **Local Scan & Archive Security Tests:**
+  - `tests/Feature/ScanLocalApiTest.php`, `tests/Feature/LocalScanEndToEndTest.php`, `tests/Feature/ArchiveSecurityTest.php`: **14 passed (46 assertions)**.
+- **CLI Unit & Workflow Test Suite:**
+  - `cli/tests/`: **19 passed (75 assertions)** in Linux container environment; `DirectoryWatcherTest` and `LocalDirectoryPackagerTest` passed on host Windows environment.
+
+### 3. Live Synthetic End-to-End Verification on Windows Host
+- Synthetic Project Path: `C:\Users\Groot\AppData\Local\Temp\synthetic-trustnode-test` (isolated outside Docker workspace and repo).
+- Agent Watch Executed: `php cli/bin/trustnode agent:watch --path="C:\Users\Groot\AppData\Local\Temp\synthetic-trustnode-test" --name="Synthetic Watch Fixture" --once -v`
+  - Heartbeat sent: Agent ID `agent-desktopjjqlekr-08a3e9` checked in and reported `status: online` in `GET /api/agent/list`.
+  - Project registered & authorized: CodebaseProject ID 2 created with `source_type: agent`.
+  - Scan queued and completed: Local scanner packaged files and queued Scan ID 27, which completed with status `completed` and 100% progress.
+  - Revocation gate verified: `DELETE /api/projects/2` revoked authorization; subsequent scans were blocked. Re-authorization restored project state cleanly.
+- `git diff --check`: 0 errors. All Git work preserved.
+
+---
+
+## Session 23 — Local Folder Selection Separation & UI Hardening (Completed)
+
+### 1. Root Cause Analysis
+- **Problem:** Clicking "Choose Local Folder" in the web UI was stuck at "Opening Native Dialog..." and timed out with "Folder picker dialog timed out" or displayed:
+  `The selected Agent (trustnode-local-agent-1) is running in container/service mode and cannot display native desktop dialogs.`
+- **Underlying Mechanism:**
+  - The default Docker Compose environment includes a containerized background agent (`trustnode-agent-1`) that heartbeats as `trustnode-local-agent-1`.
+  - Because it runs inside an isolated headless Linux container, it has no access to the developer's interactive desktop window manager.
+  - The single unified form erroneously routed desktop picker requests to this container service, leading to timeouts.
+
+### 2. Implementation & Architecture Separation
+- **Direct Browser Folder Selection (One-Time Scan Workflow):**
+  - Implemented client-side directory selection utilizing native HTML directory picking (`webkitdirectory="true"`) in [resources/js/pages/ProjectFormPage.jsx](file:///c:/xampp/htdocs/trustnode/resources/js/pages/ProjectFormPage.jsx).
+  - Opens the developer's interactive OS native folder selection dialog directly in the browser with zero agent requirements.
+  - Automatically filters sensitive assets (`.git`, `node_modules`, `vendor`, `.env`, keys, certificates, binaries) client-side using `zipPackager.js`.
+  - In-memory packages the eligible files and securely dispatches to `POST /api/scans/local`.
+- **Persistent Local Agent Monitoring Workflow:**
+  - Kept strictly separate from the one-time browser upload.
+  - Added explicit capability metadata (`execution_mode: 'desktop'`, `desktop_picker_supported: true`) in [AgentController.php](file:///c:/xampp/htdocs/trustnode/app/Http/Controllers/AgentController.php) and [AgentWatchCommand.php](file:///c:/xampp/htdocs/trustnode/cli/src/Commands/AgentWatchCommand.php).
+  - Explicitly rejects container-mode agents from native desktop dialog requests.
+  - Provides clear UI states: "Container Agent Online (Desktop Agent Required)" vs "Interactive Desktop Agent Connected".
+  - Enables "Open Native Folder Dialog" only when an authenticated desktop agent is online.
+  - Retains manual path fallback and explicit cancellation controls.
+- **Docker Workspace Mount Workflow:**
+  - Dedicated tab allowing selection of pre-mounted container volumes from `/mnt/trustnode-scan`.
+
+### 3. Verification & Test Evidence
+- **Feature Tests:**
+  - `tests/Feature/PersistentAgentScanTest.php`: **8 passed (42 assertions)**.
+  - `tests/Feature/ScanLocalApiTest.php`: **4 passed (13 assertions)**.
+  - `tests/Feature/LocalScanEndToEndTest.php`: **1 passed (15 assertions)**.
+  - `tests/Feature/CodebaseProjectApiTest.php`: **21 passed (51 assertions)**.
+  - Combined suite: **34 passed (121 assertions)**, 100% pass rate.
+- **Frontend Compilation:**
+  - `npm run build` compiled cleanly via Vite v7.3.6 (`public/build/assets/app-67dBf-8g.js`, 569.42 kB).
+- **Integrity:**
+  - `git diff --check` passed with 0 errors. All Git changes preserved.
+
+---
+
+## Session 24 — Unified Single-Workflow Add Project UI & Multi-Project Persistent Monitoring (Completed)
+
+### 1. Architectural & Product Unification
+- **Removed Workflow Duplication from Primary UI:**
+  - Completely stripped tabs and alternative mode switches from [ProjectFormPage.jsx](file:///c:/xampp/htdocs/trustnode/resources/js/pages/ProjectFormPage.jsx).
+  - No browser upload tab, no Docker workspace mount tab, no native picker dropdown or hidden fallbacks in the main flow.
+  - The primary Add Codebase Project page now strictly consists of:
+    1. **Host Agent Connection Banner** (identifying host desktop agent vs action required).
+    2. **Absolute Folder Path** (plain text input supporting Windows, macOS, and Linux formats).
+    3. **Project Name** (auto-defaulted from the folder basename).
+    4. **Scan Profile** (aligned with backend `ScanProfile` enum: `standard`, `full`).
+    5. **Continuous Monitoring Toggle** (enabled by default).
+    6. **Authorize Project Action** (with inline submission error reporting).
+- **Multi-Project Persistent Monitoring by Single Agent Daemon:**
+  - Upgraded [AgentWatchCommand.php](file:///c:/xampp/htdocs/trustnode/cli/src/Commands/AgentWatchCommand.php) to support multi-project monitoring under a single process (`php cli/bin/trustnode agent:watch`).
+  - Agent polls heartbeat and receives `assigned_projects` array from server heartbeat response.
+  - Maintains individual state digests, snapshots, debounce quiet windows, and periodic scheduled scans for all authorized directories simultaneously.
+  - Changes detected in any monitored project trigger a debounced incremental scan only for that project.
+  - Ceases monitoring automatically when a project is archived or revoked on the server.
+- **Backend Tenant Correlation & Capability Hardening:**
+  - In [AgentController.php](file:///c:/xampp/htdocs/trustnode/app/Http/Controllers/AgentController.php), heartbeat now includes `assigned_projects` for the reporting agent.
+  - In [CodebaseProjectController.php](file:///c:/xampp/htdocs/trustnode/app/Http/Controllers/Api/CodebaseProjectController.php), registration enforces desktop capability and tenant match, preventing container agents from being assigned to host filesystem projects.
+
+### 2. Live Host Verification Evidence
+- **Multi-Project Registration & Baseline Scans:**
+  - Project Alpha (`C:\Users\Groot\AppData\Local\Temp\tn-synth-proj-a`): Registered & authorized (ID 6), initial baseline scan queued (Scan ID 30).
+  - Project Beta (`C:\Users\Groot\AppData\Local\Temp\tn-synth-proj-b`): Registered & authorized (ID 7), initial baseline scan queued (Scan ID 31).
+- **Single Daemon Multi-Directory Monitoring:**
+  - Launched `php cli/bin/trustnode agent:watch --interval=1 --debounce=2`.
+  - Daemon synchronized both projects:
+    - `[Agent] Synced active project 'Synth Alpha' (#6) at C:\Users\Groot\AppData\Local\Temp\tn-synth-proj-a for monitoring.`
+    - `[Agent] Synced active project 'Synth Beta' (#7) at C:\Users\Groot\AppData\Local\Temp\tn-synth-proj-b for monitoring.`
+- **Independent Change Detection & Debounced Scanning:**
+  - Modified file in Project Alpha: Daemon detected modifications (`+0 ~1 -0`), debounced 2 seconds, and triggered change scan (Scan ID 32).
+  - Modified file in Project Beta: Daemon detected modifications (`+0 ~1 -0`), debounced 2 seconds, and triggered change scan (Scan ID 33).
+- **Security & Integrity Preservation:**
+  - Scanning is strictly read-only; source files on the host were never modified by the scanner.
+  - Secret patterns, `.git`, `node_modules`, `vendor`, and binary files remain excluded.
+  - Revocation gate verified: Revoked projects reject further scans and uploads (`test_project_revocation_prevents_subsequent_scans` passed).
+
+### 3. Verification & Acceptance
+- **Automated Test Suite:**
+  - `tests/Feature/PersistentAgentScanTest.php`: **10 passed (54 assertions)**, including container rejection and multi-project heartbeat sync.
+  - `tests/Feature/CodebaseProjectApiTest.php`: **21 passed (51 assertions)**.
+  - Combined suite: **31 passed (105 assertions)**, 100% pass rate.
+- **Frontend Compilation:**
+  - `npm run build` ran cleanly via Vite v7.3.6 (`public/build/assets/app-DwLLRJYU.js`, 549.39 kB).
+- **Integrity:**
+  - `git diff --check` passed with 0 errors. All Git changes preserved.
+
+---
+
+## Session 25 — Resolution of Contradictory Agent Status & Live Project Authorization Verification (Completed)
+
+### 1. Root Cause Analysis: Contradictory Agent Status
+- **Observed Defect:**
+  - The UI simultaneously displayed a green "Host Local Agent Connected / ONLINE" banner for host agent `agent-desktopjjqlekr-eb63d7`, but submitting "Authorize Project" failed with a red error:
+    `"The selected Agent (agent-desktopjjqlekr-eb63d7) is offline or unverified. Please ensure it is running."`
+- **Underlying Cause & Contract Discrepancy:**
+  1. **Frontend Polling Gap:** [ProjectFormPage.jsx](file:///c:/xampp/htdocs/trustnode/resources/js/pages/ProjectFormPage.jsx) loaded agents only on initial mount. If an agent process previously reported heartbeats but then stopped, the UI state stayed frozen in 'online' while the backend cache expired after the 90-second timeout.
+  2. **Storage Subsystem Contract Mismatch:** [AgentController.php](file:///c:/xampp/htdocs/trustnode/app/Http/Controllers/AgentController.php) updates both Redis cache and `agent_states.updated_at` on every heartbeat. However, [CodebaseProjectController.php](file:///c:/xampp/htdocs/trustnode/app/Http/Controllers/Api/CodebaseProjectController.php) strictly required the volatile Redis key `trustnode_agent_heartbeat_{$agentId}` to be present and unexpired. If Redis TTL expired or experienced eviction while the agent record had an active `updated_at` timestamp within the freshness window (`staleThreshold`), `store()` rejected the agent as offline while listing or vice-versa could disagree.
+- **Remediation:**
+  - **Unified Freshness Contract:** Aligned freshness calculation across [AgentController.php](file:///c:/xampp/htdocs/trustnode/app/Http/Controllers/AgentController.php) (`list()` and `pickFolderRequest()`) and [CodebaseProjectController.php](file:///c:/xampp/htdocs/trustnode/app/Http/Controllers/Api/CodebaseProjectController.php) (`store()`). Freshness evaluates `max((int)$cachedHb, $dbTimestamp) >= $staleThreshold`. If the agent is offline, both the status banner and project authorization evaluate to offline synchronously.
+  - **Live Dynamic Polling in UI:** Added a 5-second interval in [ProjectFormPage.jsx](file:///c:/xampp/htdocs/trustnode/resources/js/pages/ProjectFormPage.jsx) so agent online/offline status updates dynamically in real time without requiring manual refreshes or stale state retention.
+
+### 2. Live Project Authorization Verification (Synthetic Project)
+- **Dedicated Synthetic Directory:**
+  - `C:\Users\Groot\AppData\Local\Temp\tn-synth-proj-c` initialized with test files (`index.php`, `secret.php`).
+- **Authorization Flow Execution:**
+  - Started host Local Agent daemon: `php cli/bin/trustnode agent:watch`.
+  - Sent project authorization payload:
+    `{"name": "Synth Gamma Live", "path": "C:\\Users\\Groot\\AppData\\Local\\Temp\\tn-synth-proj-c", "source_type": "agent", "agent_id": "agent-desktopjjqlekr-eb63d7", "scan_profile": "standard", "continuous_scan_enabled": true}`
+  - **API Result:** `201 Created` returning project ID `8` (`uuid: cbee9488-0d39-4219-8ff0-71e8fe08dd2d`).
+  - **Daemon Adoption & Immediate Scan:**
+    - Host agent logged: `[Agent] Adopting project 'Synth Gamma Live' (#8) at C:\Users\Groot\AppData\Local\Temp\tn-synth-proj-c...`
+    - Ingested & packaged files: `Packaged 2 eligible files for scan ingestion (0.1 KB).`
+    - Scan created and queued: `Scan queued successfully! Scan ID: 35`.
+  - **Actionable Error Validation:**
+    - When an agent is genuinely offline or invalid, the backend returns clear actionable 422 JSON messages:
+      - `"The selected Agent (...) is offline or unverified. Please ensure it is running."`
+      - Container agents are rejected with: `"The selected Agent (...) is running in container mode. A host desktop agent is required to monitor local directories."`
+
+### 3. Multi-Project Persistence & Revocation Verification
+- **Multi-Project Sync:**
+  - Host daemon continuously synced existing active projects:
+    - Project #6 (`C:\Users\Groot\AppData\Local\Temp\tn-synth-proj-a`)
+    - Project #7 (`C:\Users\Groot\AppData\Local\Temp\tn-synth-proj-b`)
+    - Project #8 (`C:\Users\Groot\AppData\Local\Temp\tn-synth-proj-c`)
+- **Revocation / Archival Handling:**
+  - Project #8 was revoked via `DELETE /api/projects/8`.
+  - On the next sync cycle, the host daemon immediately detected archival and logged:
+    `[Agent] Project #8 no longer active or revoked on server. Ceasing monitoring.`
+  - Further scans on Project #8 are rejected.
+
+### 4. Preservation of Agreed Scope & Architecture
+- [ProjectFormPage.jsx](file:///c:/xampp/htdocs/trustnode/resources/js/pages/ProjectFormPage.jsx) strictly maintains the minimal required surface:
+  - Absolute Folder Path
+  - Project Name
+  - Scan Profile
+  - Continuous Monitoring checkbox
+  - Authorize Project button
+  - No browser-upload tab, no Docker workspace tab, no native picker dialog button, and no Agent dropdown.
+
+### 5. Verification & Acceptance
+- **Automated Feature Tests:**
+  - `docker exec -t trustnode-php-1 php artisan test tests/Feature/PersistentAgentScanTest.php tests/Feature/CodebaseProjectApiTest.php`
+  - Output: **31 passed (105 assertions)**, 100% pass rate.
+- **Frontend Asset Compilation:**
+  - `npm run build` compiled cleanly via Vite v7.3.6:
+    `public/build/assets/app-BmTsebmG.js` (549.45 kB).
+- **Repository Integrity:**
+  - `git diff --check` passed with 0 errors. All prior changes and Git history preserved.
+
+---
+
+## Session 26 — Persistent Local Agent Background Startup, OS Service Integration & Multi-Project Monitoring (Completed)
+
+### 1. Architectural Strategy & Design
+- **Core Requirement:**
+  - A developer installs/connects the TrustNode Local Agent once, and it runs reliably in the background without an open terminal.
+  - Multi-project persistent monitoring automatically watches multiple registered local folders on the host machine, detects changes, debounces, triggers scans, and immediately stops when a project is archived or revoked.
+  - The web UI remains completely minimal: Absolute Folder Path, Project Name, Scan Profile, Continuous Monitoring checkbox, Authorize Project button (no browser upload tabs, no Docker mounts, no native pickers, no agent dropdowns).
+- **Platform-Appropriate Per-User Mechanisms:**
+  - **Windows:** Per-user startup via registry key `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\TrustNodeLocalAgent` executing a hidden runner script (`wscript.exe ~/.trustnode/trustnode-agent-runner.vbs`). Requires **zero administrator privileges**, starts cleanly upon user login, and runs completely headless without opening a terminal window.
+  - **macOS:** Per-user LaunchAgent plist written to `~/Library/LaunchAgents/com.trustnode.agent.plist` managed via `launchctl load/unload`.
+  - **Linux:** Per-user systemd service written to `~/.config/systemd/user/trustnode-agent.service` managed via `systemctl --user daemon-reload/enable/start`.
+  - **Runtime & PID Management:** Host PHP executable is dynamically resolved without assuming global installation path. Process locking via PID file (`~/.trustnode/agent.pid`) and process aliveness verification (`tasklist` on Windows, `posix_kill` / `ps` on Unix) guarantees single-instance execution and prevents duplicate agent instances.
+
+### 2. Implementation Deliverables
+- **CLI Service Manager (`AgentDaemonManager.php` & `AgentServiceCommand.php`):**
+  - Implemented `php cli/bin/trustnode agent:service [install|start|stop|restart|status|uninstall]`.
+  - `install`: Creates runner scripts (`trustnode-agent-runner.bat` and `.vbs`), configures OS auto-start entry, and launches background agent.
+  - `status`: Displays real-time OS family, process status (RUNNING with PID / STOPPED), auto-start registration (INSTALLED / NOT INSTALLED), host PHP binary path, and runner path.
+  - `stop`: Gracefully terminates background daemon process and cleans PID tracking.
+  - `restart`: Sequentially stops running daemon and initiates a fresh background instance.
+  - `uninstall`: Unregisters auto-start registry key / service files safely.
+- **Process Locking in `AgentWatchCommand.php`:**
+  - Enforced single-instance daemon mode. Checks existing PID file, confirms if the process is alive before proceeding, registers clean shutdown handlers to remove the PID file upon termination, and logs warnings if duplicate daemon startup is attempted.
+- **Dynamic Web UI (`ProjectFormPage.jsx`):**
+  - Displays accurate live Host Agent connection banner. When agent is offline or uninstalled, renders an actionable one-time setup block: `php cli/bin/trustnode agent:service install` with one-click copy.
+  - Automatically polls every 5 seconds so when the agent connects in the background, the UI detects it dynamically without manual page refreshes.
+
+### 3. Verification & Live Workflow Evidence
+- **CLI Daemon Manager Unit Tests:**
+  - Created `cli/tests/AgentDaemonManagerTest.php` testing OS family detection, PHP runtime resolution, PID lifecycle management, and structured status reporting.
+  - `php cli/vendor/bin/phpunit -c phpunit.xml cli/tests/AgentDaemonManagerTest.php cli/tests/DirectoryWatcherTest.php cli/tests/LocalDirectoryPackagerTest.php`:
+    **8 passed (49 assertions)**.
+- **Live Lifecycle Operations:**
+  - Tested `agent:service install` -> Registered `HKCU` startup entry and created runners.
+  - Tested `agent:service status` -> Reported `INSTALLED (Auto-Start Enabled)` and proper runner paths.
+  - Tested `agent:service start`, `agent:service stop`, and `agent:service restart`.
+- **Live Multi-Project Persistent Monitoring (Synthetic Directories):**
+  - Daemon monitored two synthetic project directories simultaneously:
+    - Synth Alpha (`C:\Users\Groot\AppData\Local\Temp\tn-synth-proj-a`, Project #6)
+    - Synth Beta (`C:\Users\Groot\AppData\Local\Temp\tn-synth-proj-b`, Project #7)
+  - **Independent Change Detection & Debounce:**
+    - Modified file in Synth Alpha -> Daemon detected modifications `(+1 ~0 -0)`, debounced for 10s, and triggered Scan #36.
+    - Modified file in Synth Beta -> Daemon independently detected modifications `(+1 ~0 -0)`, debounced for 10s, and triggered Scan #37.
+  - **Revocation / Archival Sync:**
+    - Revoked/disabled continuous scan on Synth Beta -> Server heartbeat omitted project; daemon immediately ceased monitoring Project #7.
+    - Re-enabled continuous scan on Synth Beta -> Server heartbeat returned project; daemon immediately re-synced and resumed monitoring Project #7.
+- **Automated Feature & API Tests:**
+  - `docker exec -i trustnode-php-1 php artisan test tests/Feature/PersistentAgentScanTest.php tests/Feature/CodebaseProjectApiTest.php`
+  - Output: **31 passed (105 assertions)**, 100% pass rate.
+- **Frontend Asset Compilation:**
+  - `npm run build` compiled cleanly via Vite v7.3.6:
+    `public/build/assets/app-lTg6DPfN.js` (550.33 kB).
+- **Integrity:**
+  - `git diff --check` passed with 0 errors. All Git changes preserved.
+
+---
+
+## 2026-10-15: Local Agent Lifecycle & Host Installation Integration
+
+### 1. Root Cause Analysis
+- **Missing Lifecycle Integration in Installers & CLI:**
+  - `install.ps1` and `install.sh` provisioned Docker containers and CLI wrappers, but omitted host agent auto-start service registration.
+  - `trustnode.cmd` and `install.sh`'s `trustnode start` commands only executed `docker compose up -d`, leaving the host Local Agent daemon stopped.
+  - Diagnostics (`trustnode doctor`) and repair (`trustnode repair`) only checked Docker containers and database health, omitting host Local Agent daemon health and auto-start state.
+  - For remote TrustNode web instances, developers had no OS-specific installer package to download and execute on their local workstation.
+
+### 2. Implementation Deliverables
+- **CLI & Installer Host Lifecycle (`trustnode.cmd`, `install.ps1`, `install.sh`):**
+  - **`trustnode start`**: Starts Docker services AND ensures the host Local Agent daemon is active (`agent:service start`).
+  - **`trustnode stop` & `trustnode down`**: Safely terminates the background host daemon alongside container shutdown.
+  - **`trustnode restart`**: Restarts both Docker services and the host Local Agent daemon.
+  - **`trustnode doctor`**: Inspects Docker, `.env`, container services, and reports real-time host Local Agent status (PID, auto-start registration, PHP binary, and runner path).
+  - **`trustnode repair`**: Re-provisions container services and ensures host Local Agent daemon is installed into startup and restarted.
+  - **Host CLI Routing**: Forwarding `agent:*` commands directly to host PHP so daemon execution runs natively on the host workstation.
+  - **`install.ps1` & `install.sh`**: Step 14 automatically configures and starts the persistent host Local Agent daemon upon initial setup.
+- **Remote Agent Installer Download Endpoint (`AgentController.php` & `api.php`):**
+  - Implemented `GET /api/agent/installer?os=windows|linux|macos`.
+  - Generates a self-contained, OS-specific installation script pre-configured with the TrustNode instance URL, API token, and auto-start configuration.
+- **Minimal Project Registration UI (`ProjectFormPage.jsx`):**
+  - Displays truthful host agent connection status without requiring manual CLI command execution.
+  - When agent is offline, provides direct "Download Agent Installer" actions for Windows / Linux / macOS.
+  - Preserved strictly minimal registration form: Absolute Folder Path, Project Name, Scan Profile, Continuous Monitoring toggle, and Authorize Project button.
+
+### 3. Verification & Live Evidence
+- **CLI Diagnostics & Service Lifecycle (`trustnode.cmd`):**
+  - `trustnode doctor`: Output confirmed all checks [OK], Docker running, services running, and Local Agent daemon RUNNING (PID: 11216) with Auto-Start Enabled.
+  - `trustnode agent:service status`: Reported accurate real-time daemon status on Windows host.
+- **Unit & Feature Test Suites:**
+  - `cli/vendor/bin/phpunit cli/tests/AgentDaemonManagerTest.php cli/tests/DirectoryWatcherTest.php cli/tests/LocalDirectoryPackagerTest.php`: **8 passed (49 assertions)**.
+  - `docker compose -f compose.dev.yaml exec -T php php artisan test tests/Feature/PersistentAgentScanTest.php tests/Feature/CodebaseProjectApiTest.php`: **31 passed (105 assertions)**.
+- **Frontend Asset Compilation:**
+  - `npm run build` completed cleanly via Vite v7.3.6 (0 errors).
+- **Integrity:**
+  - `git diff --check` passed with 0 errors. All Git work preserved.

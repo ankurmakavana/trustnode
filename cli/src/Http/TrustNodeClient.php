@@ -15,6 +15,11 @@ class TrustNodeClient
     {
     }
 
+    public function getConfigManager(): ConfigManager
+    {
+        return $this->configManager;
+    }
+
     private function getClient(): Client
     {
         if ($this->client) {
@@ -64,6 +69,11 @@ class TrustNodeClient
     public function post(string $endpoint, array $data = []): array
     {
         return $this->request('POST', $endpoint, ['json' => $data]);
+    }
+
+    public function postMultipart(string $endpoint, array $multipart = []): array
+    {
+        return $this->request('POST', $endpoint, ['multipart' => $multipart]);
     }
 
     public function delete(string $endpoint): array

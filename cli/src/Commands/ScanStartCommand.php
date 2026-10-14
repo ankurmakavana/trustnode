@@ -126,12 +126,12 @@ class ScanStartCommand extends Command
 
     private function getDatabasePassword(InputInterface $input, OutputInterface $output): ?string
     {
-        // 1. Check STDIN (if piped)
-        if (0 === ftell(STDIN)) {
+        // 1. Check STDIN (if piped) - Note: stream_select on Windows STDIN hangs or is not supported
+        if (DIRECTORY_SEPARATOR !== '\\' && defined('STDIN') && is_resource(STDIN) && 0 === @ftell(STDIN)) {
             $read = [STDIN];
             $write = null;
             $except = null;
-            if (stream_select($read, $write, $except, 0) === 1) {
+            if (@stream_select($read, $write, $except, 0) === 1) {
                 $stdinPassword = trim(stream_get_contents(STDIN));
                 if ($stdinPassword !== '') {
                     return $stdinPassword;

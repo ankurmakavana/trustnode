@@ -40,6 +40,8 @@ class StoreCodebaseProjectRequest extends FormRequest
                     ->where('organization_id', $orgId)
                     ->whereNull('deleted_at')
             ],
+            'source_type' => ['nullable', 'string', Rule::in(['workspace_mount', 'agent'])],
+            'agent_id' => ['nullable', 'string', 'max:128'],
             'scan_profile' => ['required', 'string', Rule::enum(ScanProfile::class)],
             'continuous_scan_enabled' => ['required', 'boolean'],
         ];

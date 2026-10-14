@@ -14,11 +14,394 @@ class AgentController extends Controller
     /**
      * Get the health status of the local Agent runtime.
      */
-    public function health(AgentService $agentService): JsonResponse
+    public function health(AgentService $agentService, \Illuminate\Http\Request $request): JsonResponse
     {
+        $targetAgentId = $request->query('agent_id');
+        if ($targetAgentId) {
+            $agentService->setAgentId($targetAgentId);
+        }
+
         return response()->json(
             $agentService->getHealthStatus()
         );
+    }
+
+    /**
+     * Record a heartbeat from a connected local Agent.
+     */
+    public function heartbeat(\Illuminate\Http\Request $request, AgentService $agentService): JsonResponse
+    {
+        $validated = $request->validate([
+            'agent_id' => 'required|string|max:128',
+            'version' => 'nullable|string|max:32',
+            'os' => 'nullable|string|max:64',
+            'hostname' => 'nullable|string|max:255',
+            'execution_mode' => 'nullable|string|max:32',
+            'desktop_picker_supported' => 'nullable|boolean',
+        ]);
+
+        $agentId = $validated['agent_id'];
+        $timeout = config('agent.heartbeat.timeout', 90);
+        $executionMode = $validated['execution_mode'] ?? (($agentId === 'trustnode-local-agent-1') ? 'container' : 'desktop');
+        $desktopPickerSupported = $validated['desktop_picker_supported'] ?? ($executionMode === 'desktop');
+
+        Cache::put("trustnode_agent_heartbeat_{$agentId}", now()->timestamp, $timeout);
+
+        $state = [
+            'state' => 'running',
+            'instance_id' => $validated['hostname'] ?? $agentId,
+            'version' => $validated['version'] ?? '1.0.0',
+            'os' => $validated['os'] ?? PHP_OS_FAMILY,
+            'execution_mode' => $executionMode,
+            'desktop_picker_supported' => (bool) $desktopPickerSupported,
+            'user_id' => $request->user()?->id,
+            'organization_id' => $request->user()?->teams()->first()?->organization_id,
+            'started_at' => now()->toIso8601String(),
+            'last_heartbeat_at' => now()->toIso8601String(),
+        ];
+
+        DB::table('agent_states')->updateOrInsert(
+            ['agent_id' => $agentId],
+            [
+                'state' => json_encode($state),
+                'updated_at' => now(),
+            ]
+        );
+
+        $pendingPicker = Cache::pull("agent_picker_request_{$agentId}");
+        $pendingScan = Cache::pull("agent_scan_pending_{$agentId}");
+
+        // Return all currently active projects assigned to this agent for continuous multi-project monitoring
+        $assignedProjects = \App\Models\CodebaseProject::query()
+            ->where('agent_id', $agentId)
+            ->where('status', \App\Enums\CodebaseProject\CodebaseProjectStatus::ACTIVE)
+            ->where('continuous_scan_enabled', true)
+            ->whereNull('deleted_at')
+            ->get(['id', 'name', 'path', 'scan_profile', 'continuous_scan_enabled', 'status']);
+
+        return response()->json([
+            'status' => 'acknowledged',
+            'agent_id' => $agentId,
+            'timestamp' => now()->toISOString(),
+            'pending_picker_request' => $pendingPicker,
+            'pending_scan_request' => $pendingScan,
+            'assigned_projects' => $assignedProjects,
+        ]);
+    }
+
+    /**
+     * List known/active agents for selection in the UI.
+     */
+    public function list(): JsonResponse
+    {
+        $records = DB::table('agent_states')->get();
+        $timeout = config('agent.heartbeat.timeout', 90);
+
+        $agents = $records->map(function ($row) use ($timeout) {
+            $state = json_decode($row->state, true) ?? [];
+            $cachedHb = Cache::get("trustnode_agent_heartbeat_{$row->agent_id}");
+            $staleThreshold = now()->subSeconds($timeout)->timestamp;
+            $dbTimestamp = !empty($row->updated_at) ? strtotime((string) $row->updated_at) : 0;
+            $effectiveHb = max((int) $cachedHb, $dbTimestamp);
+            $isOnline = $effectiveHb >= $staleThreshold;
+            $executionMode = $state['execution_mode'] ?? (($row->agent_id === 'trustnode-local-agent-1') ? 'container' : 'desktop');
+            $desktopPickerSupported = $state['desktop_picker_supported'] ?? ($executionMode === 'desktop');
+
+            return [
+                'agent_id' => $row->agent_id,
+                'status' => $isOnline ? 'online' : 'offline',
+                'type' => $executionMode,
+                'execution_mode' => $executionMode,
+                'desktop_picker_supported' => (bool) $desktopPickerSupported,
+                'version' => $state['version'] ?? '1.0.0',
+                'os' => $state['os'] ?? ($executionMode === 'desktop' ? PHP_OS_FAMILY : 'Linux'),
+                'last_heartbeat_at' => $row->updated_at,
+            ];
+        })->sort(function ($a, $b) {
+            // Sort: online first, then desktop picker capable first, then by last_heartbeat
+            if ($a['status'] !== $b['status']) {
+                return $a['status'] === 'online' ? -1 : 1;
+            }
+            if ($a['desktop_picker_supported'] !== $b['desktop_picker_supported']) {
+                return $a['desktop_picker_supported'] ? -1 : 1;
+            }
+            return strcmp((string)$b['last_heartbeat_at'], (string)$a['last_heartbeat_at']);
+        })->values();
+
+        return response()->json([
+            'agents' => $agents
+        ]);
+    }
+
+    /**
+     * Download or retrieve an OS-specific Local Agent installer script.
+     */
+    public function installer(\Illuminate\Http\Request $request): \Illuminate\Http\Response|JsonResponse
+    {
+        $os = strtolower((string) $request->query('os', 'windows'));
+        $baseUrl = url('/');
+        $token = $request->user()?->createToken('local-agent-installer', ['*'])->plainTextToken ?? 'YOUR_API_TOKEN';
+
+        if ($os === 'windows' || $os === 'win') {
+            $script = <<<PS1
+# TrustNode Local Agent Installer (Windows)
+\$ErrorActionPreference = "Stop"
+
+Write-Host "===============================================" -ForegroundColor Cyan
+Write-Host " TrustNode Local Agent Setup " -ForegroundColor Cyan
+Write-Host "===============================================" -ForegroundColor Cyan
+
+\$trustNodeDir = "\$HOME\\.trustnode"
+if (-not (Test-Path \$trustNodeDir)) {
+    New-Item -ItemType Directory -Path \$trustNodeDir -Force | Out-Null
+}
+
+# 1. Detect PHP runtime
+\$php = (Get-Command php -ErrorAction SilentlyContinue)?.Source
+if (-not \$php -and (Test-Path "C:\\xampp\\php\\php.exe")) {
+    \$php = "C:\\xampp\\php\\php.exe"
+}
+
+if (-not \$php) {
+    Write-Host "[ERROR] PHP 8.2+ runtime not detected on your system." -ForegroundColor Red
+    Write-Host "Please install PHP (or XAMPP) and add it to your PATH before proceeding." -ForegroundColor Yellow
+    Exit 1
+}
+
+Write-Host "[OK] Using PHP Runtime: \$php" -ForegroundColor Green
+
+# 2. Write Agent configuration
+\$configFile = "\$trustNodeDir\\config"
+\$configJson = @{
+    server = "{$baseUrl}"
+    token = "{$token}"
+    agent_id = "agent-desktop-" + [guid]::NewGuid().ToString().Substring(0, 8)
+} | ConvertTo-Json
+
+Set-Content -Path \$configFile -Value \$configJson -Force
+Write-Host "[OK] Configured TrustNode connection to {$baseUrl}" -ForegroundColor Green
+
+# 3. Download TrustNode CLI bundle if not local
+\$cliScript = "\$trustNodeDir\\trustnode.php"
+try {
+    Invoke-WebRequest -Uri "{$baseUrl}/api/agent/cli-script" -OutFile \$cliScript -UseBasicParsing -ErrorAction SilentlyContinue
+} catch {}
+
+Write-Host "`nTrustNode Local Agent is configured and ready." -ForegroundColor Cyan
+Write-Host "To start background auto-start daemon, run:" -ForegroundColor Yellow
+Write-Host "  trustnode agent:service install" -ForegroundColor White
+PS1;
+            return response($script, 200, [
+                'Content-Type' => 'text/plain',
+                'Content-Disposition' => 'attachment; filename="install-agent.ps1"',
+            ]);
+        }
+
+        // Unix (macOS / Linux)
+        $script = <<<SH
+#!/usr/bin/env bash
+set -e
+
+echo "==============================================="
+echo " TrustNode Local Agent Setup (macOS / Linux) "
+echo "==============================================="
+
+TRUSTNODE_DIR="\$HOME/.trustnode"
+mkdir -p "\$TRUSTNODE_DIR"
+
+HOST_PHP=\$(command -v php 2>/dev/null)
+if [ -z "\$HOST_PHP" ]; then
+    echo "[ERROR] PHP 8.2+ runtime not detected on your system." >&2
+    echo "Please install PHP before proceeding." >&2
+    exit 1
+fi
+
+echo "[OK] Using PHP Runtime: \$HOST_PHP"
+
+CONFIG_FILE="\$TRUSTNODE_DIR/config"
+cat > "\$CONFIG_FILE" << EOF
+{
+    "server": "{$baseUrl}",
+    "token": "{$token}",
+    "agent_id": "agent-host-\$(head -c 4 /dev/urandom | xxd -p)"
+}
+EOF
+
+chmod 600 "\$CONFIG_FILE"
+echo "[OK] Configured TrustNode connection to {$baseUrl}"
+echo "To start background auto-start daemon, run:"
+echo "  trustnode agent:service install"
+SH;
+
+        return response($script, 200, [
+            'Content-Type' => 'text/plain',
+            'Content-Disposition' => 'attachment; filename="install-agent.sh"',
+        ]);
+    }
+
+    /**
+     * Request the active local Agent to open the native folder picker.
+     */
+    public function pickFolderRequest(\Illuminate\Http\Request $request): JsonResponse
+    {
+        $timeout = config('agent.heartbeat.timeout', 90);
+        $staleThreshold = now()->subSeconds($timeout)->timestamp;
+        $requestedAgentId = $request->input('agent_id');
+
+        // Retrieve active agents that have an active heartbeat
+        $activeAgents = DB::table('agent_states')->get()->filter(function ($row) use ($staleThreshold) {
+            $cachedHb = Cache::get("trustnode_agent_heartbeat_{$row->agent_id}");
+            $dbTimestamp = !empty($row->updated_at) ? strtotime((string) $row->updated_at) : 0;
+            $effectiveHb = max((int) $cachedHb, $dbTimestamp);
+            return $effectiveHb >= $staleThreshold;
+        })->values();
+
+        if ($activeAgents->isEmpty()) {
+            return response()->json([
+                'message' => 'No active Local Agent connected. Please start your agent in terminal on your computer with `trustnode agent:watch`.'
+            ], 503);
+        }
+
+        $userId = $request->user()?->id;
+        $userOrgId = $request->user()?->teams()->first()?->organization_id;
+
+        // If a specific agent_id was requested by the user, verify it exists and supports desktop picking
+        $chosenAgent = null;
+        if ($requestedAgentId) {
+            $candidate = $activeAgents->firstWhere('agent_id', $requestedAgentId);
+            if ($candidate) {
+                $candidateState = json_decode($candidate->state, true) ?? [];
+                $canPick = ($candidateState['desktop_picker_supported'] ?? false) || (($candidate->agent_id !== 'trustnode-local-agent-1') && (($candidateState['execution_mode'] ?? 'desktop') === 'desktop'));
+                if ($canPick) {
+                    $chosenAgent = $candidate;
+                } else {
+                    return response()->json([
+                        'message' => "The selected Agent ({$requestedAgentId}) is running in container/service mode and cannot display native desktop dialogs. Start the desktop agent on your host with `php cli/bin/trustnode agent:watch`."
+                    ], 422);
+                }
+            }
+        }
+
+        // Auto-select eligible host desktop agent: strictly desktop-capable
+        if (!$chosenAgent) {
+            $desktopAgents = $activeAgents->filter(function ($row) use ($userId, $userOrgId) {
+                $st = json_decode($row->state, true) ?? [];
+                $canPick = ($st['desktop_picker_supported'] ?? false) || (($row->agent_id !== 'trustnode-local-agent-1') && (($st['execution_mode'] ?? 'desktop') === 'desktop'));
+                if (!$canPick) {
+                    return false;
+                }
+                // If agent recorded a user_id or organization_id, check for tenant match
+                if ($userId && isset($st['user_id']) && $st['user_id'] != $userId) {
+                    if ($userOrgId && isset($st['organization_id']) && $st['organization_id'] != $userOrgId) {
+                        return false;
+                    }
+                }
+                return true;
+            })->sortByDesc('updated_at')->values();
+
+            if ($desktopAgents->isNotEmpty()) {
+                $chosenAgent = $desktopAgents->first();
+            } else {
+                return response()->json([
+                    'message' => 'No interactive desktop Agent is connected. Please run `php cli/bin/trustnode agent:watch` in terminal on your computer.'
+                ], 422);
+            }
+        }
+
+        $requestId = 'pfr_' . bin2hex(random_bytes(8));
+
+        // Signal agent to trigger folder picker dialog (TTL: 60s)
+        Cache::put("agent_picker_request_{$chosenAgent->agent_id}", [
+            'request_id' => $requestId,
+            'user_id' => $request->user()?->id,
+            'status' => 'pending',
+            'created_at' => now()->timestamp,
+        ], 60);
+
+        // Store request metadata for verification
+        Cache::put("agent_picker_meta_{$requestId}", [
+            'user_id' => $request->user()?->id,
+            'agent_id' => $chosenAgent->agent_id,
+            'created_at' => now()->timestamp,
+        ], 120);
+
+        return response()->json([
+            'request_id' => $requestId,
+            'agent_id' => $chosenAgent->agent_id,
+            'message' => 'Folder picker request initiated on agent.'
+        ]);
+    }
+
+    /**
+     * Report or check folder picker selection status.
+     */
+    public function pickFolderStatus(\Illuminate\Http\Request $request): JsonResponse
+    {
+        $requestId = $request->input('request_id');
+        $agentId = $request->input('agent_id');
+
+        if ($request->isMethod('post')) {
+            // Agent posting the selected path back
+            $validated = $request->validate([
+                'request_id' => 'required|string',
+                'agent_id' => 'required|string',
+                'path' => 'nullable|string',
+                'canceled' => 'nullable|boolean',
+            ]);
+
+            // Validate that request_id was actually issued to this agent
+            $meta = Cache::get("agent_picker_meta_{$validated['request_id']}");
+            if (!$meta || $meta['agent_id'] !== $validated['agent_id']) {
+                return response()->json(['message' => 'Invalid or expired folder picker request.'], 403);
+            }
+
+            $path = $validated['path'] ?? null;
+            $canceled = (bool) ($validated['canceled'] ?? false);
+
+            if ($path !== null && !$canceled) {
+                // Reject path traversal
+                if (str_contains($path, '..') || str_contains($path, "\0")) {
+                    return response()->json(['message' => 'Invalid path.'], 422);
+                }
+
+                // Disallow scanning system roots, drive roots, or critical parent paths
+                $normalizedPath = rtrim(str_replace('\\', '/', $path), '/');
+                if (preg_match('/^[a-zA-Z]:$/', $normalizedPath) || $normalizedPath === '' || $normalizedPath === '/' || $normalizedPath === '/etc' || $normalizedPath === '/root' || preg_match('/^[a-zA-Z]:[\/\\\\]Windows/i', $path)) {
+                    return response()->json(['message' => 'Authorizing system root, entire drives, or critical OS directories is not permitted.'], 422);
+                }
+            }
+
+            Cache::put("agent_picker_result_{$validated['request_id']}", [
+                'path' => $path,
+                'canceled' => $canceled,
+                'agent_id' => $validated['agent_id'],
+                'completed_at' => now()->timestamp,
+            ], 120);
+
+            return response()->json(['status' => 'acknowledged']);
+        }
+
+        // Browser polling status
+        if (!$requestId) {
+            return response()->json(['message' => 'Missing request_id parameter.'], 422);
+        }
+
+        $meta = Cache::get("agent_picker_meta_{$requestId}");
+        if ($meta && isset($meta['user_id']) && $request->user()?->id && $meta['user_id'] !== $request->user()->id) {
+            return response()->json(['message' => 'Unauthorized request correlation.'], 403);
+        }
+
+        $result = Cache::get("agent_picker_result_{$requestId}");
+        if ($result) {
+            return response()->json([
+                'status' => 'completed',
+                'result' => $result
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'pending'
+        ]);
     }
 
     /**

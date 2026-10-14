@@ -19,6 +19,8 @@ class CodebaseProjectResource extends JsonResource
             'uuid' => $this->uuid,
             'name' => $this->name,
             'path' => $this->path,
+            'source_type' => $this->source_type ?? 'workspace_mount',
+            'agent_id' => $this->agent_id,
             'scan_profile' => $this->scan_profile?->value ?? $this->scan_profile,
             'continuous_scan_enabled' => $this->continuous_scan_enabled,
             'status' => $this->status?->value ?? $this->status,

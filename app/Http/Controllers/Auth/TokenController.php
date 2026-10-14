@@ -23,6 +23,8 @@ final class TokenController extends Controller
         'repositories:write',
         'notifications:read',
         'notifications:write',
+        'agent:read',
+        'agent:write',
     ];
 
     /**

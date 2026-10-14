@@ -439,7 +439,27 @@ exit /b !EXIT_CODE!
     $statusCheck = docker compose -f compose.dev.yaml exec -T -e TRUSTNODE_API_URL=http://nginx php php cli/bin/trustnode status 2>&1
     Write-Log $statusCheck
 
-    # 14. Final success
+    # 14. Configure and Start Host Local Agent Daemon
+    $global:currentStep = "Configuring Host Local Agent Daemon"
+    Write-Log "`n[*] Configuring Host Local Agent Daemon for continuous monitoring..."
+    $hostPhp = (Get-Command php -ErrorAction SilentlyContinue)?.Source
+    if (-not $hostPhp -and (Test-Path "C:\xampp\php\php.exe")) {
+        $hostPhp = "C:\xampp\php\php.exe"
+    }
+
+    if ($hostPhp -and (Test-Path "$installDir\cli\bin\trustnode")) {
+        try {
+            & $hostPhp "$installDir\cli\bin\trustnode" agent:service install
+            & $hostPhp "$installDir\cli\bin\trustnode" agent:service start
+            Write-Log "Host Local Agent daemon installed and started in background." "SUCCESS"
+        } catch {
+            Write-Log "Notice: Host Local Agent daemon setup skipped: $($_.Exception.Message)" "WARN"
+        }
+    } else {
+        Write-Log "Notice: Host PHP runtime not found. Local Agent daemon can be installed later with 'trustnode repair'." "INFO"
+    }
+
+    # 15. Final success
     $global:currentStep = "Finished"
     Write-Log "`n==============================================="
     Write-Log " TrustNode installed successfully! " "SUCCESS"

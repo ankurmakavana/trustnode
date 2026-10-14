@@ -29,6 +29,7 @@ class CheckTokenAbilities
         'projects' => ['read' => 'projects:read', 'write' => 'projects:write'],
         'repositories' => ['read' => 'repositories:read', 'write' => 'repositories:write'],
         'notifications' => ['read' => 'notifications:read', 'write' => 'notifications:write'],
+        'agent' => ['read' => 'agent:read', 'write' => 'agent:write'],
     ];
 
     /** Read-only endpoints every valid token may use. They expose no other user's data. */

@@ -161,6 +161,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
     });
     // Agent Endpoints
     Route::get('/agent/health', [\App\Http\Controllers\AgentController::class, 'health']);
+    Route::post('/agent/heartbeat', [\App\Http\Controllers\AgentController::class, 'heartbeat']);
+    Route::get('/agent/list', [\App\Http\Controllers\AgentController::class, 'list']);
+    Route::get('/agent/installer', [\App\Http\Controllers\AgentController::class, 'installer']);
+    Route::post('/agent/pick-folder/request', [\App\Http\Controllers\AgentController::class, 'pickFolderRequest']);
+    Route::match(['get', 'post'], '/agent/pick-folder/status', [\App\Http\Controllers\AgentController::class, 'pickFolderStatus']);
     Route::get('/agent/console', [\App\Http\Controllers\AgentController::class, 'console']);
 
     // Codebase Project Endpoints

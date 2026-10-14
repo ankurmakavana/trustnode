@@ -20,6 +20,8 @@ use TrustNode\Cli\Commands\RepairCommand;
 use TrustNode\Cli\Commands\ProjectListCommand;
 use TrustNode\Cli\Commands\ProjectAddCommand;
 use TrustNode\Cli\Commands\ProjectScanCommand;
+use TrustNode\Cli\Commands\AgentWatchCommand;
+use TrustNode\Cli\Commands\AgentServiceCommand;
 // Keep existing auth commands just in case
 require_once __DIR__ . '/../src/Commands/ScanLocalUploadCommand.php';
 use TrustNode\Cli\Commands\ScanLocalUploadCommand;
@@ -37,6 +39,8 @@ $client = new TrustNodeClient($configManager);
 $application->add(new ProjectListCommand($client));
 $application->add(new ProjectAddCommand($client));
 $application->add(new ProjectScanCommand($client));
+$application->add(new AgentWatchCommand($client, $configManager));
+$application->add(new AgentServiceCommand($configManager));
 $application->add(new ScanCommand($client));
 $application->add(new ScanLocalUploadCommand($client, $configManager));
 $application->add(new StatusCommand($client));

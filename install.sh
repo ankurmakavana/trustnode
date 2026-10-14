@@ -267,19 +267,47 @@ if ! docker info >/dev/null 2>&1; then
 fi
 CMD="\$1"
 CMD_ARG2="\$2"
+
+# Direct routing for agent:* commands to host PHP
+if [[ "\$CMD" == agent:* ]]; then
+    HOST_PHP=\$(command -v php 2>/dev/null)
+    if [ -n "\$HOST_PHP" ] && [ -f "$INSTALL_DIR/cli/bin/trustnode" ]; then
+        "\$HOST_PHP" "$INSTALL_DIR/cli/bin/trustnode" "\$@"
+        exit \$?
+    fi
+fi
+
 if [ "\$CMD" = "start" ]; then
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" up -d
+    START_EC=\$?
+    if [ \$START_EC -eq 0 ]; then
+        HOST_PHP=\$(command -v php 2>/dev/null)
+        if [ -n "\$HOST_PHP" ] && [ -f "$INSTALL_DIR/cli/bin/trustnode" ]; then
+            "\$HOST_PHP" "$INSTALL_DIR/cli/bin/trustnode" agent:service start >/dev/null 2>&1 || true
+        fi
+    fi
+    exit \$START_EC
 elif [ "\$CMD" = "stop" ]; then
+    HOST_PHP=\$(command -v php 2>/dev/null)
+    if [ -n "\$HOST_PHP" ] && [ -f "$INSTALL_DIR/cli/bin/trustnode" ]; then
+        "\$HOST_PHP" "$INSTALL_DIR/cli/bin/trustnode" agent:service stop >/dev/null 2>&1 || true
+    fi
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" stop
+    exit \$?
 elif [ "\$CMD" = "restart" ]; then
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" restart
+    RESTART_EC=\$?
+    HOST_PHP=\$(command -v php 2>/dev/null)
+    if [ -n "\$HOST_PHP" ] && [ -f "$INSTALL_DIR/cli/bin/trustnode" ]; then
+        "\$HOST_PHP" "$INSTALL_DIR/cli/bin/trustnode" agent:service restart >/dev/null 2>&1 || true
+    fi
+    exit \$RESTART_EC
 elif [ "\$CMD" = "status" ]; then
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" ps
+    exit \$?
 elif [ "\$CMD" = "logs" ]; then
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" logs -f "\$CMD_ARG2"
-    echo "[OK] TrustNode updated successfully."
-    echo "Version: \$LATEST_VERSION"
-    exit 0
+    exit \$?
 elif [ "\$CMD" = "doctor" ]; then
     echo "Running TrustNode Diagnostics..."
     echo ""
@@ -289,6 +317,13 @@ elif [ "\$CMD" = "doctor" ]; then
     if [ -f "$INSTALL_DIR/.env" ]; then echo "[OK] .env configuration found"; else echo "[FAIL] .env is missing"; fi
     echo "Checking Services..."
     if docker compose -f "$INSTALL_DIR/compose.dev.yaml" ps | grep -q "php"; then echo "[OK] Services are running"; else echo "[FAIL] Services are stopped"; fi
+    echo "Checking Host Local Agent Daemon..."
+    HOST_PHP=\$(command -v php 2>/dev/null)
+    if [ -n "\$HOST_PHP" ] && [ -f "$INSTALL_DIR/cli/bin/trustnode" ]; then
+        "\$HOST_PHP" "$INSTALL_DIR/cli/bin/trustnode" agent:service status
+    else
+        echo "[WARN] Host PHP runtime not found. Local Agent daemon cannot run directly on host."
+    fi
     echo ""
     echo "Run 'trustnode repair' to attempt safe automated fixes."
     exit 0
@@ -299,6 +334,12 @@ elif [ "\$CMD" = "repair" ]; then
         exit 1
     fi
     docker compose -f "$INSTALL_DIR/compose.dev.yaml" up -d
+    echo "Repairing Host Local Agent Daemon..."
+    HOST_PHP=\$(command -v php 2>/dev/null)
+    if [ -n "\$HOST_PHP" ] && [ -f "$INSTALL_DIR/cli/bin/trustnode" ]; then
+        "\$HOST_PHP" "$INSTALL_DIR/cli/bin/trustnode" agent:service install >/dev/null 2>&1 || true
+        "\$HOST_PHP" "$INSTALL_DIR/cli/bin/trustnode" agent:service restart >/dev/null 2>&1 || true
+    fi
     echo "Repair completed. Run 'trustnode doctor' to verify."
     exit 0
 elif [ "\$CMD" = "uninstall" ]; then
@@ -406,7 +447,19 @@ CURRENT_STEP="Verifying installation"
 write_log "\n[*] Verifying installation..."
 "$CLI_WRAPPER" status
 
-# 14. Final success
+# 14. Configure and Start Host Local Agent Daemon
+CURRENT_STEP="Configuring Host Local Agent Daemon"
+write_log "\n[*] Configuring Host Local Agent Daemon for continuous monitoring..."
+HOST_PHP=$(command -v php 2>/dev/null)
+if [ -n "$HOST_PHP" ] && [ -f "$INSTALL_DIR/cli/bin/trustnode" ]; then
+    "$HOST_PHP" "$INSTALL_DIR/cli/bin/trustnode" agent:service install >/dev/null 2>&1 || true
+    "$HOST_PHP" "$INSTALL_DIR/cli/bin/trustnode" agent:service start >/dev/null 2>&1 || true
+    write_log "Host Local Agent daemon installed and started in background." "SUCCESS"
+else
+    write_log "Notice: Host PHP runtime not found. Local Agent daemon can be installed later with 'trustnode repair'." "INFO"
+fi
+
+# 15. Final success
 CURRENT_STEP="Finished"
 write_log "\n==============================================="
 write_log " TrustNode installed successfully! " "SUCCESS"

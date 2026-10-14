@@ -89,80 +89,138 @@ class ScanCommand extends Command
         }
 
         $target = $actionOrTarget;
-        $output->writeln("Checking repository access...");
 
-        $token = null;
-        $visibility = 'public';
+        // Check if target is a local folder
+        if (is_dir($target)) {
+            $realTarget = realpath($target);
+            $output->writeln("Local folder detected: <info>{$realTarget}</info>");
+            $output->writeln("Packaging eligible source files (excluding .git, dependencies, binaries, secrets)...");
 
-        try {
-            $validation = $this->client->post('api/repositories/validate-access', [
-                'repository_url' => $target
-            ]);
+            $packager = new \TrustNode\Cli\Services\LocalDirectoryPackager();
+            $tempZip = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'tn_scan_' . uniqid() . '.zip';
 
-            if (empty($validation['valid'])) {
-                $output->writeln('<comment>Repository access requires authentication.</comment>');
-                $output->writeln('<comment>The repository may be private, unavailable, or GitHub rejected anonymous access.</comment>');
-                $output->writeln('');
-                $output->writeln('<comment>GitHub Personal Access Token is required.</comment>');
-                
-                $helper = $this->getHelper('question');
-                $confirmQuestion = new \Symfony\Component\Console\Question\ConfirmationQuestion('Enter token now? [yes/no] ', false);
-                
-                if (!$helper->ask($input, $output, $confirmQuestion)) {
-                    $output->writeln('<error>Authentication cancelled.</error>');
-                    return Command::FAILURE;
-                }
-                
-                $question = new \Symfony\Component\Console\Question\Question('Token: ');
-                $question->setHidden(true);
-                $question->setHiddenFallback(false);
-                
-                $token = $helper->ask($input, $output, $question);
-                
-                if (!$token) {
-                    $output->writeln('<error>Authentication cancelled. Cannot scan a private repository without credentials.</error>');
-                    return Command::FAILURE;
-                }
-                
-                $visibility = 'private';
-                
-                // Validate again with the token
-                $validation = $this->client->post('api/repositories/validate-access', [
-                    'repository_url' => $target,
-                    'token' => $token
+            try {
+                $summary = $packager->package($realTarget, $tempZip);
+                $sizeMb = round($summary['total_size'] / (1024 * 1024), 2);
+                $output->writeln("Packaged {$summary['files_count']} files ({$sizeMb} MB).");
+
+                $output->writeln("Uploading to TrustNode scanner...");
+                $configManager = $this->client->getConfigManager();
+                $baseUrl = rtrim($configManager->getUrl(), '/') . '/';
+                $token = $configManager->getToken();
+
+                $guzzleClient = new \GuzzleHttp\Client(['base_uri' => $baseUrl]);
+                $response = $guzzleClient->request('POST', 'api/scans/local', [
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $token,
+                        'Accept' => 'application/json',
+                    ],
+                    'multipart' => [
+                        [
+                            'name'     => 'archive',
+                            'contents' => fopen($tempZip, 'r'),
+                            'filename' => basename($realTarget) . '.zip',
+                        ],
+                        [
+                            'name'     => 'target',
+                            'contents' => basename($realTarget),
+                        ],
+                    ],
                 ]);
-                
-                if (empty($validation['valid'])) {
-                    $output->writeln('<error>The provided token is invalid or does not have access to the repository.</error>');
-                    return Command::FAILURE;
+
+                $body = json_decode($response->getBody()->getContents(), true);
+                $scanId = $body['id'] ?? 'unknown';
+
+                $output->writeln("<info>Scan queued successfully.</info>\n");
+                $output->writeln("Scan ID: {$scanId}");
+            } catch (\Exception $e) {
+                $output->writeln('<error>Failed to process local scan: ' . $e->getMessage() . '</error>');
+                return Command::FAILURE;
+            } finally {
+                if (file_exists($tempZip)) {
+                    @unlink($tempZip);
                 }
             }
-            
-            $output->writeln("Connecting repository to TrustNode...");
-            $repoPayload = [
-                'repository_url' => $target,
-                'visibility' => $visibility,
-            ];
-            if ($token) {
-                $repoPayload['token'] = $token;
-            }
-            
-            $repoData = $this->client->post('api/repositories', $repoPayload);
-            $repoId = $repoData['id'] ?? null;
-            
-            if (!$repoId) {
-                $output->writeln('<error>Failed to connect repository.</error>');
+        } else {
+            $output->writeln("Checking repository access...");
+
+            $token = null;
+            $visibility = 'public';
+
+            try {
+                $validation = $this->client->post('api/repositories/validate-access', [
+                    'repository_url' => $target
+                ]);
+
+                if (empty($validation['valid'])) {
+                    $output->writeln('<comment>Repository access requires authentication.</comment>');
+                    $output->writeln('<comment>The repository may be private, unavailable, or GitHub rejected anonymous access.</comment>');
+                    $output->writeln('');
+                    $output->writeln('<comment>GitHub Personal Access Token is required.</comment>');
+
+                    $helper = $this->getHelper('question');
+                    $confirmQuestion = new \Symfony\Component\Console\Question\ConfirmationQuestion('Enter token now? [yes/no] ', false);
+
+                    if (!$helper->ask($input, $output, $confirmQuestion)) {
+                        $output->writeln('<error>Authentication cancelled.</error>');
+                        return Command::FAILURE;
+                    }
+
+                    $question = new \Symfony\Component\Console\Question\Question('Token: ');
+                    $question->setHidden(true);
+                    $question->setHiddenFallback(false);
+
+                    $token = $helper->ask($input, $output, $question);
+
+                    if (!$token) {
+                        $output->writeln('<error>Authentication cancelled. Cannot scan a private repository without credentials.</error>');
+                        return Command::FAILURE;
+                    }
+
+                    $visibility = 'private';
+
+                    // Validate again with the token
+                    $validation = $this->client->post('api/repositories/validate-access', [
+                        'repository_url' => $target,
+                        'token' => $token
+                    ]);
+
+                    if (empty($validation['valid'])) {
+                        $output->writeln('<error>The provided token is invalid or does not have access to the repository.</error>');
+                        return Command::FAILURE;
+                    }
+                }
+
+                $output->writeln("Connecting repository to TrustNode...");
+                $repoPayload = [
+                    'repository_url' => $target,
+                    'visibility' => $visibility,
+                ];
+                if ($token) {
+                    $repoPayload['token'] = $token;
+                }
+
+                $repoData = $this->client->post('api/repositories', $repoPayload);
+                $repoId = $repoData['id'] ?? null;
+
+                if (!$repoId) {
+                    $output->writeln('<error>Failed to connect repository.</error>');
+                    return Command::FAILURE;
+                }
+
+                $output->writeln("Triggering scan...");
+                $scanData = $this->client->post("api/repositories/{$repoId}/scan");
+                $scanId = $scanData['id'] ?? 'unknown';
+
+                $output->writeln("<info>Scan started.</info>\n");
+                $output->writeln("Scanning repository...\n");
+            } catch (\Exception $e) {
+                $output->writeln('<error>' . $e->getMessage() . '</error>');
                 return Command::FAILURE;
             }
-            
-            $output->writeln("Triggering scan...");
-            $scanData = $this->client->post("api/repositories/{$repoId}/scan");
-            $scanId = $scanData['id'] ?? 'unknown';
-            
-            $output->writeln("<info>Scan started.</info>\n");
-            $output->writeln("Scanning repository...\n");
-            
-            $status = 'queued';
+        }
+
+        $status = 'queued';
             $progress = 0;
             $filesScanned = 0;
             $scanResource = [];
@@ -290,10 +348,5 @@ class ScanCommand extends Command
             }
 
             return Command::SUCCESS;
-            
-        } catch (\Exception $e) {
-            $output->writeln('<error>' . $e->getMessage() . '</error>');
-            return Command::FAILURE;
-        }
     }
 }

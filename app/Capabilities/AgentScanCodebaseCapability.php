@@ -97,20 +97,34 @@ class AgentScanCodebaseCapability implements AgentCapabilityInterface
             
             $scanProfile = $project->scan_profile?->value ?? $arguments['scan_profile'] ?? 'standard';
             
-            if (!$mountPrefix) {
-                throw new \RuntimeException("Scan mount directory is not configured or unavailable.");
-            }
-            
-            $targetPath = rtrim($scanMountDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . ltrim($project->path, '/\\');
-            $canonicalTarget = realpath($targetPath);
-            
-            if ($canonicalTarget === false || !is_dir($canonicalTarget)) {
-                throw new \RuntimeException("Invalid target path: directory does not exist or cannot be resolved.");
-            }
-            
-            // Boundary check avoiding prefix-sibling attacks
-            if ($canonicalTarget !== rtrim($mountPrefix, DIRECTORY_SEPARATOR) && !str_starts_with($canonicalTarget, $mountPrefix)) {
-                throw new \RuntimeException("Invalid or unauthorized target path. Target must be within the designated scan mount.");
+            if ($project->source_type === 'agent') {
+                // Agent-managed project: path is resolved on the local agent filesystem
+                $canonicalTarget = realpath($project->path);
+                if ($canonicalTarget === false || !is_dir($canonicalTarget)) {
+                    throw new \RuntimeException("Invalid target path: directory does not exist or cannot be resolved on this system.");
+                }
+
+                // Prevent scanning entire drive root or system root (Windows e.g. C:\ or C:\Windows, Linux / or /etc)
+                $trimmedTarget = rtrim(str_replace('\\', '/', $canonicalTarget), '/');
+                if (preg_match('/^[a-zA-Z]:$/', $trimmedTarget) || $trimmedTarget === '' || $trimmedTarget === '/root' || $trimmedTarget === '/etc') {
+                    throw new \RuntimeException("Scanning root or critical system directories is forbidden.");
+                }
+            } else {
+                if (!$mountPrefix) {
+                    throw new \RuntimeException("Scan mount directory is not configured or unavailable.");
+                }
+
+                $targetPath = rtrim($scanMountDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . ltrim($project->path, '/\\');
+                $canonicalTarget = realpath($targetPath);
+
+                if ($canonicalTarget === false || !is_dir($canonicalTarget)) {
+                    throw new \RuntimeException("Invalid target path: directory does not exist or cannot be resolved.");
+                }
+
+                // Boundary check avoiding prefix-sibling attacks
+                if ($canonicalTarget !== rtrim($mountPrefix, DIRECTORY_SEPARATOR) && !str_starts_with($canonicalTarget, $mountPrefix)) {
+                    throw new \RuntimeException("Invalid or unauthorized target path. Target must be within the designated scan mount.");
+                }
             }
         } elseif ($targetPath) {
             // Legacy flow

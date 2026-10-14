@@ -18,6 +18,8 @@ class CodebaseProject extends Model
         'uuid',
         'name',
         'path',
+        'source_type',
+        'agent_id',
         'scan_profile',
         'continuous_scan_enabled',
         'organization_id',

@@ -138,7 +138,9 @@ class AgentService
         
         $targetState = array_merge($this->state, [
             'state' => self::S_STARTING,
-            'instance_id' => $this->instanceId
+            'instance_id' => $this->instanceId,
+            'execution_mode' => 'container',
+            'desktop_picker_supported' => false,
         ]);
         
         if ($driver === 'database') {
@@ -355,6 +357,8 @@ class AgentService
     protected function persistState($state)
     {
         $state['instance_id'] = $this->instanceId;
+        $state['execution_mode'] = 'container';
+        $state['desktop_picker_supported'] = false;
 
         $driver = $this->config['state']['driver'];
         $table = $this->config['state']['table'];
@@ -427,6 +431,12 @@ class AgentService
         }
 
         return $this->config['id'];
+    }
+
+    public function setAgentId(string $id): void
+    {
+        $this->config['id'] = $id;
+        $this->state = $this->loadState();
     }
 
     public function getInstanceId()

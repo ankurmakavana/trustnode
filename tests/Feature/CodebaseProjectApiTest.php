@@ -138,6 +138,111 @@ class CodebaseProjectApiTest extends TestCase
         $response->assertJsonPath('message', 'Workspace mount is unavailable or not configured correctly.');
     }
 
+    public function test_empty_workspace_returns_an_empty_directories_list()
+    {
+        $emptyMount = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'trustnode_test_empty_' . uniqid();
+        mkdir($emptyMount, 0777, true);
+        config(['agent.scan_mount_dir' => $emptyMount]);
+
+        try {
+            $user = $this->createUserWithPermissions(['targets.view']);
+            $response = $this->actingAs($user)->getJson('/api/projects/workspace-directories');
+
+            $response->assertOk();
+            $this->assertSame([], $response->json('directories'));
+        } finally {
+            $this->removeDirectory($emptyMount);
+        }
+    }
+
+    public function test_workspace_listing_excludes_a_symlink_that_escapes_the_mount()
+    {
+        $outside = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'trustnode_test_outside_' . uniqid();
+        mkdir($outside, 0777, true);
+        $link = $this->tempWorkspace . DIRECTORY_SEPARATOR . 'escape-link';
+
+        if (!@symlink($outside, $link)) {
+            // Windows symlinks need a privilege; a directory junction needs none and resolves the same way.
+            if (PHP_OS_FAMILY !== 'Windows' || !$this->createJunction($link, $outside)) {
+                rmdir($outside);
+                $this->markTestSkipped('Creating a symlink or junction is not permitted on this platform.');
+            }
+        }
+
+        try {
+            $user = $this->createUserWithPermissions(['targets.view']);
+            $response = $this->actingAs($user)->getJson('/api/projects/workspace-directories');
+
+            $response->assertOk();
+            $directories = $response->json('directories');
+            $this->assertContains('valid-project', $directories);
+            $this->assertNotContains('escape-link', $directories);
+        } finally {
+            // rmdir removes a Windows junction or directory symlink without touching its target.
+            if (!@rmdir($link)) {
+                @unlink($link);
+            }
+            $this->removeDirectory($outside);
+        }
+    }
+
+    private function createJunction(string $link, string $target): bool
+    {
+        exec('cmd /c mklink /J ' . escapeshellarg($link) . ' ' . escapeshellarg($target) . ' 2>&1', $output, $code);
+
+        return $code === 0 && is_dir($link);
+    }
+
+    public function test_newly_created_workspace_subdirectory_becomes_discoverable_and_registers_distinct_from_fixture()
+    {
+        $user = $this->createUserWithPermissions(['targets.view', 'targets.create']);
+        $newDir = $this->tempWorkspace . DIRECTORY_SEPARATOR . 'my-real-project';
+        mkdir($newDir, 0777, true);
+
+        try {
+            // 1. Verify it is discovered in workspace-directories
+            $dirResponse = $this->actingAs($user)->getJson('/api/projects/workspace-directories');
+            $dirResponse->assertOk();
+            $this->assertContains('my-real-project', $dirResponse->json('directories'));
+            $this->assertContains('valid-project', $dirResponse->json('directories'));
+
+            // 2. Register synthetic fixture first
+            $fixtureResponse = $this->actingAs($user)->postJson('/api/projects', [
+                'name' => 'Fixture Project',
+                'path' => 'valid-project',
+                'scan_profile' => 'standard',
+                'continuous_scan_enabled' => false,
+            ]);
+            $fixtureResponse->assertCreated();
+
+            // 3. Register newly discovered project
+            $newProjectResponse = $this->actingAs($user)->postJson('/api/projects', [
+                'name' => 'Real Project',
+                'path' => 'my-real-project',
+                'scan_profile' => 'standard',
+                'continuous_scan_enabled' => false,
+            ]);
+            $newProjectResponse->assertCreated();
+
+            // 4. Verify duplicate path of newly created project is rejected
+            $dupResponse = $this->actingAs($user)->postJson('/api/projects', [
+                'name' => 'Real Project Duplicate',
+                'path' => 'my-real-project',
+                'scan_profile' => 'standard',
+                'continuous_scan_enabled' => false,
+            ]);
+            $dupResponse->assertStatus(422);
+            $dupResponse->assertJsonValidationErrors(['path']);
+
+            // 5. Verify both projects exist distinctly in database
+            $this->assertDatabaseHas('codebase_projects', ['path' => 'valid-project', 'name' => 'Fixture Project']);
+            $this->assertDatabaseHas('codebase_projects', ['path' => 'my-real-project', 'name' => 'Real Project']);
+        } finally {
+            $this->removeDirectory($newDir);
+        }
+    }
+
+
     public function test_successful_project_creation()
     {
         $user = $this->createUserWithPermissions(['targets.create']);
