@@ -233,6 +233,13 @@ class AgentWatchCommand extends Command
                     if ($pData['pending_change_at'] === null) {
                         $pData['pending_change_at'] = time();
                         $output->writeln("<comment>[Change] Modifications in {$pName} (+{$diff['added']} ~{$diff['modified']} -{$diff['removed']}). Debouncing for {$debounceWindow}s...</comment>");
+                        $this->sendActivity($agentId, 'change_detected', "Modifications detected in {$pName} (+{$diff['added']} ~{$diff['modified']} -{$diff['removed']}). Debouncing for {$debounceWindow}s.", [
+                            'project_id' => $projectId,
+                            'project_name' => $pName,
+                            'added' => $diff['added'],
+                            'modified' => $diff['modified'],
+                            'removed' => $diff['removed'],
+                        ]);
                     }
                     $pData['snapshot'] = $currentSnapshot;
                 }
@@ -240,6 +247,10 @@ class AgentWatchCommand extends Command
                 // Trigger scan once debounce window elapses
                 if ($pData['pending_change_at'] !== null && ($now - $pData['pending_change_at'] >= $debounceWindow)) {
                     $output->writeln("<info>[Trigger] Debounce elapsed for {$pName} (#{$projectId}). Starting change-triggered scan...</info>");
+                    $this->sendActivity($agentId, 'scan_triggered', "Debounce window elapsed for {$pName} (#{$projectId}). Starting incremental scan.", [
+                        'project_id' => $projectId,
+                        'project_name' => $pName,
+                    ]);
                     $pData['scanning'] = true;
                     $this->performScan($pPath, $pName, $projectId, $agentId, $output);
                     $pData['scanning'] = false;
@@ -340,12 +351,37 @@ class AgentWatchCommand extends Command
 
             $scanId = $res['scan_id'] ?? $res['id'] ?? 'queued';
             $output->writeln("<info>Scan queued successfully! Scan ID: {$scanId}</info>");
+            $this->sendActivity($agentId, 'scan_dispatched', "Scan for {$name} queued with server (Scan ID: {$scanId}, files: {$summary['files_count']}).", [
+                'project_id' => $projectId,
+                'project_name' => $name,
+                'scan_id' => $scanId,
+                'files_count' => $summary['files_count'],
+            ]);
         } catch (\Throwable $e) {
             $output->writeln("<error>Scan failed: " . $e->getMessage() . "</error>");
+            $this->sendActivity($agentId, 'scan_failed', "Scan failed for {$name}: " . $e->getMessage(), [
+                'project_id' => $projectId,
+                'project_name' => $name,
+                'error' => $e->getMessage(),
+            ]);
         } finally {
             if (file_exists($tempZip)) {
                 @unlink($tempZip);
             }
+        }
+    }
+
+    private function sendActivity(string $agentId, string $action, string $message, array $properties = []): void
+    {
+        try {
+            $this->client->post('api/agent/activity', [
+                'agent_id' => $agentId,
+                'action' => $action,
+                'message' => $message,
+                'properties' => $properties,
+            ]);
+        } catch (\Throwable) {
+            // Non-blocking telemetry
         }
     }
 

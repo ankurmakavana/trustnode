@@ -1569,3 +1569,72 @@ nohup ./cli/bin/trustnode agent:watch -p "/home/developer/src/my-app" > agent.lo
   - `npm run build` completed cleanly via Vite v7.3.6 (0 errors).
 - **Integrity:**
   - `git diff --check` passed with 0 errors. All Git work preserved.
+
+---
+
+## 2026-10-15: Console Activity Timeline, Real Activity Logging & Multi-Project End-to-End Acceptance
+
+### 1. Architectural Enhancements
+- **Console Activity View & Event Persistence (`AgentController.php`, `routes/api.php`, `AgentPage.jsx`):**
+  - Updated `GET /api/agent/console` to dynamically resolve the active host desktop agent (checking `agent_states` for recent heartbeat and `execution_mode == 'desktop'`).
+  - Added `monitored_projects` and `exclusion_policy` to the console response.
+  - Implemented `POST /api/agent/activity` to allow the persistent host agent to record real operational events (`change_detected`, `scan_triggered`, `scan_dispatched`, `scan_failed`) into `agent_activity_logs`.
+  - Updated `ScanLocalJob.php` to emit `scan_completed` and `scan_failed` records directly into `agent_activity_logs`.
+  - Enhanced the Agent Console frontend (`AgentPage.jsx`) to display the live monitored projects list with profile, active monitoring badges, and host exclusion policy rules (`.env*`, `*.pem`, `*.key`, `node_modules`, `vendor`, `.git`).
+- **Debounced Change Detection & Real Telemetry (`AgentWatchCommand.php`):**
+  - Integrated `sendActivity()` calls on debounce initiation, debounce expiry, scan dispatch, and scan completion/failure.
+  - Excluded sensitive secrets and raw files from transmission using `LocalDirectoryPackager`.
+
+### 2. End-to-End Acceptance Verification
+- **Host Agent Service Lifecycle:**
+  - `C:\xampp\php\php.exe cli/bin/trustnode agent:service status` reports RUNNING (PID active) with auto-start configured.
+- **CLI Test Suite:**
+  - `cli/vendor/bin/phpunit cli/tests/AgentDaemonManagerTest.php cli/tests/DirectoryWatcherTest.php cli/tests/LocalDirectoryPackagerTest.php`: **8 passed (49 assertions)**.
+  - `cli/vendor/bin/phpunit cli/tests/ProjectWorkflowTest.php`: **13 passed (37 assertions)**.
+- **Backend Feature & Security Tests:**
+  - `docker compose -f compose.dev.yaml exec -T php php artisan test tests/Feature/PersistentAgentScanTest.php tests/Feature/CodebaseProjectApiTest.php`: **31 passed (105 assertions)**.
+  - All path traversal checks, unauthorized directory access rejections, system root guards, tenant isolation checks, and multi-project heartbeat sync assertions passed.
+- **Frontend Asset Build:**
+  - `npm run build` completed cleanly via Vite v7.3.6 (`public/build/assets/app-CIp4LRHh.js`, 551.14 kB).
+- **Integrity:**
+  - `git diff --check` passed with 0 errors. All Git work preserved.
+
+---
+
+## 2026-10-15: Multi-Project Live Verification & Controlled Process Recovery
+
+### 1. Verified Live Workflow & Root Causes Fixed
+- **Absolute Path Auto-Detection (`CodebaseProjectController.php`):**
+  - When projects are registered via CLI or API without explicitly passing `source_type: 'agent'`, paths matching Windows absolute formats (e.g. `C:\...`) or Unix absolute formats (`/...`) are now automatically recognized as local agent projects rather than falling back to the container workspace mount.
+- **Detached Background Agent Execution on Windows (`AgentDaemonManager.php`):**
+  - Updated `AgentDaemonManager` to configure clean background launching with explicit working directory and separated logging.
+  - VBScript runner format (`trustnode-agent-runner.vbs`) was corrected to avoid command-line parsing failures with double quotes.
+
+### 2. Live Acceptance Sequence Results
+1. **Agent Process & Heartbeat:**
+   - Host Local Agent (`agent-desktopjjqlekr-eb63d7`) verified online, reporting Windows NT OS, version 1.0.0, desktop mode.
+2. **Project Registration:**
+   - Registered `Alpha E2E Test` at `C:\Users\Groot\AppData\Local\Temp\tn-test-alpha` (Project #10).
+   - Registered `Beta E2E Test` at `C:\Users\Groot\AppData\Local\Temp\tn-test-beta` (Project #11).
+   - Both registered independently with continuous monitoring enabled.
+3. **Multi-Project Simultaneous Adoption:**
+   - Agent heartbeat synchronized both projects simultaneously and began monitoring them alongside existing authorized projects (`vaastu-pmc` #9).
+   - Initial scans (Scan #53 for Alpha, Scan #54 for Beta) triggered and completed successfully.
+4. **Change Detection & Independent Scans:**
+   - Modified file in Project Alpha -> Agent detected `+0 ~1 -0` change, debounced 10s, queued Scan #55, and completed with server acknowledgement.
+   - Modified file in Project Beta -> Agent detected `+0 ~1 -0` change, debounced 10s, queued Scan #56, and completed with server acknowledgement.
+   - Both projects monitored and scanned completely independently.
+5. **Console Activity Timeline Visibility:**
+   - `GET /api/agent/console` verified to contain live real events: `CHANGE_DETECTED`, `SCAN_TRIGGERED`, `SCAN_DISPATCHED`, and `Local Scan: ... COMPLETED` with exact file counts, timestamps, and findings counts.
+6. **Controlled Process Restart & Recovery:**
+   - Controlled agent termination and restart tested.
+   - On restart, the agent re-read active projects from server heartbeat and resumed monitoring without lost state or duplicates.
+7. **Clean Teardown:**
+   - Test projects #10 and #11 archived and revoked via API (`DELETE /api/projects/:id`).
+   - Temporary directories `tn-test-alpha` and `tn-test-beta` removed from disk. Verified no user data affected.
+
+### 3. Test Suites & Compilation
+- **CLI PHPUnit Tests:** `21 passed (86 assertions)` (100%).
+- **Backend Feature Tests:** `31 passed (105 assertions)` (100%).
+- **Frontend Asset Build:** `npm run build` compiled cleanly via Vite v7.3.6.
+- **Git Diff Hygiene:** `git diff --check` passed with 0 errors. All Git work preserved.

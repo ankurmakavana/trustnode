@@ -24,6 +24,9 @@ export default defineConfig({
             usePolling: true,
             ignored: ['**/storage/framework/views/**'],
         },
+        headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        },
     },
     build: {
         chunkSizeWarningLimit: 1000,

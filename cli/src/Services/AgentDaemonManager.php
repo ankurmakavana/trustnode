@@ -170,7 +170,7 @@ class AgentDaemonManager
             $batchContent = "@echo off\r\n\"{$phpWin}\" \"{$cliWin}\" agent:watch >> \"{$logFileWin}\" 2>&1\r\n";
             file_put_contents($batchPath, $batchContent);
 
-            $vbsContent = "Set WshShell = CreateObject(\"WScript.Shell\")\r\nWshShell.Run \"cmd.exe /c \"\"\" & \"{$batchPath}\" & \"\"\"\", 0, False\r\n";
+            $vbsContent = "Set WshShell = CreateObject(\"WScript.Shell\")\r\nWshShell.Run \"cmd.exe /c \"\"{$batchPath}\"\"\", 0, False\r\n";
             file_put_contents($vbsPath, $vbsContent);
 
             // Register per-user Run entry in HKCU registry (no elevation required)
@@ -286,8 +286,14 @@ INI;
                 $this->install();
             }
 
-            // Launch wscript silently in background via start
-            @shell_exec("start \"\" wscript.exe \"{$runnerPath}\"");
+            // Launch silently in background using PowerShell Start-Process without opening a visible console window
+            $logFileWin = str_replace('/', '\\', $logFile);
+            $errFileWin = str_replace('/', '\\', $configDir . DIRECTORY_SEPARATOR . 'agent_err.log');
+            $phpWin = str_replace('/', '\\', $php);
+            $cliWin = str_replace('/', '\\', $cli);
+            $workingDir = str_replace('/', '\\', realpath(dirname(__DIR__, 3)) ?: getcwd());
+            $psCmd = "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"Start-Process -FilePath '{$phpWin}' -ArgumentList 'cli\\bin\\trustnode', 'agent:watch' -WorkingDirectory '{$workingDir}' -WindowStyle Hidden -RedirectStandardOutput '{$logFileWin}' -RedirectStandardError '{$errFileWin}'\"";
+            pclose(popen("start /min {$psCmd}", "r"));
 
             // Wait briefly for PID file
             $attempts = 0;

@@ -144,6 +144,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/settings/mail', [SettingController::class, 'getMailSettings']);
     Route::put('/settings/mail', [SettingController::class, 'updateMailSettings']);
     Route::post('/settings/test-email', [SettingController::class, 'testEmail']);
+    Route::post('/settings/reset', [SettingController::class, 'resetPlatform']);
 
     // User Preferences
     Route::get('/users/preferences', [UserPreferenceController::class, 'index']);
@@ -167,6 +168,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/agent/pick-folder/request', [\App\Http\Controllers\AgentController::class, 'pickFolderRequest']);
     Route::match(['get', 'post'], '/agent/pick-folder/status', [\App\Http\Controllers\AgentController::class, 'pickFolderStatus']);
     Route::get('/agent/console', [\App\Http\Controllers\AgentController::class, 'console']);
+    Route::post('/agent/activity', [\App\Http\Controllers\AgentController::class, 'recordActivity']);
 
     // Codebase Project Endpoints
     Route::get('/projects/workspace-directories', [\App\Http\Controllers\Api\CodebaseProjectController::class, 'workspaceDirectories']);

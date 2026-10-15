@@ -407,11 +407,36 @@ SH;
     /**
      * Get operational data for the Agent Console UI.
      */
-    public function console(AgentService $agentService): JsonResponse
+    public function console(AgentService $agentService, \Illuminate\Http\Request $request): JsonResponse
     {
+        $targetAgentId = $request->query('agent_id');
+        if (!$targetAgentId) {
+            // Find the most recently active host/desktop agent with an active heartbeat
+            $timeout = config('agent.heartbeat.timeout', 90);
+            $staleThreshold = now()->subSeconds($timeout)->timestamp;
+            $activeHostAgent = DB::table('agent_states')->get()->filter(function ($row) use ($staleThreshold) {
+                $cachedHb = Cache::get("trustnode_agent_heartbeat_{$row->agent_id}");
+                $dbTimestamp = !empty($row->updated_at) ? strtotime((string) $row->updated_at) : 0;
+                $effectiveHb = max((int) $cachedHb, $dbTimestamp);
+                if ($effectiveHb < $staleThreshold) {
+                    return false;
+                }
+                $state = json_decode($row->state, true) ?? [];
+                return ($state['execution_mode'] ?? '') === 'desktop' || $row->agent_id !== 'trustnode-local-agent-1';
+            })->sortByDesc('updated_at')->first();
+
+            if ($activeHostAgent) {
+                $targetAgentId = $activeHostAgent->agent_id;
+            }
+        }
+
+        if ($targetAgentId) {
+            $agentService->setAgentId($targetAgentId);
+        }
+
         $health = $agentService->getHealthStatus();
         $agentId = $health['agent_id'];
-        $heartbeatTimeout = config('agent.heartbeat.timeout', 60);
+        $heartbeatTimeout = config('agent.heartbeat.timeout', 90);
 
         // Calculate heartbeat age in seconds
         $lastHeartbeatAt = $health['last_heartbeat_at'];
@@ -779,7 +804,54 @@ SH;
                 'last_checked' => $lastCompletedObsAt,
                 'status' => $obsStale ? 'Stale' : ($lastObservedHash ? 'Monitored (Hash Active)' : 'Pending')
             ],
+            'monitored_projects' => \App\Models\CodebaseProject::query()
+                ->where('agent_id', $agentId)
+                ->whereNull('deleted_at')
+                ->get(['id', 'name', 'path', 'scan_profile', 'continuous_scan_enabled', 'status', 'created_at', 'updated_at']),
+            'exclusion_policy' => [
+                'rules' => [
+                    '.env*',
+                    '*.pem',
+                    '*.key',
+                    'id_rsa*',
+                    'node_modules',
+                    'vendor',
+                    '.git',
+                    '*.exe',
+                    '*.dll',
+                    '*.zip'
+                ],
+                'description' => 'Local Agent excludes environment secrets, private keys, dependencies, and binary artifacts from transmission.',
+            ],
             'activity_timeline' => $sortedActivity,
         ]);
+    }
+
+    /**
+     * Record an activity event from the Local Agent.
+     */
+    public function recordActivity(\Illuminate\Http\Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'agent_id' => 'required|string|max:128',
+            'action' => 'required|string|max:64',
+            'message' => 'required|string|max:500',
+            'properties' => 'nullable|array',
+        ]);
+
+        $properties = $validated['properties'] ?? [];
+        $properties['message'] = $validated['message'];
+
+        \App\Models\AgentActivityLog::create([
+            'agent_id' => $validated['agent_id'],
+            'action' => strtolower($validated['action']),
+            'properties' => $properties,
+            'user_id' => $request->user()?->id,
+            'organization_id' => $request->user()?->teams()->first()?->organization_id,
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        return response()->json(['status' => 'recorded']);
     }
 }

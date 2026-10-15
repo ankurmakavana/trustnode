@@ -310,6 +310,23 @@ class ScanLocalJob implements ShouldQueue, TenantAwareJob
                 'duration' => $duration,
             ]);
 
+            // Record authoritative agent activity log for the scan completion
+            $codebaseProj = $this->scan->codebase_project_id ? \App\Models\CodebaseProject::find($this->scan->codebase_project_id) : null;
+            $agentIdForLog = $codebaseProj?->agent_id ?? 'agent-host';
+            \App\Models\AgentActivityLog::create([
+                'agent_id' => $agentIdForLog,
+                'action' => 'scan_completed',
+                'properties' => [
+                    'message' => "Scan #{$this->scan->id} ({$this->scan->name}) completed in {$duration}s with " . count($savedFindings) . " finding(s).",
+                    'scan_id' => $this->scan->id,
+                    'duration_seconds' => $duration,
+                    'findings_count' => count($savedFindings),
+                    'files_scanned' => $filesScanned,
+                ],
+                'user_id' => $this->scan->created_by,
+                'organization_id' => $this->scan->organization_id,
+            ]);
+
             app(\App\Services\Finding\FindingLifecycleService::class)->process($this->scan);
 
             \App\Services\Notification\NotificationRouter::dispatch(
@@ -323,6 +340,20 @@ class ScanLocalJob implements ShouldQueue, TenantAwareJob
             $this->scan->update([
                 'status' => 'failed',
                 'completed_at' => now(),
+            ]);
+
+            $codebaseProj = $this->scan->codebase_project_id ? \App\Models\CodebaseProject::find($this->scan->codebase_project_id) : null;
+            $agentIdForLog = $codebaseProj?->agent_id ?? 'agent-host';
+            \App\Models\AgentActivityLog::create([
+                'agent_id' => $agentIdForLog,
+                'action' => 'scan_failed',
+                'properties' => [
+                    'message' => "Scan #{$this->scan->id} ({$this->scan->name}) failed: {$e->getMessage()}",
+                    'scan_id' => $this->scan->id,
+                    'error' => $e->getMessage(),
+                ],
+                'user_id' => $this->scan->created_by,
+                'organization_id' => $this->scan->organization_id,
             ]);
 
             \App\Services\Notification\NotificationRouter::dispatch(

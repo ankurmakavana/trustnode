@@ -395,8 +395,9 @@ export default function AgentPage() {
                                 <tr>
                                     <th className="px-4 py-2.5">Project Name</th>
                                     <th className="px-4 py-2.5">Workspace Path</th>
+                                    <th className="px-4 py-2.5">Profile</th>
                                     <th className="px-4 py-2.5">Status</th>
-                                    <th className="px-4 py-2.5">Continuous Scan</th>
+                                    <th className="px-4 py-2.5">Continuous Monitoring</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 font-mono">
@@ -408,6 +409,9 @@ export default function AgentPage() {
                                         <td className="px-4 py-2.5 text-slate-600">
                                             <MonoChip>{p.path}</MonoChip>
                                         </td>
+                                        <td className="px-4 py-2.5 font-sans text-slate-700 capitalize">
+                                            {p.scan_profile || 'standard'}
+                                        </td>
                                         <td className="px-4 py-2.5">
                                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                                                 p.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
@@ -415,8 +419,12 @@ export default function AgentPage() {
                                                 {p.status}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-2.5 text-slate-400 font-sans">
-                                            {p.continuous_scan_enabled ? 'Enabled' : 'Disabled'}
+                                        <td className="px-4 py-2.5 font-sans">
+                                            <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
+                                                p.continuous_scan_enabled ? 'text-emerald-700 font-semibold' : 'text-slate-400'
+                                            }`}>
+                                                {p.continuous_scan_enabled ? '● Active Monitoring' : 'Disabled'}
+                                            </span>
                                         </td>
                                     </tr>
                                 ))}
@@ -424,6 +432,16 @@ export default function AgentPage() {
                         </table>
                     )}
                 </div>
+                {telemetry?.exclusion_policy && (
+                    <div className="p-3 bg-slate-50 border-t border-slate-200 text-[11px] text-slate-500 flex flex-wrap items-center justify-between gap-2">
+                        <span>{telemetry.exclusion_policy.description}</span>
+                        <div className="flex items-center gap-1 font-mono text-[10px]">
+                            {telemetry.exclusion_policy.rules.map((rule, idx) => (
+                                <span key={idx} className="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-700">{rule}</span>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </Card>
 
             {/* 6. RECENT SCANS SECTION */}

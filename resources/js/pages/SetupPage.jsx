@@ -38,18 +38,30 @@ export default function SetupPage() {
                 }),
             });
 
+            const contentType = res.headers.get('content-type') || '';
+            const isJson = contentType.includes('application/json');
+
             if (!res.ok) {
                 if (res.status === 403) {
                     // Setup already completed by another process/user
                     await refreshSetupStatus();
                     return;
                 }
-                if (res.status === 422) {
-                    const data = await res.json();
-                    throw { validation: data.errors };
+
+                if (isJson) {
+                    const data = await res.json().catch(() => ({}));
+                    if (res.status === 422 && data.errors) {
+                        throw { validation: data.errors };
+                    }
+                    throw new Error(data.message || `Setup failed with status ${res.status}.`);
+                } else {
+                    const text = await res.text().catch(() => '');
+                    throw new Error(`Server returned unexpected ${res.status} response (${contentType || 'text'}). Please check server logs.`);
                 }
-                const data = await res.json().catch(() => ({}));
-                throw new Error(data.message || 'Setup failed. Please try again.');
+            }
+
+            if (!isJson) {
+                throw new Error('Server returned non-JSON response during setup.');
             }
 
             // After successful setup, automatically log in

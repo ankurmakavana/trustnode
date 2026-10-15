@@ -88,7 +88,16 @@ class CodebaseProjectController extends Controller
     {
         $validated = $request->validated();
         $user = $request->user();
-        $sourceType = $validated['source_type'] ?? 'workspace_mount';
+        $sourceType = $validated['source_type'] ?? null;
+        if ($sourceType === null) {
+            $pathInput = (string) ($validated['path'] ?? '');
+            // If path looks like an absolute path (Windows drive letter or Unix root), default to agent
+            if (preg_match('/^[a-zA-Z]:[\\\\\/]/', $pathInput) || str_starts_with($pathInput, '/')) {
+                $sourceType = 'agent';
+            } else {
+                $sourceType = 'workspace_mount';
+            }
+        }
         $agentId = $validated['agent_id'] ?? null;
 
         $orgId = \App\Models\Team::query()

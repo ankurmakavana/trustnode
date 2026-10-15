@@ -48,7 +48,8 @@ export function AuthProvider({ children }) {
                 headers:     { 'Accept': 'application/json' },
             });
 
-            if (res.ok) {
+            const contentType = res.headers.get('content-type') || '';
+            if (res.ok && contentType.includes('application/json')) {
                 const json = await res.json();
                 if (json.authenticated && json.data) {
                     setUser(buildUser(json.data));
@@ -59,6 +60,7 @@ export function AuthProvider({ children }) {
                 }
             } else {
                 setUser(null);
+                await refreshSetupStatus();
             }
         } catch {
             setUser(null);
@@ -72,7 +74,8 @@ export function AuthProvider({ children }) {
             const setupRes = await fetch('/api/setup/status', {
                 headers: { 'Accept': 'application/json' },
             });
-            if (setupRes.ok) {
+            const contentType = setupRes.headers.get('content-type') || '';
+            if (setupRes.ok && contentType.includes('application/json')) {
                 const setupJson = await setupRes.json();
                 setSetupRequired(!!setupJson.setup_required);
             }
@@ -102,13 +105,23 @@ export function AuthProvider({ children }) {
             body: JSON.stringify({ email, password }),
         });
 
+        const contentType = res.headers.get('content-type') || '';
+        const isJson = contentType.includes('application/json');
+
         if (!res.ok) {
-            if (res.status === 422) {
-                const data = await res.json();
-                throw { validation: data.errors };
+            if (isJson) {
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 422 && data.errors) {
+                    throw { validation: data.errors };
+                }
+                throw new Error(data.message || 'Authentication failed. Please verify your credentials.');
+            } else {
+                throw new Error(`Authentication failed: Server returned ${res.status} response.`);
             }
-            const data = await res.json().catch(() => ({}));
-            throw new Error(data.message || 'Authentication failed. Please verify your credentials.');
+        }
+
+        if (!isJson) {
+            throw new Error('Server returned non-JSON response during login.');
         }
 
         const data     = await res.json();

@@ -102,6 +102,50 @@ class SettingController extends Controller
     }
 
     /**
+     * Danger Zone: Reset entire TrustNode application data.
+     */
+    public function resetPlatform(Request $request, \App\Services\ResetService $resetService)
+    {
+        Gate::authorize('updateSettings', Setting::class);
+
+        $validated = $request->validate([
+            'confirmation' => 'required|string',
+            'create_backup' => 'nullable|boolean',
+        ]);
+
+        try {
+            $user = $request->user();
+            $result = $resetService->executeReset(
+                adminUser: $user,
+                confirmationPhrase: $validated['confirmation'],
+                requireBackup: $validated['create_backup'] ?? true
+            );
+
+            // Invalidate current user session
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return response()->json([
+                'success' => true,
+                'message' => $result['message'],
+                'backup' => $result['backup'],
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\Throwable $e) {
+            \Log::error('Platform reset failed', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Helper to apply DB mail settings to current runtime config.
      */
     public static function applyMailSettings()

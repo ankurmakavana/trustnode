@@ -31,6 +31,13 @@ export default function SettingsPage() {
     const [testingMail, setTestingMail] = useState(false);
     const [testMessage, setTestMessage] = useState(null);
 
+    // Danger Zone / Reset state
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [resetConfirmation, setResetConfirmation] = useState('');
+    const [createBackup, setCreateBackup] = useState(true);
+    const [resetting, setResetting] = useState(false);
+    const [resetError, setResetError] = useState(null);
+
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
@@ -106,6 +113,29 @@ export default function SettingsPage() {
         }
     };
 
+    const handlePlatformReset = async () => {
+        setResetting(true);
+        setResetError(null);
+
+        try {
+            const res = await axios.post('/api/settings/reset', {
+                confirmation: resetConfirmation,
+                create_backup: createBackup
+            });
+
+            if (res.data?.success) {
+                // Force full reload to setup wizard
+                window.location.href = '/';
+            } else {
+                setResetError(res.data?.message || 'Failed to reset platform.');
+            }
+        } catch (error) {
+            setResetError(error.response?.data?.message || 'A server error occurred during platform reset.');
+        } finally {
+            setResetting(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[40vh]">
@@ -140,6 +170,12 @@ export default function SettingsPage() {
                     onClick={() => setActiveTab('notifications')}
                 >
                     <div className="flex items-center gap-2"><Bell size={16}/> My Preferences</div>
+                </button>
+                <button
+                    className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'danger' ? 'border-rose-600 text-rose-700' : 'border-transparent text-slate-500 hover:text-rose-600'}`}
+                    onClick={() => setActiveTab('danger')}
+                >
+                    <div className="flex items-center gap-2"><AlertTriangle size={16}/> Danger Zone</div>
                 </button>
             </div>
 
@@ -248,6 +284,134 @@ export default function SettingsPage() {
                         </button>
                     </div>
                 </form>
+            )}
+
+            {activeTab === 'danger' && (
+                <div className="space-y-6">
+                    <div className="bg-white border border-rose-200 rounded-xl shadow-sm overflow-hidden">
+                        <div className="p-6 border-b border-rose-100 bg-rose-50/40">
+                            <div className="flex items-center gap-2 text-rose-700 font-semibold text-base mb-1">
+                                <AlertTriangle size={18} /> Danger Zone — Application Reset
+                            </div>
+                            <p className="text-xs text-rose-600">
+                                Irreversible actions that modify or purge platform operational data.
+                            </p>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="p-4 rounded-lg border border-slate-200 bg-slate-50">
+                                    <div className="text-sm font-semibold text-slate-800 mb-1">Safe Application Restart</div>
+                                    <p className="text-xs text-slate-500 mb-3">
+                                        Restarts the container services or host processes. All projects, findings, and configurations remain completely intact.
+                                    </p>
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-100 text-emerald-800">
+                                        Non-destructive · Safe
+                                    </span>
+                                </div>
+
+                                <div className="p-4 rounded-lg border border-rose-200 bg-rose-50/50">
+                                    <div className="text-sm font-semibold text-rose-900 mb-1">Full Platform Data Reset</div>
+                                    <p className="text-xs text-rose-700 mb-3">
+                                        Purges all registered projects, scan history, findings, and administrator accounts to return TrustNode to its initial setup wizard.
+                                    </p>
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-rose-100 text-rose-800">
+                                        Destructive · Purges App Data
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="border-t border-slate-200 pt-6">
+                                <h3 className="text-sm font-semibold text-slate-900 mb-2">Scope of Data Purge</h3>
+                                <div className="text-xs text-slate-600 space-y-1.5 list-disc pl-4 mb-6">
+                                    <div>Purges: Codebase projects, scans, findings, activity logs, notifications, and administrator accounts.</div>
+                                    <div>Invalidates: Active user sessions, remember tokens, and connected agent authorizations.</div>
+                                    <div>Preserves: Host source code files, developer folders, Docker configurations, .env files, and baseline database schemas.</div>
+                                    <div>Protects: A verified automated database backup is generated before the reset commences.</div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setShowResetModal(true)}
+                                    className="px-4 py-2 bg-rose-600 text-white text-xs font-semibold rounded-lg hover:bg-rose-700 focus:outline-none flex items-center gap-2 shadow-sm"
+                                >
+                                    <AlertTriangle size={14} /> Reset TrustNode Platform...
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showResetModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-rose-200 overflow-hidden">
+                        <div className="p-6 bg-rose-50 border-b border-rose-100 flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                                <AlertTriangle size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-rose-900">Confirm Platform Reset</h3>
+                                <p className="text-xs text-rose-700 mt-1">
+                                    This operation will clear all platform data and return the system to the initial Setup Wizard.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                                To confirm and prevent accidental execution, please type <span className="font-mono font-bold text-rose-600 select-all">RESET TRUSTNODE</span> in the box below:
+                            </p>
+
+                            <input
+                                type="text"
+                                value={resetConfirmation}
+                                onChange={e => setResetConfirmation(e.target.value)}
+                                placeholder="RESET TRUSTNODE"
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono text-slate-800 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 outline-none"
+                            />
+
+                            <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer pt-2">
+                                <input
+                                    type="checkbox"
+                                    checked={createBackup}
+                                    onChange={e => setCreateBackup(e.target.checked)}
+                                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                />
+                                <span>Create verified pre-reset database backup (strongly recommended)</span>
+                            </label>
+
+                            {resetError && (
+                                <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+                                    {resetError}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                disabled={resetting}
+                                onClick={() => {
+                                    setShowResetModal(false);
+                                    setResetConfirmation('');
+                                    setResetError(null);
+                                }}
+                                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={resetting || resetConfirmation.trim() !== 'RESET TRUSTNODE'}
+                                onClick={handlePlatformReset}
+                                className="px-4 py-2 bg-rose-600 text-white text-xs font-semibold rounded-lg hover:bg-rose-700 disabled:opacity-40 transition-all flex items-center gap-2"
+                            >
+                                {resetting ? 'Resetting Platform...' : 'Execute Reset'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
